@@ -1,0 +1,46 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Job {
+  id           String   @id @default(cuid())
+  originalName String
+  videoPath    String
+  audioPath    String?
+  durationSec  Float?
+  status       String   @default("queued")
+  errorCode    String?
+  errorMessage String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  analysis     AnalysisResult?
+}
+
+model AnalysisResult {
+  id           String   @id @default(cuid())
+  jobId        String   @unique
+  job          Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  overallScore Float
+  summary      String
+  payload      String
+  createdAt    DateTime @default(now())
+}
+
+model Criterion {
+  id             String  @id
+  label          String
+  description    String
+  weight         Int
+  enabled        Boolean
+  sortOrder      Int
+  isExtended     Boolean @default(false)
+  categoryId     String  @default("content")
+  categoryLabel  String  @default("")
+  categoryWeight Int     @default(20)
+  categoryOrder  Int     @default(0)
+}
