@@ -6,7 +6,7 @@
 - Репозиторий: Kabalod/Vocal
 - Ветка: feat/personal-mvp-03-take-media
 - BASE_SHA (до изменений): b08929b1e1328e75c7e9d3bf6ecf1697dce46daa
-- HEAD_SHA (после изменений): будет записан после коммита
+- HEAD_SHA (после изменений): `4c7879eb25fc8315fa68500dafedfdf3ee1c3ba5`
 - Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-03-take-media
 - Ветка отправлена в GitHub: да, без force push
 - Предыдущий этап принят: да, этап 2 на `b08929b1e1328e75c7e9d3bf6ecf1697dce46daa`
