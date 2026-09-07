@@ -6,7 +6,7 @@
 - Репозиторий: Kabalod/Vocal
 - Ветка: feat/personal-mvp-02-reel-workspace
 - BASE_SHA (до изменений): ba283c9e9e20e634e76994a43183f1d2d3660e60
-- HEAD_SHA (после изменений): `1940b3553323b5025566e58dd8c7e823f1aa188e`
+- HEAD_SHA (после изменений): `d428d2b43d043d6a0d4ad1aae1630a2a62a930c1`
 - Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-02-reel-workspace
 - Ветка отправлена в GitHub: да, без force push
 - Предыдущий этап принят: да, этап 1 на `ba283c9e9e20e634e76994a43183f1d2d3660e60`
@@ -106,5 +106,5 @@
 - Исправление: «Мои ролики» вызывает `leaveReelEditor`/`flush`; сеть — остаёмся с ошибкой. Тест задержанного ответа и offline.
 - Замечание: `onCreate` вызывал старый `load()` с фильтром на момент POST.
 - Исправление: `loadRef.current` после создания. Тест: задержанный POST → смена фильтра → завершение POST.
-- Новый commit SHA: будет записан после коммита
+- Новый commit SHA: `d428d2b43d043d6a0d4ad1aae1630a2a62a930c1`
 - Повторная проверка: `npm run test:reels` 14/14; lint; браузер не гонялся. Этап 3 не начинался.
