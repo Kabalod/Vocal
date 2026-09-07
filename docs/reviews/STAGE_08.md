@@ -6,7 +6,8 @@
 - Репозиторий: Kabalod/Vocal
 - Ветка: feat/personal-mvp-08-comparison-and-release-check
 - BASE_SHA (до изменений): 87cf50b8dc8d01f98a2e64120d51ab308b9921db
-- HEAD_SHA (после изменений): `0b07f90b2f0da6601a6fdd08bb60bd4805611cb0`
+- HEAD_SHA (после изменений): `086292d9d0db4285382c9a3ca6f47231423928ad`
+- Коммит исправления diff: `0b07f90b2f0da6601a6fdd08bb60bd4805611cb0`
 - Вершина до правок ревью: `6b8f1d91467964f91d144d33d2230c237cecfbb8`
 - Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-08-comparison-and-release-check
 - Ветка отправлена в GitHub: да, без force push (если push прошёл)
@@ -46,7 +47,7 @@
 
 | Команда или ручной сценарий | Выполнено? | Результат | Ограничения |
 |---|---|---|---|
-| `npm run test:reels` | да | 28/28 | временные SQLite, mock Groq |
+| `npm run test:reels` | да | 29/29 | временные SQLite, mock Groq |
 | `npm run lint` | да | exit 0 | — |
 | `npm run typecheck` | да | исходные analyze.ts, score-analyz.ts, questions.ts | новых ошибок этапа нет |
 | `npm run build` | нет | — | не запускался |
@@ -69,7 +70,7 @@
 
 - Невыполненные условия готовности: живой UI/Groq/Windows player не гонялись
 - Известные проблемы: нет аккаунтов; приложение не для публикации в интернет
-- Отклонения от плана и причины: автотест в `tests/personal-mvp.test.ts` (tsx/node:test), не Playwright `*.spec.ts`; этап не объявлен принятым
+- Отклонения от плана и причины: автотест в `tests/personal-mvp.test.ts` (tsx/node:test), не Playwright `*.spec.ts`
 
 ## Запрос ревьюеру
 
