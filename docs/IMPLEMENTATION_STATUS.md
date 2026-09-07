@@ -15,7 +15,7 @@
 | 5 | Анкета автора | принят | `feat/personal-mvp-05-creator-profile` | `0dd0d04edbcf1cee9cff3b58d00f6290be5bd15e` | `437d8f2f1fd8a74aa17cbe810088ae58b31b4ae5` | `test:reels` 22/22; lint ок | принято внешним ревью |
 | 6 | Разбор и вопросы | принят | `feat/personal-mvp-06-reviews-and-questions` | `437d8f2f1fd8a74aa17cbe810088ae58b31b4ae5` | `d265b0d287b791e981577774b9b1a5215f5d2fc3` | `test:reels` 25/25; lint ок | принято внешним ревью |
 | 7 | Сценарий и версии | принят | `feat/personal-mvp-07-script-editor` | `d265b0d287b791e981577774b9b1a5215f5d2fc3` | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` | `test:reels` 26/26; lint ок | принято внешним ревью |
-| 8 | Сравнение, экспорт, итоговая проверка | на ревью | `feat/personal-mvp-08-comparison-and-release-check` | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` | `ec1883ccf0d8526826ac818efe90d513b3502737` | `test:reels` 28/28; lint ок | ждёт внешнего ревью |
+| 8 | Сравнение, экспорт, итоговая проверка | на ревью | `feat/personal-mvp-08-comparison-and-release-check` | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` | `0b07f90b2f0da6601a6fdd08bb60bd4805611cb0` | `test:reels` 29/29; lint ок | правки ревью, не принят |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
@@ -33,12 +33,13 @@
 | Принятый этап 7 / BASE этапа 8 | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` |
 | Коммит этапа 7 | `146c63bf94b1eadcbe3e2d59cdda4eb72d51eec9` |
 | Коммит этапа 8 | `ec1883ccf0d8526826ac818efe90d513b3502737` |
+| Исправление ревью этапа 8 | `0b07f90b2f0da6601a6fdd08bb60bd4805611cb0` |
 
 ## Этап 8 — проверки
 
 | Команда | Результат |
 |---|---|
-| `npm run test:reels` | 28/28 |
+| `npm run test:reels` | 29/29 |
 | `npm run lint` | exit 0 |
 | `npm run typecheck` | исходные analyze/score-analyz/questions |
 | `npm run build` | не запускался на этапе 8 |

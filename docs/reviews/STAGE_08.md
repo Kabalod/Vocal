@@ -6,7 +6,8 @@
 - Репозиторий: Kabalod/Vocal
 - Ветка: feat/personal-mvp-08-comparison-and-release-check
 - BASE_SHA (до изменений): 87cf50b8dc8d01f98a2e64120d51ab308b9921db
-- HEAD_SHA (после изменений): `ec1883ccf0d8526826ac818efe90d513b3502737`
+- HEAD_SHA (после изменений): `0b07f90b2f0da6601a6fdd08bb60bd4805611cb0`
+- Вершина до правок ревью: `6b8f1d91467964f91d144d33d2230c237cecfbb8`
 - Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-08-comparison-and-release-check
 - Ветка отправлена в GitHub: да, без force push (если push прошёл)
 - Предыдущий этап принят: да, этап 7 на `87cf50b8dc8d01f98a2e64120d51ab308b9921db`
@@ -78,7 +79,7 @@
 
 ## После замечаний
 
-- Замечание:
-- Исправление:
-- Новый commit SHA:
-- Повторная проверка:
+- Замечание: полная таблица LCS O(n×m) на текстах до 20 000 символов; в отчёте HEAD был ec1883c вместо вершины 6b8f1d9; в экспорте не было selectedScriptId.
+- Исправление: окно поиска вместо таблицы, лимит 8000 символов / 2500 токенов, поле truncated и явная пометка; selectedScriptId в экспорте; тест двух текстов по 20 000 символов.
+- Новый commit SHA: `0b07f90b2f0da6601a6fdd08bb60bd4805611cb0`
+- Повторная проверка: `npm run test:reels` 29/29; lint ок. Build, браузер и живой Groq по-прежнему не гонялись.
