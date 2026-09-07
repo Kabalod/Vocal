@@ -7,6 +7,12 @@ export type EditorLoadFn = () => Promise<ReelDto>;
 
 type Dirty = { title: boolean; note: boolean; status: boolean };
 
+function isStaleError(error: unknown) {
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+  const status = error && typeof error === "object" && "status" in error ? Number(error.status) : 0;
+  return code === "STALE" || status === 409;
+}
+
 export class ReelEditorSession {
   confirmed: ReelDto | null = null;
   draftTitle = "";
@@ -19,7 +25,7 @@ export class ReelEditorSession {
   private dirty: Dirty = { title: false, note: false, status: false };
   private inFlight = false;
   private queued = false;
-  private disposed = false;
+  private drainTail: Promise<void> = Promise.resolve();
   private readonly listeners = new Set<() => void>();
 
   constructor(
@@ -40,6 +46,11 @@ export class ReelEditorSession {
 
   async bootstrap() {
     const reel = await this.loadFn();
+    if (this.isDirty() && this.confirmed) {
+      this.confirmed = reel;
+      this.emit();
+      return;
+    }
     this.hydrate(reel);
   }
 
@@ -86,6 +97,7 @@ export class ReelEditorSession {
   }
 
   requestSave() {
+    if (this.conflict) return;
     this.queued = true;
     void this.drain();
   }
@@ -93,23 +105,32 @@ export class ReelEditorSession {
   retry() {
     this.conflict = false;
     this.saveError = null;
-    this.requestSave();
+    this.queued = true;
+    void this.drain();
   }
 
-  dispose() {
-    this.disposed = true;
+  async flush(): Promise<boolean> {
+    if (this.conflict) return false;
+    if (this.isDirty()) this.queued = true;
+    await this.drain();
+    return !this.conflict && this.saveState !== "error" && !this.isDirty();
   }
 
-  private async drain() {
-    if (this.inFlight) return;
-    this.inFlight = true;
-    while (this.queued) {
-      this.queued = false;
-      await this.saveOnce();
-      if (this.disposed && !this.queued) break;
-    }
-    this.inFlight = false;
-    this.emit();
+  private drain(): Promise<void> {
+    const next = this.drainTail.then(async () => {
+      while (this.queued && !this.conflict) {
+        this.queued = false;
+        this.inFlight = true;
+        try {
+          await this.saveOnce();
+        } finally {
+          this.inFlight = false;
+        }
+      }
+      this.emit();
+    });
+    this.drainTail = next.catch(() => undefined);
+    return next;
   }
 
   private snapshotPatch(): UpdateReelInput | null {
@@ -136,23 +157,20 @@ export class ReelEditorSession {
 
     try {
       const saved = await this.saveFn({ ...patch, expectedUpdatedAt: version });
-      if (this.disposed) return;
       this.confirmed = saved;
       if (sentTitle !== undefined && this.draftTitle === sentTitle) this.dirty.title = false;
       if (sentNote !== undefined && this.draftNote === sentNote) this.dirty.note = false;
       if (sentStatus !== undefined && this.draftStatus === sentStatus) this.dirty.status = false;
       this.conflict = false;
-      if (this.isDirty()) this.queued = true;
-      this.saveState = this.isDirty() || this.queued ? "saving" : "saved";
+      this.queued = this.isDirty();
+      this.saveState = this.isDirty() ? "saving" : "saved";
     } catch (error) {
-      if (this.disposed) return;
-      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
-      const status = error && typeof error === "object" && "status" in error ? Number(error.status) : 0;
-      if (code === "STALE" || status === 409) {
+      if (isStaleError(error)) {
         this.conflict = true;
+        this.queued = false;
         try {
           const latest = await this.loadFn();
-          if (!this.disposed) this.confirmed = latest;
+          this.confirmed = latest;
         } catch {
           /* версия могла не обновиться; черновик всё равно сохраняем */
         }
@@ -160,6 +178,7 @@ export class ReelEditorSession {
         this.saveError =
           error instanceof Error ? error.message : "Карточка изменилась. Черновик на месте — повторите сохранение.";
       } else {
+        this.queued = false;
         this.saveState = "error";
         this.saveError = error instanceof Error ? error.message : "Нет связи. Черновик на месте — повторите сохранение.";
       }
@@ -170,4 +189,52 @@ export class ReelEditorSession {
 
 export function isBrowserLeaveWarningNeeded(session: ReelEditorSession) {
   return session.hasUnsavedWork();
+}
+
+export function connectReelEditorView(session: ReelEditorSession, onChange: () => void) {
+  return session.subscribe(onChange);
+}
+
+export function cleanupReelEditorView(clearNoteTimer: () => void) {
+  clearNoteTimer();
+}
+
+export function mountReelWorkspaceEffects(
+  session: ReelEditorSession,
+  onChange: () => void,
+  clearNoteTimer: () => void,
+  windowLike: {
+    addEventListener: (type: "beforeunload", listener: (event: BeforeUnloadEvent) => void) => void;
+    removeEventListener: (type: "beforeunload", listener: (event: BeforeUnloadEvent) => void) => void;
+  } | null = null,
+) {
+  const unsub = connectReelEditorView(session, onChange);
+  const onBeforeUnload = (event: BeforeUnloadEvent) => {
+    if (!isBrowserLeaveWarningNeeded(session)) return;
+    event.preventDefault();
+    event.returnValue = "";
+  };
+  windowLike?.addEventListener("beforeunload", onBeforeUnload);
+  return () => {
+    windowLike?.removeEventListener("beforeunload", onBeforeUnload);
+    cleanupReelEditorView(clearNoteTimer);
+    unsub();
+  };
+}
+
+export function runReactStrictModeEffects(effect: () => () => void) {
+  const firstCleanup = effect();
+  firstCleanup();
+  return effect();
+}
+
+export async function leaveReelEditor(
+  session: ReelEditorSession,
+  navigate: () => void,
+  clearNoteTimer: () => void,
+): Promise<boolean> {
+  clearNoteTimer();
+  const ok = await session.flush();
+  if (ok) navigate();
+  return ok;
 }

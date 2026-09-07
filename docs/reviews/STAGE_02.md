@@ -29,9 +29,9 @@
 | src/app/api/reels/route.ts | GET список, POST создание |
 | src/app/api/reels/[id]/route.ts | GET/PATCH, 400/404/409 |
 | src/components/ReelCard.tsx | Карточка списка |
-| src/components/ReelList.tsx | Поиск, фильтры, создание, пустое/ошибка |
-| src/components/ReelWorkspace.tsx | Черновик отдельно от сервера; очередь сохранений |
-| src/lib/reel-editor-session.ts | Последовательное сохранение, 409/сеть без затирания ввода |
+| src/components/ReelList.tsx | Поиск, фильтры; после создания — load текущего фильтра |
+| src/components/ReelWorkspace.tsx | Черновик отдельно; выход ждёт flush; cleanup не dispose |
+| src/lib/reel-editor-session.ts | Очередь, 409 стоп, flush, Strict Mode без игнора ответа |
 | src/lib/generation-guard.ts | Актуальный запрос списка |
 | tests/reels-editor-session.test.ts | Задержанные ответы, сеть, 409, фильтр |
 | src/app/reels/page.tsx | Экран списка |
@@ -53,7 +53,7 @@
 
 | Команда или ручной сценарий | Выполнено? | Результат | Ограничения |
 |---|---|---|---|
-| npm run test:reels | да | 10/10 | без браузера; задержанные ответы в unit-тестах сессии |
+| npm run test:reels | да | 14/14 | без браузера; Strict Mode эффектов, 409+очередь, leave, POST+фильтр |
 | npm run lint | да | ok | next lint deprecated |
 | npm run typecheck | да | исходные ошибки | не этап 2 |
 | npm run build | да | падает на score-analyz.ts:93 | исходная |
@@ -95,3 +95,16 @@
 - Исправление: `GenerationGuard` для load и после создания.
 - Новый commit SHA: `1940b3553323b5025566e58dd8c7e823f1aa188e`
 - Повторная проверка: `npm run test:reels` 10/10; lint ок; typecheck без новых ошибок кроме исходных analyze/score-analyz. Браузер не гонялся.
+
+## После второго ревью
+
+- Замечание: cleanup `dispose()` при том же `useMemo` сессии; Strict Mode игнорировал ответ сохранения.
+- Исправление: cleanup только снимает подписку и таймер; ответ PATCH применяется. Тест `runReactStrictModeEffects` + `mountReelWorkspaceEffects`.
+- Замечание: после 409 drain сразу слал накопившийся черновик.
+- Исправление: конфликт сбрасывает очередь; `requestSave` молчит до «Повторить». Тест правки во время 409.
+- Замечание: Next Link не ждал сохранение; cleanup убивал сессию.
+- Исправление: «Мои ролики» вызывает `leaveReelEditor`/`flush`; сеть — остаёмся с ошибкой. Тест задержанного ответа и offline.
+- Замечание: `onCreate` вызывал старый `load()` с фильтром на момент POST.
+- Исправление: `loadRef.current` после создания. Тест: задержанный POST → смена фильтра → завершение POST.
+- Новый commit SHA: будет записан после коммита
+- Повторная проверка: `npm run test:reels` 14/14; lint; браузер не гонялся. Этап 3 не начинался.

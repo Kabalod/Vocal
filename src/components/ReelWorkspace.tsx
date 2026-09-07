@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { isBrowserLeaveWarningNeeded, ReelEditorSession } from "@/lib/reel-editor-session";
+import { leaveReelEditor, mountReelWorkspaceEffects, ReelEditorSession } from "@/lib/reel-editor-session";
 import type { ReelDto, ReelStatus, UpdateReelInput } from "@/types/reel";
 import { REEL_STATUS_LABELS, REEL_STATUSES } from "@/types/reel";
 
@@ -47,6 +48,7 @@ async function loadReel(id: string): Promise<ReelDto> {
 }
 
 export function ReelWorkspace({ id }: { id: string }) {
+  const router = useRouter();
   const [, bump] = useState(0);
   const session = useMemo(
     () => new ReelEditorSession((patch) => patchReel(id, patch), () => loadReel(id)),
@@ -55,9 +57,17 @@ export function ReelWorkspace({ id }: { id: string }) {
   const noteTimer = useRef<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+
+  function clearNoteTimer() {
+    if (noteTimer.current) {
+      window.clearTimeout(noteTimer.current);
+      noteTimer.current = null;
+    }
+  }
 
   useEffect(() => {
-    return session.subscribe(() => bump((n) => n + 1));
+    return mountReelWorkspaceEffects(session, () => bump((n) => n + 1), clearNoteTimer, window);
   }, [session]);
 
   useEffect(() => {
@@ -75,24 +85,20 @@ export function ReelWorkspace({ id }: { id: string }) {
     };
   }, [session]);
 
-  useEffect(() => {
-    const onLeave = (event: BeforeUnloadEvent) => {
-      if (!isBrowserLeaveWarningNeeded(session)) return;
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", onLeave);
-    return () => {
-      window.removeEventListener("beforeunload", onLeave);
-      if (noteTimer.current) window.clearTimeout(noteTimer.current);
-      session.requestSave();
-      session.dispose();
-    };
-  }, [session]);
-
   function scheduleNoteSave() {
-    if (noteTimer.current) window.clearTimeout(noteTimer.current);
+    clearNoteTimer();
     noteTimer.current = window.setTimeout(() => session.requestSave(), 450);
+  }
+
+  async function onGoToList(event: React.MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
+    if (leaving) return;
+    setLeaving(true);
+    try {
+      await leaveReelEditor(session, () => router.push("/reels"), clearNoteTimer);
+    } finally {
+      setLeaving(false);
+    }
   }
 
   if (loadError) {
@@ -111,20 +117,22 @@ export function ReelWorkspace({ id }: { id: string }) {
   }
 
   const saveLabel =
-    session.saveState === "saving"
-      ? "Сохраняется…"
-      : session.saveState === "saved"
-        ? "Сохранено"
-        : session.saveState === "error"
-          ? session.saveError ?? "Ошибка сохранения"
-          : session.isDirty()
-            ? "Есть несохранённые правки"
-            : "Изменения ещё не отправлялись";
+    leaving && session.saveState === "saving"
+      ? "Сохраняем перед выходом…"
+      : session.saveState === "saving"
+        ? "Сохраняется…"
+        : session.saveState === "saved"
+          ? "Сохранено"
+          : session.saveState === "error"
+            ? session.saveError ?? "Ошибка сохранения"
+            : session.isDirty()
+              ? "Есть несохранённые правки"
+              : "Изменения ещё не отправлялись";
 
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/reels" className="text-sm text-muted hover:text-text">
+        <Link href="/reels" onClick={onGoToList} className="text-sm text-muted hover:text-text">
           ← Мои ролики
         </Link>
         <div className="flex items-center gap-3">

@@ -69,6 +69,9 @@ export function ReelList() {
     }
   }, [queryString]);
 
+  const loadRef = useRef(load);
+  loadRef.current = load;
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -88,7 +91,7 @@ export function ReelList() {
       if (!res.ok) throw new Error(data.error ?? "Не удалось создать карточку.");
       setTitle("");
       setNote("");
-      await load();
+      await loadRef.current();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка.");
     } finally {
