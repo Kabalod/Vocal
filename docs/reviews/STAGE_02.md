@@ -6,7 +6,7 @@
 - Репозиторий: Kabalod/Vocal
 - Ветка: feat/personal-mvp-02-reel-workspace
 - BASE_SHA (до изменений): ba283c9e9e20e634e76994a43183f1d2d3660e60
-- HEAD_SHA (после изменений): будет записан после коммита исправления ревью
+- HEAD_SHA (после изменений): `1940b3553323b5025566e58dd8c7e823f1aa188e`
 - Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-02-reel-workspace
 - Ветка отправлена в GitHub: да, без force push
 - Предыдущий этап принят: да, этап 1 на `ba283c9e9e20e634e76994a43183f1d2d3660e60`
@@ -93,5 +93,5 @@
 - Исправление: try/catch, ошибка и повтор; beforeunload; таймер сбрасывается, затем requestSave.
 - Замечание: старый поиск/фильтр мог перезаписать новый список.
 - Исправление: `GenerationGuard` для load и после создания.
-- Новый commit SHA: вершина ветки после push
+- Новый commit SHA: `1940b3553323b5025566e58dd8c7e823f1aa188e`
 - Повторная проверка: `npm run test:reels` 10/10; lint ок; typecheck без новых ошибок кроме исходных analyze/score-analyz. Браузер не гонялся.
