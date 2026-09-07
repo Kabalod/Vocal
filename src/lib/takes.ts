@@ -64,6 +64,18 @@ export async function updateTake(id: string, input: UpdateTakeInput): Promise<Ta
   }
 
   await prisma.take.update({ where: { id }, data });
+  if (data.bodyText) {
+    const existingOriginal = await prisma.transcriptRevision.findFirst({
+      where: { takeId: id, kind: "original" },
+    });
+    if (existingOriginal) {
+      const { createEditedRevision } = await import("@/lib/transcripts");
+      await createEditedRevision(id, data.bodyText);
+    } else {
+      const { ensureOriginalFromText } = await import("@/lib/transcripts");
+      await ensureOriginalFromText(id, data.bodyText);
+    }
+  }
   const row = await prisma.take.findUnique({ where: { id }, include: takeInclude });
   if (!row) throw new ReelError("Дубль не найден.", "TAKE_NOT_FOUND", 404);
   return toTakeDto(row);

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { TakeList } from "@/components/TakeList";
 import { TakePlayer } from "@/components/TakePlayer";
 import { TakeUploadDropzone } from "@/components/TakeUploadDropzone";
+import { TranscriptEditor } from "@/components/TranscriptEditor";
 import type { ReelDto } from "@/types/reel";
 
 export function ReelTakes({ reelId }: { reelId: string }) {
@@ -96,7 +97,8 @@ export function ReelTakes({ reelId }: { reelId: string }) {
       <div>
         <h2 className="font-display text-2xl">Попытки</h2>
         <p className="text-sm text-muted">
-          Новый дубль не заменяет старый и не становится финальным сам. Распознавание речи — отдельный этап, здесь его нет.
+          Новый дубль не заменяет старый и не становится финальным сам. Расшифровку можно править версиями; распознавание
+          речи по-прежнему запускается отдельно через задачу обработки.
         </p>
       </div>
       {error ? <p className="text-bad">{error}</p> : null}
@@ -110,6 +112,7 @@ export function ReelTakes({ reelId }: { reelId: string }) {
         />
         <div className="space-y-4">
           <TakePlayer take={viewing} seekTo={seekTo} />
+          {viewing ? <TranscriptEditor key={viewing.id} takeId={viewing.id} /> : null}
           {viewing && viewing.inputType !== "text" && viewing.browserPlayback ? (
             <form
               className="flex flex-wrap items-end gap-2"
@@ -136,7 +139,7 @@ export function ReelTakes({ reelId }: { reelId: string }) {
       </div>
       <TakeUploadDropzone reelId={reelId} onUploaded={() => void load()} />
       <form onSubmit={addText} className="space-y-3 rounded-2xl border border-line bg-bg-elev p-4">
-        <p className="text-sm text-muted">Текстовая попытка. Фиктивное видео не создаётся. На этапе 4 текст переедет в версии расшифровки.</p>
+        <p className="text-sm text-muted">Текстовая попытка. Текст сразу сохраняется как исходная версия расшифровки.</p>
         <textarea
           value={textBody}
           onChange={(event) => setTextBody(event.target.value)}

@@ -51,6 +51,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       bodyText,
       idempotencyKey: typeof body.idempotencyKey === "string" ? body.idempotencyKey : undefined,
     });
+    const { ensureOriginalFromText } = await import("@/lib/transcripts");
+    await ensureOriginalFromText(created.id, bodyText);
     const take = await getTakeDto(created.id);
     return NextResponse.json({ take, selectedTakeId: reel.selectedTakeId }, { status: 201 });
   } catch (error) {

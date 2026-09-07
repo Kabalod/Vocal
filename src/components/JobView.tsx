@@ -51,7 +51,7 @@ export function JobView({ id }: { id: string }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Не удалось перезапустить.");
       setJob((prev) =>
-        prev ? { ...prev, ...data.job, analysis: null, status: "queued" } : prev,
+        prev ? { ...prev, ...data.job, analysis: prev.analysis } : prev,
       );
       setError(null);
       setPollKey((n) => n + 1);

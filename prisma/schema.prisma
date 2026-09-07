@@ -19,38 +19,59 @@ model Reel {
 }
 
 model Take {
-  id             String   @id @default(cuid())
-  reelId         String
-  reel           Reel     @relation(fields: [reelId], references: [id], onDelete: Restrict)
-  number         Int
-  inputType      String
-  authorNote     String   @default("")
-  idempotencyKey String?
-  mediaStatus    String   @default("ready")
-  originalName   String?
-  storedPath     String?
-  mimeType       String?
-  bodyText       String   @default("")
-  createdAt      DateTime @default(now())
-  jobs           Job[]
+  id                    String                @id @default(cuid())
+  reelId                String
+  reel                  Reel                  @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  number                Int
+  inputType             String
+  authorNote            String                @default("")
+  idempotencyKey        String?
+  mediaStatus           String                @default("ready")
+  originalName          String?
+  storedPath            String?
+  mimeType              String?
+  bodyText              String                @default("")
+  selectedTranscriptId  String?
+  createdAt             DateTime              @default(now())
+  jobs                  Job[]
+  transcripts           TranscriptRevision[]
 
   @@unique([reelId, number])
   @@unique([reelId, idempotencyKey])
 }
 
-model Job {
+model TranscriptRevision {
   id           String   @id @default(cuid())
+  takeId       String
+  take         Take     @relation(fields: [takeId], references: [id], onDelete: Restrict)
+  kind         String
+  source       String
+  text         String
+  segmentsJson String?
+  language     String?
+  sttModel     String?
+  parentId     String?
+  createdAt    DateTime @default(now())
+}
+
+model Job {
+  id           String    @id @default(cuid())
   originalName String
   videoPath    String
   audioPath    String?
   durationSec  Float?
-  status       String   @default("queued")
+  status       String    @default("queued")
+  stage        String    @default("convert")
+  attempts     Int       @default(0)
+  maxAttempts  Int       @default(3)
+  leaseUntil   DateTime?
+  leaseOwner   String?
   errorCode    String?
   errorMessage String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
   takeId       String?
-  take         Take?    @relation(fields: [takeId], references: [id], onDelete: Restrict)
+  take         Take?     @relation(fields: [takeId], references: [id], onDelete: Restrict)
   analysis     AnalysisResult?
 }
 

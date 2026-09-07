@@ -13,6 +13,9 @@ export interface JobDto {
   audioPath?: string | null;
   durationSec?: number | null;
   status: JobStatus;
+  stage?: string | null;
+  attempts?: number;
+  maxAttempts?: number;
   errorCode?: string | null;
   errorMessage?: string | null;
   createdAt: string;
