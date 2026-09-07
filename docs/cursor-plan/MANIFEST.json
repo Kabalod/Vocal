@@ -1,10 +1,10 @@
 {
   "project": "Kabalod/Vocal",
   "created": "2026-09-07",
-  "stages": 9,
+  "stages": 10,
   "files_sha256": {
     "CURSOR_COMMON.md": "4e1d9c3112f30bcf90870da9d83548f7285e48636d4ad2acceeac0c7fa5a4cf6",
-    "README.md": "1f1e5a69b050e07b058705bc7b0659338ddffb684ff04ae792a418689c79fa43",
+    "README.md": "39f00ff21e83c0041c1c156183906dcf11e6e2fad6bc383ca053afe2339df3d2",
     "REVIEW_TEMPLATE.md": "c4be0f986c928ba5794f1b400303cc62f30b1ba1214b04f5ae6712f08cc4bd2e",
     "STAGE_00_baseline.md": "fa6c2f4a473f65bb0530e09373239c3ae689b38f9ad41c80a393e763c91ab871",
     "STAGE_01_reels-and-takes.md": "e638ccc38421515be29949cd04ab5577656ee4f48e7e744ee3e42a21ecf4fe93",
@@ -14,6 +14,7 @@
     "STAGE_05_creator-profile.md": "d573b5e43d5dc919902e665db10c566dae74e2fc108b1292ecf148f5058a4527",
     "STAGE_06_reviews-and-questions.md": "5417ebf609372b674795133ad1117200fdde13bac9b02575c567804a617d708f",
     "STAGE_07_script-editor.md": "37a48c246a5e585e17a147b9250f4163a1ea897b6f34c8d5b7c49fed7a3d600c",
-    "STAGE_08_comparison-and-release-check.md": "a388dd48e0d4359b96d5351e4fbc6079ea84c5c8c4e3bce0df891cca0296abf2"
+    "STAGE_08_comparison-and-release-check.md": "a388dd48e0d4359b96d5351e4fbc6079ea84c5c8c4e3bce0df891cca0296abf2",
+    "STAGE_09_mvp-stabilization.md": "0f843c26ec1fbac965978a0a4a8ba821f04a34ca7d9e6d2c847beb0428be3605"
   }
 }

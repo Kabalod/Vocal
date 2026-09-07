@@ -10,7 +10,7 @@ import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { isPathInsideRoot } from "../src/lib/storage";
 import { parseByteRange } from "../src/lib/take-media";
-import { canPlayInBrowser } from "../src/lib/take-playback";
+import { canPlayInBrowser, extensionFromName, mimeFromName } from "../src/lib/take-playback";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -32,6 +32,9 @@ test("byte range and browser playback helpers", () => {
   assert.deepEqual(parseByteRange("bytes=0-3", 10), { start: 0, end: 3, partial: true });
   assert.deepEqual(parseByteRange("bytes=8-", 10), { start: 8, end: 9, partial: true });
   assert.equal(parseByteRange("bytes=99-100", 10), null);
+  assert.equal(extensionFromName("folder\\clip.MP4"), ".mp4");
+  assert.equal(extensionFromName("noext"), "");
+  assert.equal(mimeFromName("voice.mp3"), "audio/mpeg");
   assert.equal(canPlayInBrowser("video", "a.mp4"), true);
   assert.equal(canPlayInBrowser("video", "a.mkv"), false);
   assert.equal(canPlayInBrowser("audio", "a.mp3"), true);

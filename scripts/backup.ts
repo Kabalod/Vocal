@@ -8,9 +8,13 @@ function arg(name: string): string | undefined {
 }
 
 async function main() {
-  const dest = arg("--dest");
+  let dest = arg("--dest");
   const restoreFrom = arg("--restore-from");
   const restoreTo = arg("--restore-to");
+  if (!dest && !restoreFrom) {
+    const positional = process.argv.slice(2).filter((item) => !item.startsWith("-"));
+    dest = positional[0];
+  }
   if (restoreFrom && restoreTo) {
     const manifest = await restoreAppBackup({ fromDir: restoreFrom, toDir: restoreTo });
     console.log(JSON.stringify({ ok: true, action: "restore", to: path.resolve(restoreTo), manifest }, null, 2));

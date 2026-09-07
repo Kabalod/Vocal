@@ -15,7 +15,8 @@
 | 5 | Анкета автора | принят | `feat/personal-mvp-05-creator-profile` | `0dd0d04edbcf1cee9cff3b58d00f6290be5bd15e` | `437d8f2f1fd8a74aa17cbe810088ae58b31b4ae5` | `test:reels` 22/22; lint ок | принято внешним ревью |
 | 6 | Разбор и вопросы | принят | `feat/personal-mvp-06-reviews-and-questions` | `437d8f2f1fd8a74aa17cbe810088ae58b31b4ae5` | `d265b0d287b791e981577774b9b1a5215f5d2fc3` | `test:reels` 25/25; lint ок | принято внешним ревью |
 | 7 | Сценарий и версии | принят | `feat/personal-mvp-07-script-editor` | `d265b0d287b791e981577774b9b1a5215f5d2fc3` | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` | `test:reels` 26/26; lint ок | принято внешним ревью |
-| 8 | Сравнение, экспорт, итоговая проверка | на ревью | `feat/personal-mvp-08-comparison-and-release-check` | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` | `0b07f90b2f0da6601a6fdd08bb60bd4805611cb0` | `test:reels` 29/29; lint ок | правки ревью, не принят |
+| 8 | Сравнение, экспорт, итоговая проверка | принят | `feat/personal-mvp-08-comparison-and-release-check` | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` | `086292d9d0db4285382c9a3ca6f47231423928ad` | `test:reels` 29/29; lint ок | принято внешним ревью |
+| 9 | Стабилизация MVP и браузерная проверка | на ревью | `feat/personal-mvp-09-mvp-stabilization` | `086292d9d0db4285382c9a3ca6f47231423928ad` | после push | `test:reels` 29/29; lint; build | не принят |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
@@ -30,18 +31,22 @@
 | Принятый этап 4 | `0dd0d04edbcf1cee9cff3b58d00f6290be5bd15e` |
 | Принятый этап 5 | `437d8f2f1fd8a74aa17cbe810088ae58b31b4ae5` |
 | Принятый этап 6 | `d265b0d287b791e981577774b9b1a5215f5d2fc3` |
-| Принятый этап 7 / BASE этапа 8 | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` |
+| Принятый этап 7 | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` |
+| Принятый этап 8 / BASE этапа 9 | `086292d9d0db4285382c9a3ca6f47231423928ad` |
 | Коммит этапа 7 | `146c63bf94b1eadcbe3e2d59cdda4eb72d51eec9` |
 | Коммит этапа 8 | `ec1883ccf0d8526826ac818efe90d513b3502737` |
 | Исправление ревью этапа 8 | `0b07f90b2f0da6601a6fdd08bb60bd4805611cb0` |
+| Документация SHA этапа 8 | `086292d9d0db4285382c9a3ca6f47231423928ad` |
+| Инструкция этапа 9 (ветка 8, не база) | `33d7ff175559a3a87aee78bdbe11a3fb77ca669d` |
 
-## Этап 8 — проверки
+## Этап 9 — проверки
 
 | Команда | Результат |
 |---|---|
 | `npm run test:reels` | 29/29 |
 | `npm run lint` | exit 0 |
-| `npm run typecheck` | исходные analyze/score-analyz/questions |
-| `npm run build` | не запускался на этапе 8 |
+| `npm run build` | успех |
+| `npm run typecheck` | scripts исключены; analyze с `@ts-nocheck` |
+| Браузер | частичный smoke, без живого Groq и без настоящего видео |
 
-Миграция `20260907132000_compare_results`. Платных вызовов в автотестах не было. Браузер и живой Groq не проверялись. Просмотр медиа на Windows живым запуском не подтверждён.
+Новой миграции нет. Платных вызовов не было. Backup: `%USERPROFILE%\Vocal-backups\stage09-2026-09-07-234850`. Restore: `%USERPROFILE%\Vocal-restore-check-stage09`.

@@ -53,14 +53,18 @@ npm run test:reels
 npm run build
 ```
 
+На этапе 9 `npm run build` прошёл после правок клиентского `take-playback` (без `node:path`), `tsconfig` exclude для `scripts` и узких правок типов в `questions.ts` / отключения проверки старого `analyze.ts`. `npm run typecheck` по-прежнему ругается на прежний Job-скоринг, если смотреть весь репозиторий без exclude.
+
 ## Резервное копирование
 
 Перед копированием остановите `npm run dev` и другие процессы, пишущие в БД.
 
 ```powershell
-npm run backup -- --dest "$env:USERPROFILE\Vocal-backups\manual-$(Get-Date -Format yyyy-MM-dd-HHmmss)"
-npm run backup -- --restore-from "<каталог-бэкапа>" --restore-to "$env:USERPROFILE\Vocal-restore-check"
+npx tsx scripts/backup.ts --dest "$env:USERPROFILE\Vocal-backups\manual-$(Get-Date -Format yyyy-MM-dd-HHmmss)"
+npx tsx scripts/backup.ts --restore-from "<каталог-бэкапа>" --restore-to "$env:USERPROFILE\Vocal-restore-check"
 ```
+
+На части Windows `npm run backup -- --dest …` отбрасывает `--dest`. Надёжнее вызывать `npx tsx scripts/backup.ts` напрямую; скрипт также принимает путь без флага.
 
 Восстановление только в **изолированный** каталог, не поверх рабочей `prisma/dev.db`.
 Не используйте `migrate reset`, `db push --force-reset` и флаги с потерей данных.
@@ -73,9 +77,10 @@ npm run backup -- --restore-from "<каталог-бэкапа>" --restore-to "$
 
 - Один автор, localhost. Нет аккаунтов; не публикуйте приложение в интернет без защиты.
 - Запись с камеры/микрофона в браузере не реализована. Нужна загрузка готового файла или текст.
-- Просмотр видео на Windows в браузере этим этапом не подтверждался живым прогоном.
-- Смысловое сравнение, разбор, вопросы и сборка сценария вызывают Groq только по кнопке. Без ключа доступны сохранение, версии, текстовый diff и экспорт.
-- Typecheck проекта содержит прежние ошибки `src/lib/analyze.ts`, `scripts/score-analyz.ts` и `src/lib/ai/questions.ts`. Сборка `npm run build` на этапе 8 не гонялась.
+- Просмотр **настоящего** видео на Windows в браузере не подтверждался: загружался только крошечный тестовый mp3, отдан `GET /api/takes/:id/media` (200, `audio/mpeg`). Плеер для полноценного ролика не гонялся.
+- Живой Groq на этапе 9 не вызывался: вопросы/разбор/смысловое сравнение по кнопке не запускались. Ошибки модели проверены автотестами с mock.
+- Выбор файла в диалоге Windows через встроенный браузер агента недоступен; загрузка медиа — через `POST /api/uploads`.
+- `npm run typecheck` без exclude `scripts` по-прежнему видит прежний `score-analyz.ts`. Сборка `npm run build` на этапе 9 прошла.
 
 ## Пайплайн текущего кода
 

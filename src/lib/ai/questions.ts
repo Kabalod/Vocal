@@ -79,15 +79,16 @@ export async function updateQuestion(
 
   let nextStatus = question.status;
   if (hasStatus) {
-    if (!isQuestionStatus(input.status)) {
+    const status = input.status;
+    if (!status || !isQuestionStatus(status)) {
       throw new ReviewError("Неизвестный статус вопроса.", "QUESTION_STATUS");
     }
-    nextStatus = input.status;
+    nextStatus = status;
   }
 
   let nextAnswer: string | null = null;
   if (hasText) {
-    const text = input.text.trim();
+    const text = (input.text ?? "").trim();
     if (text.length > ANSWER_MAX) {
       throw new ReviewError(`Ответ короче ${ANSWER_MAX} символов.`, "ANSWER_TOO_LONG");
     }

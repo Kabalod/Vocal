@@ -31,6 +31,7 @@
 | 6 | [STAGE_06_reviews-and-questions.md](STAGE_06_reviews-and-questions.md) | Содержательный разбор и вопросы |
 | 7 | [STAGE_07_script-editor.md](STAGE_07_script-editor.md) | Итоговый сценарий и версии |
 | 8 | [STAGE_08_comparison-and-release-check.md](STAGE_08_comparison-and-release-check.md) | Сравнение, экспорт и итоговая проверка |
+| 9 | [STAGE_09_mvp-stabilization.md](STAGE_09_mvp-stabilization.md) | Стабилизация MVP и браузерная проверка |
 
 ## Как устроено ревью
 

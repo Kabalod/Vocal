@@ -1,9 +1,15 @@
-import path from "node:path";
 import {
   BROWSER_AUDIO_EXTENSIONS,
   BROWSER_VIDEO_EXTENSIONS,
 } from "@/lib/constants";
 import type { TakeInputType } from "@/types/reel";
+
+export function extensionFromName(name: string): string {
+  const base = name.replace(/\\/g, "/").split("/").pop() ?? name;
+  const dot = base.lastIndexOf(".");
+  if (dot <= 0) return "";
+  return base.slice(dot).toLowerCase();
+}
 
 const MIME_BY_EXT: Record<string, string> = {
   ".mp4": "video/mp4",
@@ -18,11 +24,11 @@ const MIME_BY_EXT: Record<string, string> = {
 };
 
 export function mimeFromName(name: string, fallback = "application/octet-stream") {
-  return MIME_BY_EXT[path.extname(name).toLowerCase()] ?? fallback;
+  return MIME_BY_EXT[extensionFromName(name)] ?? fallback;
 }
 
 export function canPlayInBrowser(inputType: TakeInputType, originalName: string | null) {
-  const ext = path.extname(originalName ?? "").toLowerCase();
+  const ext = extensionFromName(originalName ?? "");
   if (inputType === "video") return BROWSER_VIDEO_EXTENSIONS.includes(ext);
   if (inputType === "audio") return BROWSER_AUDIO_EXTENSIONS.includes(ext);
   return false;
