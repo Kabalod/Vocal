@@ -6,7 +6,7 @@
 - Репозиторий: Kabalod/Vocal
 - Ветка: feat/personal-mvp-04-transcripts-and-jobs
 - BASE_SHA (до изменений): 1d8f26c1cb3d137f133fc8f35b0dfd7eac8302be
-- HEAD_SHA (после изменений): `HEAD_SHA`
+- HEAD_SHA (после изменений): `0aa040498b51dc889466ad55375a14e13121c6ab`
 - Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-04-transcripts-and-jobs
 - Ветка отправлена в GitHub: да, без force push (если push прошёл)
 - Предыдущий этап принят: да, этап 3 на `1d8f26c1cb3d137f133fc8f35b0dfd7eac8302be`

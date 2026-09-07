@@ -11,7 +11,7 @@
 | 1 | Карточки роликов и дубли | принят | `feat/personal-mvp-01-reels-and-takes` | `89c52c52160f4ac2ce8155f6ece178bc259c7092` | `ba283c9e9e20e634e76994a43183f1d2d3660e60` | `test:reels` 4/4 на момент принятия | принято внешним ревью |
 | 2 | Экран «Мои ролики» | принят | `feat/personal-mvp-02-reel-workspace` | `ba283c9e9e20e634e76994a43183f1d2d3660e60` | `b08929b1e1328e75c7e9d3bf6ecf1697dce46daa` | `test:reels` 14/14 | принято внешним ревью |
 | 3 | Материалы, плеер, перезаписи | принят | `feat/personal-mvp-03-take-media` | `b08929b1e1328e75c7e9d3bf6ecf1697dce46daa` | `1d8f26c1cb3d137f133fc8f35b0dfd7eac8302be` | `test:reels` 19/19; lint ок | принято внешним ревью |
-| 4 | Расшифровки и надёжная обработка | на ревью | `feat/personal-mvp-04-transcripts-and-jobs` | `1d8f26c1cb3d137f133fc8f35b0dfd7eac8302be` | `HEAD_SHA` | `test:reels` 20/20; lint ок | не принят |
+| 4 | Расшифровки и надёжная обработка | на ревью | `feat/personal-mvp-04-transcripts-and-jobs` | `1d8f26c1cb3d137f133fc8f35b0dfd7eac8302be` | `0aa040498b51dc889466ad55375a14e13121c6ab` | `test:reels` 20/20; lint ок | не принят |
 | 5 | Анкета автора | не начат | — | — | — | — | ждёт принятия этапа 4 |
 | 6 | Разбор и вопросы | не начат | — | — | — | — | |
 | 7 | Сценарий и версии | не начат | — | — | — | — | |
@@ -27,7 +27,7 @@
 | Принятый этап 1 | `ba283c9e9e20e634e76994a43183f1d2d3660e60` |
 | Принятый этап 2 | `b08929b1e1328e75c7e9d3bf6ecf1697dce46daa` |
 | Принятый этап 3 / BASE этапа 4 | `1d8f26c1cb3d137f133fc8f35b0dfd7eac8302be` |
-| Коммит этапа 4 | `HEAD_SHA` |
+| Коммит этапа 4 | `0aa040498b51dc889466ad55375a14e13121c6ab` |
 
 ## Этап 4 — проверки
 
