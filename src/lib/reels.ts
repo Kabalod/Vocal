@@ -2,12 +2,16 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { Take as TakeRow } from "@prisma/client";
 import {
-  isReelStatus,
+  parseReelStatusInput,
   isTakeInputType,
   type CreateReelInput,
   type CreateTakeInput,
   type ReelDto,
+  type ReelListQuery,
   type UpdateReelInput,
+  REEL_LIST_LIMIT,
+  REEL_NOTE_MAX,
+  REEL_TITLE_MAX,
 } from "@/types/reel";
 import { toReelDto } from "@/lib/serialize";
 
@@ -38,11 +42,18 @@ function asReelDto(
 export async function createReel(input: CreateReelInput): Promise<ReelDto> {
   const title = input.title.trim();
   if (!title) throw new ReelError("Нужно название карточки.", "TITLE_REQUIRED");
+  if (title.length > REEL_TITLE_MAX) {
+    throw new ReelError(`Название короче ${REEL_TITLE_MAX} символов.`, "TITLE_TOO_LONG");
+  }
+  const initialNote = input.initialNote?.trim() ?? "";
+  if (initialNote.length > REEL_NOTE_MAX) {
+    throw new ReelError(`Заметка короче ${REEL_NOTE_MAX} символов.`, "NOTE_TOO_LONG");
+  }
   const row = await prisma.reel.create({
     data: {
       title,
-      initialNote: input.initialNote?.trim() ?? "",
-      status: "draft",
+      initialNote,
+      status: "idea",
     },
     include: reelInclude,
   });
@@ -54,28 +65,67 @@ export async function getReel(id: string): Promise<ReelDto | null> {
   return row ? asReelDto(row) : null;
 }
 
-export async function listReels(): Promise<ReelDto[]> {
+export async function listReels(
+  query: ReelListQuery = {},
+): Promise<{ reels: ReelDto[]; truncated: boolean }> {
+  const limit = Math.min(Math.max(query.limit ?? REEL_LIST_LIMIT, 1), REEL_LIST_LIMIT);
+  const q = query.q?.trim();
+  const status = query.status ?? "open";
+  const sort = query.sort ?? "updated";
+
+  const where: Prisma.ReelWhereInput = {};
+  if (status === "open") {
+    where.NOT = { status: "archived" };
+  } else if (status !== "all") {
+    if (status === "idea") where.status = { in: ["idea", "draft"] };
+    else if (status === "in_progress") where.status = { in: ["in_progress", "active"] };
+    else where.status = status;
+  }
+  if (q) {
+    where.OR = [{ title: { contains: q } }, { initialNote: { contains: q } }];
+  }
+
+  const orderBy: Prisma.ReelOrderByWithRelationInput =
+    sort === "title"
+      ? { title: "asc" }
+      : sort === "created"
+        ? { createdAt: "desc" }
+        : { updatedAt: "desc" };
+
   const rows = await prisma.reel.findMany({
-    orderBy: { updatedAt: "desc" },
+    where,
+    orderBy,
+    take: limit + 1,
     include: reelInclude,
   });
-  return rows.map(asReelDto);
+  const truncated = rows.length > limit;
+  return {
+    reels: rows.slice(0, limit).map(asReelDto),
+    truncated,
+  };
 }
 
 export async function updateReel(id: string, input: UpdateReelInput): Promise<ReelDto> {
-  const existing = await prisma.reel.findUnique({ where: { id } });
-  if (!existing) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
-
-  const data: Prisma.ReelUpdateInput = {};
+  const data: Prisma.ReelUpdateManyMutationInput = {};
   if (input.title !== undefined) {
     const title = input.title.trim();
     if (!title) throw new ReelError("Нужно название карточки.", "TITLE_REQUIRED");
+    if (title.length > REEL_TITLE_MAX) {
+      throw new ReelError(`Название короче ${REEL_TITLE_MAX} символов.`, "TITLE_TOO_LONG");
+    }
     data.title = title;
   }
-  if (input.initialNote !== undefined) data.initialNote = input.initialNote.trim();
+  if (input.initialNote !== undefined) {
+    const note = input.initialNote.trim();
+    if (note.length > REEL_NOTE_MAX) {
+      throw new ReelError(`Заметка короче ${REEL_NOTE_MAX} символов.`, "NOTE_TOO_LONG");
+    }
+    data.initialNote = note;
+  }
   if (input.status !== undefined) {
-    if (!isReelStatus(input.status)) throw new ReelError("Неизвестный статус карточки.", "REEL_STATUS");
-    data.status = input.status;
+    const status = parseReelStatusInput(input.status);
+    if (!status) throw new ReelError("Неизвестный статус карточки.", "REEL_STATUS");
+    data.status = status;
   }
   if (input.selectedTakeId !== undefined) {
     if (input.selectedTakeId === null) {
@@ -89,7 +139,28 @@ export async function updateReel(id: string, input: UpdateReelInput): Promise<Re
     }
   }
 
-  const row = await prisma.reel.update({ where: { id }, data, include: reelInclude });
+  if (Object.keys(data).length === 0) {
+    throw new ReelError("Нет полей для сохранения.", "EMPTY_PATCH");
+  }
+
+  const where: Prisma.ReelWhereInput = { id };
+  if (input.expectedUpdatedAt) {
+    const expected = new Date(input.expectedUpdatedAt);
+    if (Number.isNaN(expected.getTime())) {
+      throw new ReelError("Некорректная версия карточки.", "STALE", 400);
+    }
+    where.updatedAt = expected;
+  }
+
+  const updated = await prisma.reel.updateMany({ where, data });
+  if (updated.count !== 1) {
+    const exists = await prisma.reel.findUnique({ where: { id } });
+    if (!exists) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+    throw new ReelError("Карточка уже изменилась. Обновите данные и повторите.", "STALE", 409);
+  }
+
+  const row = await prisma.reel.findUnique({ where: { id }, include: reelInclude });
+  if (!row) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
   return asReelDto(row);
 }
 

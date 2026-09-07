@@ -7,8 +7,8 @@ import type {
   JobWithAnalysis,
 } from "@/types/analysis";
 import {
-  isReelStatus,
   isTakeInputType,
+  normalizeReelStatus,
   type ReelDto,
   type TakeDto,
 } from "@/types/reel";
@@ -92,7 +92,7 @@ export function toTakeDto(take: TakeWithJobs): TakeDto {
 }
 
 export function toReelDto(reel: ReelWithTakes): ReelDto {
-  const status = isReelStatus(reel.status) ? reel.status : "draft";
+  const status = normalizeReelStatus(reel.status);
   return {
     id: reel.id,
     title: reel.title,
@@ -102,5 +102,7 @@ export function toReelDto(reel: ReelWithTakes): ReelDto {
     createdAt: reel.createdAt.toISOString(),
     updatedAt: reel.updatedAt.toISOString(),
     takes: reel.takes.map(toTakeDto),
+    takeCount: reel.takes.length,
+    hasScript: false,
   };
 }
