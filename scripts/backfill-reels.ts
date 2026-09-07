@@ -23,7 +23,7 @@ export async function backfillReels(client: PrismaClient) {
         data: {
           title: titleFromJob(fresh.originalName),
           initialNote: "",
-          status: "draft",
+          status: "idea",
         },
       });
 

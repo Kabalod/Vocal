@@ -14,9 +14,9 @@ const literata = Literata({
 });
 
 export const metadata: Metadata = {
-  title: "Vocal — разбор разговорного видео",
+  title: "Vocal — идеи и разбор разговорного видео",
   description:
-    "Загрузите видео до 3 минут: подсказки по сценарию, идее и стилю разговорного блога.",
+    "Карточки идей до видео и разбор загруженного ролика: сценарий, идея и стиль.",
 };
 
 export default function RootLayout({
@@ -37,7 +37,13 @@ export default function RootLayout({
                 речь → совет на дубль
               </p>
             </Link>
-            <nav className="flex gap-1 text-sm">
+            <nav className="flex flex-wrap gap-1 text-sm">
+              <Link
+                href="/reels"
+                className="rounded-full px-3 py-1.5 text-muted hover:bg-accent-dim hover:text-text"
+              >
+                Мои ролики
+              </Link>
               <Link
                 href="/"
                 className="rounded-full px-3 py-1.5 text-muted hover:bg-accent-dim hover:text-text"
