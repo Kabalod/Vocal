@@ -6,7 +6,7 @@
 - Репозиторий: Kabalod/Vocal
 - Ветка: feat/personal-mvp-09-mvp-stabilization
 - BASE_SHA (до изменений): `086292d9d0db4285382c9a3ca6f47231423928ad`
-- HEAD_SHA (после изменений): см. коммит `fix: stabilize personal MVP stage 09`; точное значение — вершина ветки после push
+- HEAD_SHA (после изменений): `21b4858f70306cd8df29b9d450c30a4356fd49f9`
 - Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-09-mvp-stabilization
 - Ветка отправлена в GitHub: да, без force push (если push прошёл)
 - Предыдущий этап принят: да, этап 8 на `086292d9d0db4285382c9a3ca6f47231423928ad`
