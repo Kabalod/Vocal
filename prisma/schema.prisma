@@ -26,6 +26,7 @@ model Reel {
   questions        Question[]
   aiCalls          AiCall[]
   scripts          ScriptVersion[]
+  compares         CompareResult[]
 }
 
 model CreatorProfile {
@@ -216,6 +217,28 @@ model ScriptVersion {
   inputSnapshotJson  String?
   createdAt          DateTime @default(now())
   takes              Take[]
+
+  @@index([reelId, createdAt])
+}
+
+model CompareResult {
+  id                 String   @id @default(cuid())
+  reelId             String
+  reel               Reel     @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  leftTakeId         String
+  rightTakeId        String
+  leftTranscriptId   String
+  rightTranscriptId  String
+  intent             String   @default("")
+  textDiffJson       String
+  resultJson         String?
+  status             String   @default("done")
+  errorMessage       String?
+  contextSnapshotId  String?
+  aiCallId           String?
+  model              String?
+  promptVersion      String?
+  createdAt          DateTime @default(now())
 
   @@index([reelId, createdAt])
 }
