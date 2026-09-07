@@ -6,9 +6,9 @@
 - Репозиторий: Kabalod/Vocal
 - Ветка: feat/personal-mvp-08-comparison-and-release-check
 - BASE_SHA (до изменений): 87cf50b8dc8d01f98a2e64120d51ab308b9921db
-- HEAD_SHA (после изменений): (заполнится docs-коммитом)
+- HEAD_SHA (после изменений): `ec1883ccf0d8526826ac818efe90d513b3502737`
 - Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-08-comparison-and-release-check
-- Ветка отправлена в GitHub: будет после push без force
+- Ветка отправлена в GitHub: да, без force push (если push прошёл)
 - Предыдущий этап принят: да, этап 7 на `87cf50b8dc8d01f98a2e64120d51ab308b9921db`
 
 ## Реализовано
