@@ -5,6 +5,8 @@ import { TakeList } from "@/components/TakeList";
 import { TakePlayer } from "@/components/TakePlayer";
 import { TakeUploadDropzone } from "@/components/TakeUploadDropzone";
 import { TranscriptEditor } from "@/components/TranscriptEditor";
+import { QuestionList } from "@/components/QuestionList";
+import { ReviewPanel } from "@/components/ReviewPanel";
 import type { ReelDto } from "@/types/reel";
 
 export function ReelTakes({ reelId }: { reelId: string }) {
@@ -113,6 +115,7 @@ export function ReelTakes({ reelId }: { reelId: string }) {
         <div className="space-y-4">
           <TakePlayer take={viewing} seekTo={seekTo} />
           {viewing ? <TranscriptEditor key={viewing.id} takeId={viewing.id} /> : null}
+          {viewing ? <ReviewPanel key={`review-${viewing.id}`} takeId={viewing.id} /> : null}
           {viewing && viewing.inputType !== "text" && viewing.browserPlayback ? (
             <form
               className="flex flex-wrap items-end gap-2"
@@ -137,6 +140,7 @@ export function ReelTakes({ reelId }: { reelId: string }) {
           ) : null}
         </div>
       </div>
+      <QuestionList reelId={reelId} takeId={viewingId} />
       <TakeUploadDropzone reelId={reelId} onUploaded={() => void load()} />
       <form onSubmit={addText} className="space-y-3 rounded-2xl border border-line bg-bg-elev p-4">
         <p className="text-sm text-muted">Текстовая попытка. Текст сразу сохраняется как исходная версия расшифровки.</p>

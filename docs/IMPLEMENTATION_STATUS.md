@@ -12,9 +12,9 @@
 | 2 | Экран «Мои ролики» | принят | `feat/personal-mvp-02-reel-workspace` | `ba283c9e9e20e634e76994a43183f1d2d3660e60` | `b08929b1e1328e75c7e9d3bf6ecf1697dce46daa` | `test:reels` 14/14 | принято внешним ревью |
 | 3 | Материалы, плеер, перезаписи | принят | `feat/personal-mvp-03-take-media` | `b08929b1e1328e75c7e9d3bf6ecf1697dce46daa` | `1d8f26c1cb3d137f133fc8f35b0dfd7eac8302be` | `test:reels` 19/19; lint ок | принято внешним ревью |
 | 4 | Расшифровки и надёжная обработка | принят | `feat/personal-mvp-04-transcripts-and-jobs` | `1d8f26c1cb3d137f133fc8f35b0dfd7eac8302be` | `0dd0d04edbcf1cee9cff3b58d00f6290be5bd15e` | `test:reels` 20/20; lint ок | принято внешним ревью |
-| 5 | Анкета автора | на ревью | `feat/personal-mvp-05-creator-profile` | `0dd0d04edbcf1cee9cff3b58d00f6290be5bd15e` | `84f5e62749998b24db636dbcbf5d495ac1698ba3` | `test:reels` 22/22; lint ок | не принят |
-| 6 | Разбор и вопросы | не начат | — | — | — | — | ждёт принятия этапа 5 |
-| 7 | Сценарий и версии | не начат | — | — | — | — | |
+| 5 | Анкета автора | принят | `feat/personal-mvp-05-creator-profile` | `0dd0d04edbcf1cee9cff3b58d00f6290be5bd15e` | `437d8f2f1fd8a74aa17cbe810088ae58b31b4ae5` | `test:reels` 22/22; lint ок | принято внешним ревью |
+| 6 | Разбор и вопросы | на ревью | `feat/personal-mvp-06-reviews-and-questions` | `437d8f2f1fd8a74aa17cbe810088ae58b31b4ae5` | `HEAD_SHA` | `test:reels` 24/24; lint ок | не принят |
+| 7 | Сценарий и версии | не начат | — | — | — | — | ждёт принятия этапа 6 |
 | 8 | Сравнение, экспорт, итоговая проверка | не начат | — | — | — | — | |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
@@ -27,16 +27,17 @@
 | Принятый этап 1 | `ba283c9e9e20e634e76994a43183f1d2d3660e60` |
 | Принятый этап 2 | `b08929b1e1328e75c7e9d3bf6ecf1697dce46daa` |
 | Принятый этап 3 | `1d8f26c1cb3d137f133fc8f35b0dfd7eac8302be` |
-| Принятый этап 4 / BASE этапа 5 | `0dd0d04edbcf1cee9cff3b58d00f6290be5bd15e` |
-| Коммит этапа 5 | `84f5e62749998b24db636dbcbf5d495ac1698ba3` |
+| Принятый этап 4 | `0dd0d04edbcf1cee9cff3b58d00f6290be5bd15e` |
+| Принятый этап 5 / BASE этапа 6 | `437d8f2f1fd8a74aa17cbe810088ae58b31b4ae5` |
+| Коммит этапа 6 | `HEAD_SHA` |
 
-## Этап 5 — проверки
+## Этап 6 — проверки
 
 | Команда | Результат |
 |---|---|
-| `npm run test:reels` | 22/22 |
+| `npm run test:reels` | 24/24 |
 | `npm run lint` | exit 0 |
 | `npm run typecheck` | исходные analyze/score-analyz; новых ошибок этапа нет |
-| `npm run build` | не запускался на этапе 5 |
+| `npm run build` | не запускался на этапе 6 |
 
-Миграция `20260907125000_creator_profile`. Платных вызовов не было. Браузерные экраны анкеты и контекста не гонялись.
+Миграция `20260907130000_reviews_and_questions`. Платных вызовов в автотестах не было (mock Groq). Браузер не гонялся. Живой Groq из UI не проверялся.

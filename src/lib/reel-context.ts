@@ -180,3 +180,7 @@ export async function saveReelContext(
 
   return getReelContext(reelId);
 }
+
+export async function freezeReelContext(reelId: string): Promise<ReelContextDto> {
+  return saveReelContext(reelId, {});
+}

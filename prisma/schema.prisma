@@ -20,6 +20,9 @@ model Reel {
   updatedAt        DateTime               @updatedAt
   takes            Take[]
   contextSnapshots ReelContextSnapshot[]
+  reviews          Review[]
+  questions        Question[]
+  aiCalls          AiCall[]
 }
 
 model CreatorProfile {
@@ -67,6 +70,7 @@ model Take {
   createdAt             DateTime              @default(now())
   jobs                  Job[]
   transcripts           TranscriptRevision[]
+  reviews               Review[]
 
   @@unique([reelId, number])
   @@unique([reelId, idempotencyKey])
@@ -129,4 +133,64 @@ model Criterion {
   categoryLabel  String  @default("")
   categoryWeight Int     @default(20)
   categoryOrder  Int     @default(0)
+}
+
+model AiCall {
+  id                 String    @id @default(cuid())
+  kind               String
+  reelId             String
+  reel               Reel      @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  takeId             String?
+  reviewId           String?
+  model              String
+  status             String    @default("queued")
+  promptText         String
+  inputSnapshotJson  String
+  responseText       String?
+  resultJson         String?
+  errorMessage       String?
+  promptTokens       Int?
+  completionTokens   Int?
+  createdAt          DateTime  @default(now())
+  reviews            Review[]
+}
+
+model Review {
+  id                     String    @id @default(cuid())
+  reelId                 String
+  reel                   Reel      @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  takeId                 String
+  take                   Take      @relation(fields: [takeId], references: [id], onDelete: Restrict)
+  transcriptRevisionId   String
+  contextSnapshotId      String?
+  previousReviewId       String?
+  aiCallId               String?
+  aiCall                 AiCall?   @relation(fields: [aiCallId], references: [id], onDelete: SetNull)
+  status                 String    @default("queued")
+  resultJson             String?
+  errorMessage           String?
+  createdAt              DateTime  @default(now())
+  questions              Question[]
+}
+
+model Question {
+  id        String   @id @default(cuid())
+  reelId    String
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  reviewId  String?
+  review    Review?  @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  roundId   String
+  text      String
+  status    String   @default("open")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  answers   Answer[]
+}
+
+model Answer {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  text       String
+  createdAt  DateTime @default(now())
 }
