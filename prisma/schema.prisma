@@ -8,14 +8,46 @@ datasource db {
 }
 
 model Reel {
-  id             String   @id @default(cuid())
-  title          String
-  initialNote    String   @default("")
-  status         String   @default("draft")
-  selectedTakeId String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  takes          Take[]
+  id               String                 @id @default(cuid())
+  title            String
+  initialNote      String                 @default("")
+  status           String                 @default("draft")
+  selectedTakeId   String?
+  reelGoal         String                 @default("")
+  reelAudience     String                 @default("")
+  contextKeysJson  String                 @default("[]")
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  takes            Take[]
+  contextSnapshots ReelContextSnapshot[]
+}
+
+model CreatorProfile {
+  id                 String             @id
+  currentRevisionId  String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  revisions          ProfileRevision[]
+}
+
+model ProfileRevision {
+  id          String         @id @default(cuid())
+  profileId   String
+  profile     CreatorProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  payloadJson String
+  createdAt   DateTime       @default(now())
+}
+
+model ReelContextSnapshot {
+  id                 String   @id @default(cuid())
+  reelId             String
+  reel               Reel     @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  profileRevisionId  String?
+  reelGoal           String
+  reelAudience       String
+  selectedKeysJson   String
+  assembledJson      String
+  createdAt          DateTime @default(now())
 }
 
 model Take {

@@ -45,6 +45,12 @@ export default function RootLayout({
                 Мои ролики
               </Link>
               <Link
+                href="/profile"
+                className="rounded-full px-3 py-1.5 text-muted hover:bg-accent-dim hover:text-text"
+              >
+                Анкета
+              </Link>
+              <Link
                 href="/"
                 className="rounded-full px-3 py-1.5 text-muted hover:bg-accent-dim hover:text-text"
               >

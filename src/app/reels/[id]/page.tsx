@@ -1,3 +1,4 @@
+import { ReelContextForm } from "@/components/ReelContextForm";
 import { ReelTakes } from "@/components/ReelTakes";
 import { ReelWorkspace } from "@/components/ReelWorkspace";
 
@@ -6,7 +7,9 @@ export default async function ReelPage({ params }: { params: Promise<{ id: strin
   return (
     <div className="space-y-10">
       <ReelWorkspace id={id} />
+      <ReelContextForm reelId={id} />
       <ReelTakes reelId={id} />
     </div>
   );
 }
+
