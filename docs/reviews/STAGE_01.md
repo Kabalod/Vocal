@@ -6,7 +6,7 @@
 - Репозиторий: Kabalod/Vocal
 - Ветка: feat/personal-mvp-01-reels-and-takes
 - BASE_SHA (до изменений): 89c52c52160f4ac2ce8155f6ece178bc259c7092
-- HEAD_SHA (после изменений): вершина ветки после коммита этапа; точное значение в сообщении после push
+- HEAD_SHA (после изменений): `3659cd15edf207c458a7fd3d70bb746108881cfc` (коммит реализации этапа 1); итоговый HEAD — вершина ветки после исправления ревью
 - Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-01-reels-and-takes
 - Ветка отправлена в GitHub: да (после `git push -u origin HEAD`, без force)
 - Предыдущий этап принят: да, этап 0 на `89c52c52160f4ac2ce8155f6ece178bc259c7092`
@@ -93,7 +93,14 @@
 
 ## После замечаний
 
-- Замечание:
-- Исправление:
-- Новый commit SHA:
-- Повторная проверка:
+- Замечание: повтор запроса с jobId отклонялся JOB_HAS_TAKE до поиска по ключу.
+- Исправление: сначала idempotencyKey; уже привязанная к этому Take Job возвращается. Тест: два запроса с jobId+ключом — один Take.
+- Замечание: гонка могла перепривязать Job через connect вне атомарного условия.
+- Исправление: `updateMany` только при `takeId = null`; при count ≠ 1 транзакция откатывает дубль. Тест: одна Job, две карточки.
+- Замечание: baseline по отсутствию `_prisma_migrations` для любой SQLite.
+- Исправление: сверка старой схемы; пустая БД — `migrate deploy`; иное — стоп без resolve.
+- Замечание: нет теста переноса заполненной старой БД; payloadHashes только длина.
+- Исправление: сценарий db-push SQL → данные → baseline+migrate → backfill×2, точный payload, sha256, `PRAGMA foreign_key_check`. В `db-counts.ts` — sha256.
+- SQL уже применённых миграций не менялся.
+- Новый commit SHA: вершина ветки после push
+- Повторная проверка: `npm run test:reels` 4/4; lint ок; typecheck/build — только исходные ошибки

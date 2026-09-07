@@ -36,10 +36,13 @@ export async function backfillReels(client: PrismaClient) {
         },
       });
 
-      await tx.job.update({
-        where: { id: fresh.id },
+      const bound = await tx.job.updateMany({
+        where: { id: fresh.id, takeId: null },
         data: { takeId: take.id },
       });
+      if (bound.count !== 1) {
+        throw new Error(`Job ${fresh.id} уже привязана, откат дубля.`);
+      }
       return true;
     });
     if (didCreate) created += 1;

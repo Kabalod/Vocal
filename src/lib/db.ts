@@ -4,13 +4,22 @@ import type { CriterionDto } from "@/types/analysis";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
+function createPrisma() {
+  return new PrismaClient({
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
+}
+
+export let prisma = globalForPrisma.prisma ?? createPrisma();
 
 if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
+
+/** Для тестов: новый клиент после смены DATABASE_URL. */
+export async function resetPrismaClient() {
+  await prisma.$disconnect();
+  prisma = createPrisma();
   globalForPrisma.prisma = prisma;
 }
 

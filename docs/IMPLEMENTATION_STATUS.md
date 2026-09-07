@@ -8,7 +8,7 @@
 | Этап | Название | Статус | Ветка | BASE_SHA | HEAD_SHA | Проверки | Замечания |
 |---|---|---|---|---|---|---|---|
 | 0 | Исходное состояние и правила | принят | `feat/personal-mvp-00-baseline` | `b59e78a0a177442dd7fc30e02217153c634eb98f` | `89c52c52160f4ac2ce8155f6ece178bc259c7092` | lint ок; typecheck/build — исходные ошибки | принято внешним ревью |
-| 1 | Карточки роликов и дубли | на ревью | `feat/personal-mvp-01-reels-and-takes` | `89c52c52160f4ac2ce8155f6ece178bc259c7092` | вершина ветки после коммита этапа | `test:reels` ок; lint ок; typecheck/build — те же исходные ошибки | не принят |
+| 1 | Карточки роликов и дубли | на ревью | `feat/personal-mvp-01-reels-and-takes` | `89c52c52160f4ac2ce8155f6ece178bc259c7092` | вершина ветки после исправления ревью | `test:reels` 4/4; lint ок; typecheck/build — исходные ошибки | исправления ревью; не принят |
 | 2 | Экран «Мои ролики» | не начат | — | — | — | — | ждёт принятия этапа 1 |
 | 3 | Материалы, плеер, перезаписи | не начат | — | — | — | — | |
 | 4 | Расшифровки и надёжная обработка | не начат | — | — | — | — | |
@@ -37,7 +37,7 @@
 
 | Команда | Результат |
 |---|---|
-| `npm run test:reels` | pass (временная БД: migrate, backfill×2, конкурентные номера, idempotency, архив) |
+| `npm run test:reels` | pass, 4 теста (идемпотентность job+ключ, гонка двух карточек, пустая/чужая БД, legacy db-push → migrate → backfill×2, payload и foreign_key_check) |
 | `npm run lint` | exit 0; deprecation `next lint` |
 | `npm run typecheck` | exit 2, только исходные: `scripts/score-analyz.ts:93` TS1501 и `src/lib/analyze.ts` |
 | `npm run build` | compile ок, падает на исходной TS1501 в `score-analyz.ts:93` |

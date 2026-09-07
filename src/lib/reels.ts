@@ -116,15 +116,10 @@ export async function createTake(reelId: string, input: CreateTakeInput): Promis
   }
   const idempotencyKey = input.idempotencyKey?.trim() || null;
   const authorNote = input.authorNote?.trim() ?? "";
+  const jobId = input.jobId?.trim() || undefined;
 
   const reel = await prisma.reel.findUnique({ where: { id: reelId } });
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
-
-  if (input.jobId) {
-    const job = await prisma.job.findUnique({ where: { id: input.jobId } });
-    if (!job) throw new ReelError("Задача не найдена.", "JOB_NOT_FOUND", 404);
-    if (job.takeId) throw new ReelError("У этой задачи уже есть дубль.", "JOB_HAS_TAKE");
-  }
 
   for (let attempt = 0; attempt < 12; attempt++) {
     try {
@@ -133,25 +128,50 @@ export async function createTake(reelId: string, input: CreateTakeInput): Promis
           const existing = await tx.take.findUnique({
             where: { reelId_idempotencyKey: { reelId, idempotencyKey } },
           });
-          if (existing) return existing;
+          if (existing) {
+            if (jobId) await bindJobToTakeOrThrow(tx, jobId, existing.id);
+            return existing;
+          }
         }
 
         const number = await nextTakeNumber(tx, reelId);
-        return tx.take.create({
+        const take = await tx.take.create({
           data: {
             reelId,
             number,
             inputType: input.inputType,
             authorNote,
             idempotencyKey,
-            ...(input.jobId ? { jobs: { connect: { id: input.jobId } } } : {}),
           },
         });
+
+        if (jobId) await bindJobToTakeOrThrow(tx, jobId, take.id);
+        return take;
       });
     } catch (error) {
+      if (error instanceof ReelError) throw error;
       if (isUniqueConflict(error) && attempt < 11) continue;
       throw error;
     }
   }
   throw new ReelError("Не удалось выдать номер дубля.", "TAKE_NUMBER");
+}
+
+async function bindJobToTakeOrThrow(
+  tx: Prisma.TransactionClient,
+  jobId: string,
+  takeId: string,
+) {
+  const job = await tx.job.findUnique({ where: { id: jobId } });
+  if (!job) throw new ReelError("Задача не найдена.", "JOB_NOT_FOUND", 404);
+  if (job.takeId === takeId) return;
+  if (job.takeId) throw new ReelError("У этой задачи уже есть дубль.", "JOB_HAS_TAKE");
+
+  const bound = await tx.job.updateMany({
+    where: { id: jobId, takeId: null },
+    data: { takeId },
+  });
+  if (bound.count !== 1) {
+    throw new ReelError("У этой задачи уже есть дубль.", "JOB_HAS_TAKE");
+  }
 }

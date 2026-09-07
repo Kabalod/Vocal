@@ -40,7 +40,7 @@ npm run dev
 
 ## Существующая БД (после db push)
 
-Если база уже была создана через `db push` (нет таблицы `_prisma_migrations`), не выполняйте `migrate deploy` сразу: сначала `npm run db:migrate:existing` (пометит baseline `20260907120000_init` как applied), затем `npm run db:backfill-reels`. Не используйте `db push --force-reset`.
+Если база уже была создана через `db push` (старые таблицы Job/AnalysisResult/Criterion без `_prisma_migrations`), сначала `npm run db:migrate:existing`: скрипт сверит схему, пометит baseline и выполнит migrate deploy. Пустую базу не baselined — для неё обычный `migrate deploy`. При несовпадении схемы скрипт останавливается. Затем `npm run db:backfill-reels`. Не используйте `db push --force-reset`.
 
 ## Проверки кода
 
