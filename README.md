@@ -6,7 +6,7 @@
 Статус этапов: [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).  
 План работы в Cursor: [docs/cursor-plan/README.md](docs/cursor-plan/README.md).
 
-Сейчас в коде ещё разовый анализатор загруженного видео (FFmpeg → Groq Whisper → оценки). Это описано в [SPEC.md](./SPEC.md) как прежняя спецификация, не как цель личного MVP.
+В репозитории есть разовый анализатор загруженного видео (FFmpeg → Groq Whisper → оценки). Описание реализации — [SPEC.md](./SPEC.md). Это прежняя спецификация, не цель личного MVP. Живой прогон пайплайна на этапе 0 не выполнялся.
 
 ## Что нужно (Windows)
 
@@ -15,20 +15,28 @@
 - Ключ [Groq](https://console.groq.com/) в `.env` (`GROQ_API_KEY`) — только для распознавания и ИИ-разбора
 - FFmpeg подтягивается через `ffmpeg-static` / `ffprobe-static` (системный ставить не обязательно)
 
-## Запуск
+## Первая установка
 
-В PowerShell из корня репозитория:
+В PowerShell из корня репозитория. Файл `.env` создаётся **только если его ещё нет** — существующий ключ не перезаписывается.
 
 ```powershell
-Copy-Item .env.example .env
-# впишите GROQ_API_KEY в .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+# при необходимости впишите GROQ_API_KEY в .env
 npm install
 npx prisma db push
 npx prisma db seed
 npm run dev
 ```
 
-Откройте http://localhost:3000. Без ключа Groq интерфейс поднимается; пайплайн распознавания и анализа не выполнится.
+Откройте http://localhost:3000. Без ключа Groq интерфейс может подняться; распознавание и анализ без ключа не выполнятся.
+
+## Обычный запуск
+
+Если зависимости уже установлены и схема БД накатана:
+
+```powershell
+npm run dev
+```
 
 Проверки кода (без вызова модели):
 
@@ -50,6 +58,8 @@ npm run build
 `.env`, база, анкета и медиа в git не входят.
 
 ## Пайплайн текущего кода
+
+Реализация в коде (не результат ручной проверки на этом этапе):
 
 1. Загрузка видео (mp4 / webm / mov / mkv, ≤ 3 мин, ≤ 80 МБ)
 2. FFmpeg: MP3 16 kHz mono 64 kbps
