@@ -59,6 +59,35 @@ export interface VideoBrief {
   format: string;
 }
 
+export interface ScenarioBeat {
+  quote: string;
+  problem: string;
+  suggestion: string;
+  startSec?: number;
+  endSec?: number;
+}
+
+export interface ScenarioCoach {
+  spine: string;
+  weakBeats: ScenarioBeat[];
+  openingRewrite: string;
+  endingRewrite: string;
+}
+
+export interface CraftTip {
+  area: "idea" | "style" | "delivery";
+  title: string;
+  now: string;
+  better: string;
+  playbookId: string;
+}
+
+export interface CoachPack {
+  format: string;
+  scenario: ScenarioCoach;
+  craft: CraftTip[];
+}
+
 export interface EvidenceItem {
   quote: string;
   reason: string;
@@ -115,6 +144,7 @@ export interface AnalysisResultPayload {
   overallScore: number;
   summary: string;
   video: VideoBrief;
+  coach: CoachPack | null;
   categoryScores: CategoryScore[];
   evaluations: CriterionEvaluation[];
   strengths: StrengthItem[];

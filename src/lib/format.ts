@@ -22,7 +22,7 @@ export function formatDate(iso: string): string {
 }
 
 export function scoreTone(score: number): string {
-  if (score >= 8) return "good";
+  if (score >= 7) return "good";
   if (score >= 5.5) return "ok";
   return "bad";
 }

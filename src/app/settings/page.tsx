@@ -90,8 +90,9 @@ export default function SettingsPage() {
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-4xl">Критерии</h1>
           <p className="mt-2 max-w-xl text-muted">
-            Методика Instagram Conversational Video. Выключение убирает критерий из промпта и из
-            среднего. Вес 5–50 влияет только внутри категории. Итог считает backend, не модель.
+            Методика разговорного блога. Выключение убирает критерий из промпта и из
+            среднего. Вес влияет только внутри категории. Итог считает backend.
+            Помощник всё равно даст текстовые советы на следующий дубль — исходник не режется.
           </p>
         </div>
         <div className="flex gap-2">

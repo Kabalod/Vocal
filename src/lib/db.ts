@@ -34,19 +34,35 @@ export async function ensureCriteria() {
   const existing = await prisma.criterion.findMany();
   const knownIds = new Set(DEFAULT_CRITERIA.map((c) => c.id));
   const hasLegacy = existing.some((row) => LEGACY_CRITERION_IDS.includes(row.id));
-  const hasUnknown = existing.some((row) => !knownIds.has(row.id));
 
-  if (existing.length === 0 || hasLegacy || hasUnknown) {
+  if (existing.length === 0 || hasLegacy) {
     await prisma.criterion.deleteMany();
     await prisma.criterion.createMany({ data: DEFAULT_CRITERIA.map(toRow) });
     return;
   }
 
-  const existingIds = new Set(existing.map((row) => row.id));
-  const missing = DEFAULT_CRITERIA.filter((c) => !existingIds.has(c.id));
-  if (missing.length > 0) {
-    await prisma.criterion.createMany({ data: missing.map(toRow) });
-  }
+  await prisma.$transaction([
+    ...DEFAULT_CRITERIA.map((c) =>
+      prisma.criterion.upsert({
+        where: { id: c.id },
+        create: toRow(c),
+        update: {
+          label: c.label,
+          description: c.description,
+          weight: c.weight,
+          sortOrder: c.sortOrder,
+          isExtended: c.isExtended,
+          categoryId: c.categoryId,
+          categoryLabel: c.categoryLabel,
+          categoryWeight: c.categoryWeight,
+          categoryOrder: c.categoryOrder,
+        },
+      }),
+    ),
+    ...existing
+      .filter((row) => !knownIds.has(row.id))
+      .map((row) => prisma.criterion.delete({ where: { id: row.id } })),
+  ]);
 }
 
 export async function resetCriteria() {

@@ -15,13 +15,25 @@ const ORDER: JobStatus[] = [
   "done",
 ];
 
-function stepState(status: JobStatus, stepId: (typeof STEPS)[number]["id"]) {
+function failedStepFromCode(errorCode?: string | null): JobStatus | null {
+  const stage = errorCode?.split("|")[1];
+  if (stage === "queued" || stage === "converting" || stage === "transcribing" || stage === "analyzing") {
+    return stage;
+  }
+  return null;
+}
+
+function stepState(
+  status: JobStatus,
+  stepId: (typeof STEPS)[number]["id"],
+  errorCode?: string | null,
+) {
   if (status === "error") {
-    const failedAt = ORDER.indexOf(status);
+    const failedAt = ORDER.indexOf(failedStepFromCode(errorCode) ?? "queued");
     const idx = ORDER.indexOf(stepId);
-    if (idx < failedAt || (status === "error" && stepId === "queued")) {
-      return "done";
-    }
+    if (idx < failedAt) return "done";
+    if (idx === failedAt) return "failed";
+    return "todo";
   }
   const current = Math.max(ORDER.indexOf(status), 0);
   const idx = ORDER.indexOf(stepId);
@@ -34,28 +46,38 @@ function stepState(status: JobStatus, stepId: (typeof STEPS)[number]["id"]) {
 export function PipelineProgress({
   status,
   errorMessage,
+  errorCode,
 }: {
   status: JobStatus;
   errorMessage?: string | null;
+  errorCode?: string | null;
 }) {
   return (
     <div className="space-y-6">
       <ol className="grid gap-3 sm:grid-cols-4">
         {STEPS.map((step) => {
-          const state = stepState(status, step.id);
+          const state = stepState(status, step.id, errorCode);
           return (
             <li
               key={step.id}
               className={`rounded-2xl border px-4 py-3 ${
                 state === "active"
                   ? "border-accent bg-accent-dim"
-                  : state === "done"
-                    ? "border-good/30 bg-good/5"
-                    : "border-line bg-bg-elev"
+                  : state === "failed"
+                    ? "border-bad/40 bg-bad/10"
+                    : state === "done"
+                      ? "border-good/30 bg-good/5"
+                      : "border-line bg-bg-elev"
               }`}
             >
               <p className="text-[11px] uppercase tracking-wider text-muted">
-                {state === "active" ? "сейчас" : state === "done" ? "готово" : "ждём"}
+                {state === "active"
+                  ? "сейчас"
+                  : state === "failed"
+                    ? "ошибка"
+                    : state === "done"
+                      ? "готово"
+                      : "ждём"}
               </p>
               <p className="mt-1 font-medium">{step.label}</p>
             </li>

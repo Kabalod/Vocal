@@ -2,6 +2,7 @@ import { existsSync } from "fs";
 import { analyzeSpeech } from "@/lib/analyze";
 import { ensureCriteria, prisma } from "@/lib/db";
 import { extractAudio, probeDuration } from "@/lib/ffmpeg";
+import { isGroqConnectionError, isGroqTokenLimitError } from "@/lib/groq";
 import { computeMetrics } from "@/lib/metrics";
 import { toCriterionDto } from "@/lib/serialize";
 import { audioPathFor } from "@/lib/storage";
@@ -33,11 +34,21 @@ async function drain() {
 }
 
 async function fail(jobId: string, error: unknown) {
+  const current = await prisma.job.findUnique({
+    where: { id: jobId },
+    select: { status: true },
+  });
+  const stage =
+    current?.status && current.status !== "error" ? current.status : "queued";
+
   const err = error as { code?: string; message?: string; status?: number };
   let code = err.code ?? "PIPELINE";
   let message = err.message ?? "Неизвестная ошибка обработки.";
 
-  if (err.status === 413) {
+  if (isGroqTokenLimitError(error) || (err.status === 429)) {
+    code = "GROQ_RATE_LIMIT";
+    message = "Лимит Groq (токены или частота). Подождите минуту и нажмите «Повторить».";
+  } else if (err.status === 413) {
     code = "FILE_TOO_LARGE";
     message = "Аудио слишком большое для распознавания. Загрузите более короткий ролик.";
   } else if (err.status === 401) {
@@ -48,16 +59,20 @@ async function fail(jobId: string, error: unknown) {
     code = "GROQ_AUTH";
     message =
       "Groq отклонил ключ (403 Forbidden). Ключ отозван, истёк или без доступа. Создайте новый на console.groq.com/keys, замените GROQ_API_KEY в .env и перезапустите сервер.";
-  } else if (err.status === 429) {
-    code = "GROQ_RATE_LIMIT";
-    message = "Лимит Groq. Подождите минуту и нажмите «Повторить».";
+  } else if (/invalid_type|ZodError|не JSON/i.test(message)) {
+    code = "LLM_SCHEMA";
+    message = "Модель вернула неполный разбор. Нажмите «Повторить».";
+  } else if (isGroqConnectionError(error)) {
+    code = "GROQ_NETWORK";
+    message =
+      "Обрыв связи с Groq при распознавании. Часто из‑за VPN: смените сервер (например Вильнюс) или выключите VPN и нажмите «Повторить».";
   }
 
   await prisma.job.update({
     where: { id: jobId },
     data: {
       status: "error",
-      errorCode: String(code).slice(0, 64),
+      errorCode: `${code}|${stage}`.slice(0, 64),
       errorMessage: message.slice(0, 1000),
     },
   });
@@ -74,34 +89,58 @@ export async function processJob(jobId: string) {
       });
     }
 
-    await prisma.job.update({
-      where: { id: jobId },
-      data: { status: "converting", errorCode: null, errorMessage: null },
-    });
-
-    const duration = await probeDuration(job.videoPath);
-    if (duration > MAX_VIDEO_SECONDS + 0.4) {
-      throw Object.assign(
-        new Error(
-          `Видео длиннее 3 минут (${Math.round(duration)} с). Загрузите ролик до 180 секунд.`,
-        ),
-        { code: "TOO_LONG" },
-      );
+    const existing = await prisma.analysisResult.findUnique({ where: { jobId } });
+    let transcript = "";
+    let segments: { start: number; end: number; text: string }[] = [];
+    let duration = job.durationSec ?? 0;
+    let reused = false;
+    if (existing?.payload) {
+      try {
+        const prev = JSON.parse(existing.payload) as {
+          transcript?: { text?: string; segments?: { start: number; end: number; text: string }[] };
+        };
+        if (prev.transcript?.text && Array.isArray(prev.transcript.segments) && prev.transcript.segments.length > 0) {
+          transcript = prev.transcript.text;
+          segments = prev.transcript.segments;
+          reused = true;
+        }
+      } catch {
+        reused = false;
+      }
     }
 
-    const audioPath = audioPathFor(jobId);
-    await extractAudio(job.videoPath, audioPath);
+    if (!reused) {
+      await prisma.job.update({
+        where: { id: jobId },
+        data: { status: "converting", errorCode: null, errorMessage: null },
+      });
+
+      duration = await probeDuration(job.videoPath);
+      if (duration > MAX_VIDEO_SECONDS + 0.4) {
+        throw Object.assign(
+          new Error(
+            `Видео длиннее 3 минут (${Math.round(duration)} с). Загрузите ролик до 180 секунд.`,
+          ),
+          { code: "TOO_LONG" },
+        );
+      }
+
+      const audioPath = audioPathFor(jobId);
+      await extractAudio(job.videoPath, audioPath);
+
+      await prisma.job.update({
+        where: { id: jobId },
+        data: { status: "transcribing", audioPath, durationSec: duration },
+      });
+
+      const stt = await transcribeAudio(audioPath);
+      transcript = stt.text;
+      segments = stt.segments;
+    }
 
     await prisma.job.update({
       where: { id: jobId },
-      data: { status: "transcribing", audioPath, durationSec: duration },
-    });
-
-    const stt = await transcribeAudio(audioPath);
-
-    await prisma.job.update({
-      where: { id: jobId },
-      data: { status: "analyzing" },
+      data: { status: "analyzing", errorCode: null, errorMessage: null, durationSec: duration },
     });
 
     await ensureCriteria();
@@ -110,12 +149,12 @@ export async function processJob(jobId: string) {
         orderBy: [{ categoryOrder: "asc" }, { sortOrder: "asc" }],
       })
     ).map(toCriterionDto);
-    const metrics = computeMetrics(stt.segments, stt.text, duration);
+    const metrics = computeMetrics(segments, transcript, duration);
     const result = await analyzeSpeech({
       criteria,
       metrics,
-      transcript: stt.text,
-      segments: stt.segments,
+      transcript,
+      segments,
     });
 
     await prisma.analysisResult.upsert({

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { PipelineProgress } from "@/components/PipelineProgress";
 import { RecommendationList } from "@/components/RecommendationList";
 import { ScoreCard } from "@/components/ScoreCard";
-import { ExerciseCard, StrengthsList, VideoBriefCard } from "@/components/AnalysisExtras";
+import { ExerciseCard, StrengthsList, VideoBriefCard, CoachPanel } from "@/components/AnalysisExtras";
 import { TranscriptView } from "@/components/TranscriptView";
 import { formatClock } from "@/lib/format";
 import type { JobWithAnalysis } from "@/types/analysis";
@@ -80,13 +80,17 @@ export function JobView({ id }: { id: string }) {
           {job.status === "done" ? "Разбор видео" : "Обработка"}
         </h1>
         <p className="mt-2 text-sm text-muted">
-          Длительность {formatClock(job.durationSec)} · тренер разговорных Instagram-видео.
-          Жесты, взгляд, громкость и вирусность не оцениваются.
+          Длительность {formatClock(job.durationSec)} · помощник разговорного блога:
+          сценарий, идея, стиль и подача текста. Исходник не режем.
         </p>
       </div>
 
       {pending || job.status === "error" ? (
-        <PipelineProgress status={job.status} errorMessage={job.errorMessage} />
+        <PipelineProgress
+          status={job.status}
+          errorMessage={job.errorMessage}
+          errorCode={job.errorCode}
+        />
       ) : null}
 
       {job.status === "error" ? (
@@ -106,6 +110,7 @@ export function JobView({ id }: { id: string }) {
         <>
           <p className="max-w-3xl text-lg leading-relaxed text-text/90">{analysis.summary}</p>
           <VideoBriefCard video={analysis.video} />
+          <CoachPanel coach={analysis.coach ?? null} />
           <ScoreCard
             overall={analysis.overallScore}
             categories={analysis.categoryScores ?? []}

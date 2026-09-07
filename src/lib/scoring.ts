@@ -1,3 +1,4 @@
+import { MICRO_CRITERION_IDS, STORY_OPTIONAL_IDS, normalizeFormat } from "@/lib/playbook";
 import type {
   CategoryScore,
   CriterionDto,
@@ -57,4 +58,41 @@ export function scoreCategories(
 
 export function overallFromCategories(categories: CategoryScore[]): number {
   return weightedAverage(categories.map((c) => ({ score: c.score, weight: c.weight })));
+}
+
+export function applyFormatApplicability(
+  evaluations: CriterionEvaluation[],
+  formatRaw: string,
+  wordCount: number,
+): { format: ReturnType<typeof normalizeFormat>; evaluations: CriterionEvaluation[] } {
+  const format = normalizeFormat(formatRaw, wordCount);
+  const next = evaluations.map((item) => {
+    if (format === "micro" && !MICRO_CRITERION_IDS.has(item.id)) {
+      return {
+        ...item,
+        applicable: false,
+        analysis: item.analysis || "Не применяется в микро-формате.",
+      };
+    }
+    if (
+      (format === "story" || format === "vlog") &&
+      STORY_OPTIONAL_IDS.has(item.id) &&
+      item.id === "argumentation"
+    ) {
+      return {
+        ...item,
+        applicable: false,
+        analysis: item.analysis || "Для истории случай из жизни заменяет формальную аргументацию.",
+      };
+    }
+    if (format === "performance" && !["hook_strength", "conversational", "unique_voice", "focus"].includes(item.id)) {
+      return {
+        ...item,
+        applicable: false,
+        analysis: item.analysis || "Не применяется к перформансу / песне.",
+      };
+    }
+    return item;
+  });
+  return { format, evaluations: next };
 }

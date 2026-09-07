@@ -26,11 +26,9 @@ interface VerboseTranscription {
 }
 
 async function transcribeOnce(mp3Path: string, model: string): Promise<SttResult> {
-  const groq = getGroq();
-
   const raw = await withRetry(
     () =>
-      groq.audio.transcriptions.create({
+      getGroq().audio.transcriptions.create({
         file: fs.createReadStream(mp3Path),
         model,
         language: "ru",
@@ -39,7 +37,7 @@ async function transcribeOnce(mp3Path: string, model: string): Promise<SttResult
         temperature: 0,
         prompt: "Разговорное видео. Живая устная речь на русском языке.",
       }) as Promise<VerboseTranscription>,
-    { label: "stt" },
+    { retries: 5, label: "stt" },
   );
 
   const text = (raw.text ?? "").trim();

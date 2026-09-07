@@ -26,8 +26,8 @@ export function ScoreCard({
           <span className="ml-1 text-2xl text-muted">/10</span>
         </p>
         <p className="mt-3 max-w-xl text-sm text-muted">
-          Считается на бэкенде: средняя по категориям с их весами. В категории входят только
-          применимые критерии.
+          Считается на бэкенде по весам категорий. 7–8 — норма сильного разговорного блога
+          («я тут, я свой»), не потолок. В среднее входят только применимые критерии.
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
