@@ -6,7 +6,7 @@
 - Репозиторий: Kabalod/Vocal
 - Ветка: feat/personal-mvp-06-reviews-and-questions
 - BASE_SHA (до изменений): 437d8f2f1fd8a74aa17cbe810088ae58b31b4ae5
-- HEAD_SHA (после изменений): `7858783c2a419ce78d3bcdb9fa7e604d6c926a56`
+- HEAD_SHA (после изменений): `53609fd9fd00e990f2776f47b4018cbdac13163d`
 - Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-06-reviews-and-questions
 - Ветка отправлена в GitHub: да, без force push (если push прошёл)
 - Предыдущий этап принят: да, этап 5 на `437d8f2f1fd8a74aa17cbe810088ae58b31b4ae5`
@@ -83,5 +83,5 @@
 
 - Замечание: previousReviewId только по reelId; ответ в UI не редактируется; PATCH частично применяет статус; дубли вопросов только в промпте.
 - Исправление: previous только same take + status done; PATCH валидирует всё до транзакции и правит последний Answer; поле ответа заполняется текущим текстом, старые записи в истории; точные дубли вопросов отсекаются до записи.
-- Новый commit SHA: будет в следующем docs-коммите после `fix`
+- Новый commit SHA: `53609fd9fd00e990f2776f47b4018cbdac13163d`
 - Повторная проверка: `npm run test:reels` 25/25; lint ок. Build и живой Groq по-прежнему не гонялись.
