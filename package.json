@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test:reels": "tsx --test tests/reels-migration.test.ts tests/reels-workspace.test.ts tests/reels-editor-session.test.ts",
+    "test:reels": "tsx --test tests/reels-migration.test.ts tests/reels-workspace.test.ts tests/reels-editor-session.test.ts tests/reels-takes.test.ts",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate deploy",

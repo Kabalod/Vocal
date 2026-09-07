@@ -26,6 +26,11 @@ model Take {
   inputType      String
   authorNote     String   @default("")
   idempotencyKey String?
+  mediaStatus    String   @default("ready")
+  originalName   String?
+  storedPath     String?
+  mimeType       String?
+  bodyText       String   @default("")
   createdAt      DateTime @default(now())
   jobs           Job[]
 

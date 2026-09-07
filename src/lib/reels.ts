@@ -12,13 +12,20 @@ import {
   REEL_LIST_LIMIT,
   REEL_NOTE_MAX,
   REEL_TITLE_MAX,
+  TAKE_NOTE_MAX,
+  TAKE_TEXT_MAX,
 } from "@/types/reel";
 import { toReelDto } from "@/lib/serialize";
 
 const reelInclude = {
   takes: {
     orderBy: { number: "asc" as const },
-    include: { jobs: { select: { id: true, status: true }, orderBy: { createdAt: "asc" as const } } },
+    include: {
+      jobs: {
+        select: { id: true, status: true, videoPath: true, audioPath: true },
+        orderBy: { createdAt: "asc" as const },
+      },
+    },
   },
 } satisfies Prisma.ReelInclude;
 
@@ -187,6 +194,13 @@ export async function createTake(reelId: string, input: CreateTakeInput): Promis
   }
   const idempotencyKey = input.idempotencyKey?.trim() || null;
   const authorNote = input.authorNote?.trim() ?? "";
+  if (authorNote.length > TAKE_NOTE_MAX) {
+    throw new ReelError(`Заметка короче ${TAKE_NOTE_MAX} символов.`, "NOTE_TOO_LONG");
+  }
+  const bodyText = input.bodyText ?? "";
+  if (bodyText.length > TAKE_TEXT_MAX) {
+    throw new ReelError(`Текст короче ${TAKE_TEXT_MAX} символов.`, "TEXT_TOO_LONG");
+  }
   const jobId = input.jobId?.trim() || undefined;
 
   const reel = await prisma.reel.findUnique({ where: { id: reelId } });
@@ -213,6 +227,11 @@ export async function createTake(reelId: string, input: CreateTakeInput): Promis
             inputType: input.inputType,
             authorNote,
             idempotencyKey,
+            mediaStatus: input.mediaStatus ?? "ready",
+            originalName: input.originalName ?? null,
+            storedPath: input.storedPath ?? null,
+            mimeType: input.mimeType ?? null,
+            bodyText,
           },
         });
 

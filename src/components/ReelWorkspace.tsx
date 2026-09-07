@@ -188,10 +188,10 @@ export function ReelWorkspace({ id }: { id: string }) {
       </label>
 
       <p className="text-sm text-muted">
-        Дублей: {session.confirmed.takeCount}. Финальный дубль выбирается позже, когда появятся материалы.
+        Дублей: {session.confirmed.takeCount}. Финальный дубль выбирается в списке попыток ниже, вручную.
       </p>
       <p className="text-sm text-muted">
-        Расшифровка, вопросы и сценарий — следующие этапы. Здесь они не включены и не имитируются.
+        Расшифровка, вопросы и сценарий — следующие этапы. Загрузка файла их не запускает.
       </p>
     </div>
   );

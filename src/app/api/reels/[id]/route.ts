@@ -59,6 +59,15 @@ export async function PATCH(
       }
       input.status = status;
     }
+    if ("selectedTakeId" in body) {
+      if (body.selectedTakeId !== null && typeof body.selectedTakeId !== "string") {
+        return NextResponse.json(
+          { error: "Финальный дубль должен принадлежать этой карточке.", code: "TAKE_NOT_IN_REEL" },
+          { status: 400 },
+        );
+      }
+      input.selectedTakeId = body.selectedTakeId as string | null;
+    }
     if ("expectedUpdatedAt" in body) {
       if (typeof body.expectedUpdatedAt !== "string") {
         return NextResponse.json({ error: "Некорректная версия карточки.", code: "STALE" }, { status: 400 });

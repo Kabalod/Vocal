@@ -18,6 +18,19 @@ export const REEL_STATUS_LABELS: Record<ReelStatus, string> = {
 export const TAKE_INPUT_TYPES = ["video", "audio", "text"] as const;
 export type TakeInputType = (typeof TAKE_INPUT_TYPES)[number];
 
+export const TAKE_MEDIA_STATUSES = ["pending", "ready", "failed"] as const;
+export type TakeMediaStatus = (typeof TAKE_MEDIA_STATUSES)[number];
+
+export const TAKE_INPUT_TYPE_LABELS: Record<TakeInputType, string> = {
+  video: "Видео",
+  audio: "Аудио",
+  text: "Текст",
+};
+
+export function isTakeMediaStatus(value: string): value is TakeMediaStatus {
+  return (TAKE_MEDIA_STATUSES as readonly string[]).includes(value);
+}
+
 const LEGACY_STATUS: Record<string, ReelStatus> = {
   draft: "idea",
   active: "in_progress",
@@ -44,6 +57,8 @@ export function isTakeInputType(value: string): value is TakeInputType {
 export const REEL_TITLE_MAX = 200;
 export const REEL_NOTE_MAX = 8000;
 export const REEL_LIST_LIMIT = 80;
+export const TAKE_NOTE_MAX = 8000;
+export const TAKE_TEXT_MAX = 20000;
 
 export interface TakeJobRef {
   id: string;
@@ -56,6 +71,14 @@ export interface TakeDto {
   number: number;
   inputType: TakeInputType;
   authorNote: string;
+  mediaStatus: TakeMediaStatus;
+  originalName: string | null;
+  mimeType: string | null;
+  bodyText: string;
+  hasFile: boolean;
+  browserPlayback: boolean;
+  mediaUrl: string | null;
+  downloadUrl: string | null;
   createdAt: string;
   jobs: TakeJobRef[];
 }
@@ -91,6 +114,16 @@ export interface CreateTakeInput {
   authorNote?: string;
   idempotencyKey?: string;
   jobId?: string;
+  bodyText?: string;
+  mediaStatus?: TakeMediaStatus;
+  originalName?: string | null;
+  storedPath?: string | null;
+  mimeType?: string | null;
+}
+
+export interface UpdateTakeInput {
+  authorNote?: string;
+  bodyText?: string;
 }
 
 export interface ReelListQuery {

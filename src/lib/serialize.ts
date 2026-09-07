@@ -8,10 +8,12 @@ import type {
 } from "@/types/analysis";
 import {
   isTakeInputType,
+  isTakeMediaStatus,
   normalizeReelStatus,
   type ReelDto,
   type TakeDto,
 } from "@/types/reel";
+import { canPlayInBrowser } from "@/lib/take-playback";
 
 export function toJobDto(job: Job): JobDto {
   return {
@@ -63,9 +65,46 @@ type TakeWithJobs = {
   number: number;
   inputType: string;
   authorNote: string;
+  mediaStatus?: string | null;
+  originalName?: string | null;
+  storedPath?: string | null;
+  mimeType?: string | null;
+  bodyText?: string | null;
   createdAt: Date;
-  jobs: { id: string; status: string }[];
+  jobs: { id: string; status: string; videoPath?: string | null; audioPath?: string | null }[];
 };
+
+function jobHasFile(job: { videoPath?: string | null; audioPath?: string | null }) {
+  const video = job.videoPath?.trim();
+  const audio = job.audioPath?.trim();
+  return Boolean((video && video !== "pending") || audio);
+}
+
+export function toTakeDto(take: TakeWithJobs): TakeDto {
+  const inputType = isTakeInputType(take.inputType) ? take.inputType : "video";
+  const rawStatus = take.mediaStatus ?? "ready";
+  const mediaStatus = isTakeMediaStatus(rawStatus) ? rawStatus : "ready";
+  const hasOwnFile = Boolean(take.storedPath && mediaStatus === "ready");
+  const hasFile = hasOwnFile || take.jobs.some(jobHasFile);
+  const originalName = take.originalName ?? null;
+  return {
+    id: take.id,
+    reelId: take.reelId,
+    number: take.number,
+    inputType,
+    authorNote: take.authorNote,
+    mediaStatus,
+    originalName,
+    mimeType: take.mimeType ?? null,
+    bodyText: take.bodyText ?? "",
+    hasFile,
+    browserPlayback: hasFile && canPlayInBrowser(inputType, originalName),
+    mediaUrl: hasFile ? `/api/takes/${take.id}/media` : null,
+    downloadUrl: hasFile ? `/api/takes/${take.id}/media?download=1` : null,
+    createdAt: take.createdAt.toISOString(),
+    jobs: take.jobs.map((job) => ({ id: job.id, status: job.status })),
+  };
+}
 
 type ReelWithTakes = {
   id: string;
@@ -77,19 +116,6 @@ type ReelWithTakes = {
   updatedAt: Date;
   takes: TakeWithJobs[];
 };
-
-export function toTakeDto(take: TakeWithJobs): TakeDto {
-  const inputType = isTakeInputType(take.inputType) ? take.inputType : "video";
-  return {
-    id: take.id,
-    reelId: take.reelId,
-    number: take.number,
-    inputType,
-    authorNote: take.authorNote,
-    createdAt: take.createdAt.toISOString(),
-    jobs: take.jobs.map((job) => ({ id: job.id, status: job.status })),
-  };
-}
 
 export function toReelDto(reel: ReelWithTakes): ReelDto {
   const status = normalizeReelStatus(reel.status);
