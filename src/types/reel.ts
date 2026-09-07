@@ -79,6 +79,7 @@ export interface TakeDto {
   browserPlayback: boolean;
   mediaUrl: string | null;
   downloadUrl: string | null;
+  scriptVersionId: string | null;
   createdAt: string;
   jobs: TakeJobRef[];
 }
@@ -119,11 +120,13 @@ export interface CreateTakeInput {
   originalName?: string | null;
   storedPath?: string | null;
   mimeType?: string | null;
+  scriptVersionId?: string | null;
 }
 
 export interface UpdateTakeInput {
   authorNote?: string;
   bodyText?: string;
+  scriptVersionId?: string | null;
 }
 
 export interface ReelListQuery {

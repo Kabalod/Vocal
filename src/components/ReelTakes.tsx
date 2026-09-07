@@ -17,6 +17,8 @@ export function ReelTakes({ reelId }: { reelId: string }) {
   const [seekInput, setSeekInput] = useState("0");
   const [textBody, setTextBody] = useState("");
   const [textNote, setTextNote] = useState("");
+  const [scriptVersionId, setScriptVersionId] = useState("");
+  const [scriptOptions, setScriptOptions] = useState<{ id: string; label: string }[]>([]);
   const [savingText, setSavingText] = useState(false);
 
   const load = useCallback(async () => {
@@ -25,6 +27,15 @@ export function ReelTakes({ reelId }: { reelId: string }) {
     if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить дубли.");
     const next = data.reel as ReelDto;
     setReel(next);
+    const scriptsRes = await fetch(`/api/reels/${reelId}/scripts`, { cache: "no-store" });
+    if (scriptsRes.ok) {
+      const scripts = (await scriptsRes.json()) as { versions?: { id: string; kind: string; createdAt: string }[] };
+      setScriptOptions(
+        (scripts.versions ?? [])
+          .filter((row) => row.kind !== "ai_proposal")
+          .map((row) => ({ id: row.id, label: `${row.kind} · ${row.createdAt}` })),
+      );
+    }
     setViewingId((current) => {
       if (current && next.takes.some((take) => take.id === current)) return current;
       return next.takes[0]?.id ?? null;
@@ -73,7 +84,12 @@ export function ReelTakes({ reelId }: { reelId: string }) {
       const res = await fetch(`/api/reels/${reelId}/takes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inputType: "text", bodyText: textBody, authorNote: textNote }),
+        body: JSON.stringify({
+          inputType: "text",
+          bodyText: textBody,
+          authorNote: textNote,
+          scriptVersionId: scriptVersionId || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Не удалось сохранить текст.");
@@ -157,6 +173,21 @@ export function ReelTakes({ reelId }: { reelId: string }) {
           placeholder="Что менял"
           className="w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none"
         />
+        <label className="block text-sm text-muted">
+          Сценарий этой попытки
+          <select
+            value={scriptVersionId}
+            onChange={(event) => setScriptVersionId(event.target.value)}
+            className="mt-1 w-full rounded-xl border border-line bg-bg px-3 py-2"
+          >
+            <option value="">Без привязки</option>
+            {scriptOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           type="submit"
           disabled={savingText || !textBody.trim()}

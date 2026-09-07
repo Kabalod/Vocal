@@ -1,0 +1,32 @@
+import { NextResponse } from "next/server";
+import { generateScriptProposal } from "@/lib/ai/script";
+import { ReelError } from "@/lib/reels";
+import { ScriptError } from "@/lib/scripts";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+function errorResponse(error: unknown) {
+  if (error instanceof ReelError || error instanceof ScriptError) {
+    return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
+  }
+  console.error(error);
+  return NextResponse.json({ error: "Не удалось собрать сценарий." }, { status: 500 });
+}
+
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await context.params;
+    let sources: unknown = [];
+    try {
+      const body = (await request.json()) as Record<string, unknown>;
+      sources = body.sources;
+    } catch {
+      sources = [];
+    }
+    const result = await generateScriptProposal(id, { sources });
+    return NextResponse.json(result, { status: 201 });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}

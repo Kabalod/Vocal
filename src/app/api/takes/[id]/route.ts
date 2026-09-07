@@ -31,6 +31,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const take = await updateTake(id, {
       authorNote: typeof body.authorNote === "string" ? body.authorNote : undefined,
       bodyText: typeof body.bodyText === "string" ? body.bodyText : undefined,
+      scriptVersionId:
+        body.scriptVersionId === null
+          ? null
+          : typeof body.scriptVersionId === "string"
+            ? body.scriptVersionId
+            : undefined,
     });
     return NextResponse.json({ take });
   } catch (error) {

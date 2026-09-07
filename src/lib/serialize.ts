@@ -73,6 +73,7 @@ type TakeWithJobs = {
   storedPath?: string | null;
   mimeType?: string | null;
   bodyText?: string | null;
+  scriptVersionId?: string | null;
   createdAt: Date;
   jobs: {
     id: string;
@@ -112,6 +113,7 @@ export function toTakeDto(take: TakeWithJobs): TakeDto {
     browserPlayback: hasFile && canPlayInBrowser(inputType, originalName),
     mediaUrl: hasFile ? `/api/takes/${take.id}/media` : null,
     downloadUrl: hasFile ? `/api/takes/${take.id}/media?download=1` : null,
+    scriptVersionId: take.scriptVersionId ?? null,
     createdAt: take.createdAt.toISOString(),
     jobs: take.jobs.map((job) => ({ id: job.id, status: job.status })),
   };
@@ -123,9 +125,12 @@ type ReelWithTakes = {
   initialNote: string;
   status: string;
   selectedTakeId: string | null;
+  selectedScriptId?: string | null;
+  finalScriptId?: string | null;
   createdAt: Date;
   updatedAt: Date;
   takes: TakeWithJobs[];
+  _count?: { scripts?: number };
 };
 
 export function toReelDto(reel: ReelWithTakes): ReelDto {
@@ -140,6 +145,8 @@ export function toReelDto(reel: ReelWithTakes): ReelDto {
     updatedAt: reel.updatedAt.toISOString(),
     takes: reel.takes.map(toTakeDto),
     takeCount: reel.takes.length,
-    hasScript: false,
+    hasScript: Boolean(
+      reel.selectedScriptId || reel.finalScriptId || (reel._count?.scripts ?? 0) > 0,
+    ),
   };
 }

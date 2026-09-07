@@ -50,6 +50,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       authorNote: typeof body.authorNote === "string" ? body.authorNote : "",
       bodyText,
       idempotencyKey: typeof body.idempotencyKey === "string" ? body.idempotencyKey : undefined,
+      scriptVersionId: typeof body.scriptVersionId === "string" ? body.scriptVersionId : undefined,
     });
     const { ensureOriginalFromText } = await import("@/lib/transcripts");
     await ensureOriginalFromText(created.id, bodyText);

@@ -2,6 +2,7 @@ import { unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/db";
 import { ReelError, createTake, getReel } from "@/lib/reels";
+import { assertScriptOnReel, ScriptError } from "@/lib/scripts";
 import { toTakeDto } from "@/lib/serialize";
 import { ensureStorageDirs, takeMediaPathFor } from "@/lib/storage";
 import { mimeFromName } from "@/lib/take-playback";
@@ -40,7 +41,7 @@ export async function updateTake(id: string, input: UpdateTakeInput): Promise<Ta
   const existing = await prisma.take.findUnique({ where: { id } });
   if (!existing) throw new ReelError("Дубль не найден.", "TAKE_NOT_FOUND", 404);
 
-  const data: { authorNote?: string; bodyText?: string } = {};
+  const data: { authorNote?: string; bodyText?: string; scriptVersionId?: string | null } = {};
   if (input.authorNote !== undefined) {
     const note = input.authorNote.trim();
     if (note.length > TAKE_NOTE_MAX) {
@@ -58,6 +59,21 @@ export async function updateTake(id: string, input: UpdateTakeInput): Promise<Ta
     }
     if (!text.trim()) throw new ReelError("Введите текст попытки.", "TEXT_REQUIRED");
     data.bodyText = text;
+  }
+  if (input.scriptVersionId !== undefined) {
+    if (input.scriptVersionId === null || input.scriptVersionId === "") {
+      data.scriptVersionId = null;
+    } else {
+      try {
+        await assertScriptOnReel(existing.reelId, input.scriptVersionId);
+      } catch (error) {
+        if (error instanceof ScriptError) {
+          throw new ReelError(error.message, error.code, error.status);
+        }
+        throw error;
+      }
+      data.scriptVersionId = input.scriptVersionId;
+    }
   }
   if (Object.keys(data).length === 0) {
     throw new ReelError("Нет полей для сохранения.", "EMPTY_PATCH");

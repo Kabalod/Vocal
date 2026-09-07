@@ -27,6 +27,7 @@ const reelInclude = {
       },
     },
   },
+  _count: { select: { scripts: true } },
 } satisfies Prisma.ReelInclude;
 
 export class ReelError extends Error {
@@ -202,6 +203,11 @@ export async function createTake(reelId: string, input: CreateTakeInput): Promis
     throw new ReelError(`Текст короче ${TAKE_TEXT_MAX} символов.`, "TEXT_TOO_LONG");
   }
   const jobId = input.jobId?.trim() || undefined;
+  const scriptVersionId = input.scriptVersionId?.trim() || null;
+  if (scriptVersionId) {
+    const script = await prisma.scriptVersion.findFirst({ where: { id: scriptVersionId, reelId } });
+    if (!script) throw new ReelError("Версия сценария не найдена в этой карточке.", "SCRIPT_NOT_IN_REEL");
+  }
 
   const reel = await prisma.reel.findUnique({ where: { id: reelId } });
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
@@ -232,6 +238,7 @@ export async function createTake(reelId: string, input: CreateTakeInput): Promis
             storedPath: input.storedPath ?? null,
             mimeType: input.mimeType ?? null,
             bodyText,
+            scriptVersionId,
           },
         });
 

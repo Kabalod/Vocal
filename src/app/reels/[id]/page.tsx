@@ -1,6 +1,7 @@
 import { ReelContextForm } from "@/components/ReelContextForm";
 import { ReelTakes } from "@/components/ReelTakes";
 import { ReelWorkspace } from "@/components/ReelWorkspace";
+import { ScriptEditor } from "@/components/ScriptEditor";
 
 export default async function ReelPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -9,6 +10,7 @@ export default async function ReelPage({ params }: { params: Promise<{ id: strin
       <ReelWorkspace id={id} />
       <ReelContextForm reelId={id} />
       <ReelTakes reelId={id} />
+      <ScriptEditor reelId={id} />
     </div>
   );
 }

@@ -16,6 +16,8 @@ model Reel {
   reelGoal         String                 @default("")
   reelAudience     String                 @default("")
   contextKeysJson  String                 @default("[]")
+  selectedScriptId String?
+  finalScriptId    String?
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
   takes            Take[]
@@ -23,6 +25,7 @@ model Reel {
   reviews          Review[]
   questions        Question[]
   aiCalls          AiCall[]
+  scripts          ScriptVersion[]
 }
 
 model CreatorProfile {
@@ -67,6 +70,8 @@ model Take {
   mimeType              String?
   bodyText              String                @default("")
   selectedTranscriptId  String?
+  scriptVersionId       String?
+  scriptVersion         ScriptVersion?        @relation(fields: [scriptVersionId], references: [id], onDelete: Restrict)
   createdAt             DateTime              @default(now())
   jobs                  Job[]
   transcripts           TranscriptRevision[]
@@ -193,4 +198,24 @@ model Answer {
   question   Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
   text       String
   createdAt  DateTime @default(now())
+}
+
+model ScriptVersion {
+  id                 String   @id @default(cuid())
+  reelId             String
+  reel               Reel     @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  kind               String
+  body               String
+  recordingJson      String   @default("{}")
+  sourcesJson        String   @default("[]")
+  parentId           String?
+  contextSnapshotId  String?
+  model              String?
+  promptVersion      String?
+  inventedIdeasJson  String   @default("[]")
+  inputSnapshotJson  String?
+  createdAt          DateTime @default(now())
+  takes              Take[]
+
+  @@index([reelId, createdAt])
 }
