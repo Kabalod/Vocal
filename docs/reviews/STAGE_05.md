@@ -6,7 +6,7 @@
 - Репозиторий: Kabalod/Vocal
 - Ветка: feat/personal-mvp-05-creator-profile
 - BASE_SHA (до изменений): 0dd0d04edbcf1cee9cff3b58d00f6290be5bd15e
-- HEAD_SHA (после изменений): `HEAD_SHA`
+- HEAD_SHA (после изменений): `84f5e62749998b24db636dbcbf5d495ac1698ba3`
 - Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-05-creator-profile
 - Ветка отправлена в GitHub: да, без force push (если push прошёл)
 - Предыдущий этап принят: да, этап 4 на `0dd0d04edbcf1cee9cff3b58d00f6290be5bd15e`
