@@ -6,12 +6,12 @@ import { ReelError } from "@/lib/reels";
 import { listTranscriptBundle } from "@/lib/transcripts";
 import {
   ANSWER_MAX,
-  QUESTIONS_PER_ROUND,
   isQuestionStatus,
   type CompleteJsonFn,
   type QuestionDto,
   type QuestionStatus,
 } from "@/types/review";
+import { uniqueNewQuestions } from "@/lib/question-text";
 import { ReviewError } from "@/lib/ai/review";
 
 const questionsSchema = z.object({
@@ -65,27 +65,53 @@ export async function updateQuestion(
   questionId: string,
   input: { text?: string; status?: string },
 ): Promise<QuestionDto> {
-  const question = await prisma.question.findUnique({ where: { id: questionId } });
+  const question = await prisma.question.findUnique({
+    where: { id: questionId },
+    include: { answers: { orderBy: { createdAt: "asc" } } },
+  });
   if (!question) throw new ReelError("Вопрос не найден.", "QUESTION_NOT_FOUND", 404);
 
-  if (input.status !== undefined) {
+  const hasText = input.text !== undefined;
+  const hasStatus = input.status !== undefined;
+  if (!hasText && !hasStatus) {
+    throw new ReviewError("Нет полей для сохранения.", "EMPTY_PATCH");
+  }
+
+  let nextStatus = question.status;
+  if (hasStatus) {
     if (!isQuestionStatus(input.status)) {
       throw new ReviewError("Неизвестный статус вопроса.", "QUESTION_STATUS");
     }
-    await prisma.question.update({ where: { id: questionId }, data: { status: input.status } });
+    nextStatus = input.status;
   }
 
-  if (input.text !== undefined) {
+  let nextAnswer: string | null = null;
+  if (hasText) {
     const text = input.text.trim();
     if (text.length > ANSWER_MAX) {
       throw new ReviewError(`Ответ короче ${ANSWER_MAX} символов.`, "ANSWER_TOO_LONG");
     }
     if (!text) throw new ReviewError("Введите ответ.", "ANSWER_REQUIRED");
-    await prisma.answer.create({ data: { questionId, text } });
-    if (!input.status) {
-      await prisma.question.update({ where: { id: questionId }, data: { status: "answered" } });
-    }
+    nextAnswer = text;
+    if (!hasStatus) nextStatus = "answered";
   }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.question.update({
+      where: { id: questionId },
+      data: { status: nextStatus },
+    });
+    if (nextAnswer !== null) {
+      const last = question.answers.at(-1);
+      if (last) {
+        if (last.text !== nextAnswer) {
+          await tx.answer.update({ where: { id: last.id }, data: { text: nextAnswer } });
+        }
+      } else {
+        await tx.answer.create({ data: { questionId, text: nextAnswer } });
+      }
+    }
+  });
 
   const row = await prisma.question.findUnique({
     where: { id: questionId },
@@ -168,7 +194,10 @@ JSON: {"questions":[],"note":""}`;
     if (!parsed.success) {
       throw new ReviewError("Пустой или некорректный ответ модели не сохранён как вопросы.", "LLM_INVALID");
     }
-    const texts = parsed.data.questions.map((item) => item.trim()).filter(Boolean).slice(0, QUESTIONS_PER_ROUND);
+    const texts = uniqueNewQuestions(
+      parsed.data.questions,
+      existing.map((row) => row.text),
+    );
     await prisma.aiCall.update({
       where: { id: call.id },
       data: {

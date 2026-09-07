@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { uniqueNewQuestions } from "../src/lib/question-text";
 import { annotateQuotes, quoteFoundInText } from "../src/lib/evidence";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -23,6 +24,16 @@ function migrateDeploy(url: string) {
     shell: true,
   });
 }
+
+test("exact duplicate question texts are dropped before save", () => {
+  assert.deepEqual(
+    uniqueNewQuestions(
+      ["Зачем чай?", "зачем чай?", "Что дальше?", "Зачем чай?"],
+      ["Что дальше?"],
+    ),
+    ["Зачем чай?"],
+  );
+});
 
 test("quotes are marked found or missing without claiming the idea is true", () => {
   const text = "Вымышленный чай остыл на подоконнике.";
@@ -151,7 +162,59 @@ test("review and questions: versions, no scores, answers without AI, invalid JSO
   });
   assert.equal(bad.status, "error");
   assert.equal(bad.result, null);
+  await assert.rejects(
+    () => createTakeReview(take.id, { previousReviewId: bad.id }, async () => ({ text: "{}" })),
+    (error: unknown) => error instanceof Error && /этого же дубля/.test(error.message),
+  );
   const stillOld = await listTakeReviews(take.id);
   assert.equal(stillOld.find((item) => item.id === review.id)?.result?.authorThought, frozenThought);
   assert.ok(completeCalls >= 4);
+
+  const takeTwo = await createTake(reel.id, {
+    inputType: "text",
+    bodyText: "Второй вымышленный дубль про кружку.",
+  });
+  await ensureOriginalFromText(takeTwo.id, takeTwo.bodyText);
+  const callsBeforeCross = completeCalls;
+  await assert.rejects(
+    () =>
+      createTakeReview(takeTwo.id, { previousReviewId: review.id }, async () => {
+        completeCalls += 1;
+        return { text: JSON.stringify({ authorThought: "не должен вызваться" }) };
+      }),
+    (error: unknown) => error instanceof Error && /этого же дубля/.test(error.message),
+  );
+  assert.equal(completeCalls, callsBeforeCross);
+  const takeTwoReviews = await listTakeReviews(takeTwo.id);
+  assert.equal(takeTwoReviews.length, 0);
+
+  const questionId = questionsAfterReview[0].id;
+  const beforeFail = await prisma.question.findUnique({ where: { id: questionId } });
+  assert.equal(beforeFail?.status, "skipped");
+  await assert.rejects(
+    () => updateQuestion(questionId, { status: "not_relevant", text: "   " }),
+    (error: unknown) => error instanceof Error && /Введите ответ/.test(error.message),
+  );
+  const afterFailed = await prisma.question.findUnique({
+    where: { id: questionId },
+    include: { answers: true },
+  });
+  assert.equal(afterFailed?.status, "skipped");
+  assert.equal(afterFailed?.answers.length, 1);
+  assert.equal(afterFailed?.answers[0].text, "Чтобы согреться вымышленно.");
+
+  const edited = await updateQuestion(questionId, { text: "Исправленный ответ про чай." });
+  assert.equal(edited.answers.length, 1);
+  assert.equal(edited.answers[0].text, "Исправленный ответ про чай.");
+  assert.equal(edited.status, "answered");
+
+  await continueQuestions(reel.id, { takeId: take.id }, async () => ({
+    text: JSON.stringify({
+      questions: ["Что остаётся, если чай убрать?", "Зачем вам этот чай?", "Новый вопрос про кружку"],
+    }),
+  }));
+  const deduped = await listReelQuestions(reel.id);
+  assert.equal(deduped.filter((row) => row.text === "Что остаётся, если чай убрать?").length, 1);
+  assert.equal(deduped.filter((row) => row.text === "Зачем вам этот чай?").length, 1);
+  assert.equal(deduped.some((row) => row.text === "Новый вопрос про кружку"), true);
 });

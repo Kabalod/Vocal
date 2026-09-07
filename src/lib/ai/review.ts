@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CONVERSATIONAL_GROWTH_PLAYBOOK } from "@/lib/playbook";
 import { prisma } from "@/lib/db";
+import { uniqueNewQuestions } from "@/lib/question-text";
 import { annotateQuotes } from "@/lib/evidence";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
 import { freezeReelContext } from "@/lib/reel-context";
@@ -135,8 +136,16 @@ export async function createTakeReview(
 
   if (input.previousReviewId) {
     const previous = await prisma.review.findUnique({ where: { id: input.previousReviewId } });
-    if (!previous || previous.reelId !== take.reelId) {
-      throw new ReviewError("Предыдущий разбор должен быть из этой карточки.", "PREVIOUS_REVIEW");
+    if (
+      !previous ||
+      previous.reelId !== take.reelId ||
+      previous.takeId !== takeId ||
+      previous.status !== "done"
+    ) {
+      throw new ReviewError(
+        "Предыдущий разбор должен быть успешным разбором этого же дубля.",
+        "PREVIOUS_REVIEW",
+      );
     }
   }
 
@@ -235,9 +244,16 @@ JSON:
       data: { status: "done", resultJson, errorMessage: null },
     });
 
+    const existingQuestionRows = await prisma.question.findMany({
+      where: { reelId: take.reelId },
+      select: { text: true },
+    });
     const roundId = call.id;
-    let sortOrder = await prisma.question.count({ where: { reelId: take.reelId } });
-    for (const text of result.questions) {
+    let sortOrder = existingQuestionRows.length;
+    for (const text of uniqueNewQuestions(
+      result.questions,
+      existingQuestionRows.map((row) => row.text),
+    )) {
       await prisma.question.create({
         data: {
           reelId: take.reelId,
