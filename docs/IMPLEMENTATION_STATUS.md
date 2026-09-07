@@ -1,26 +1,15 @@
 # Статус личного MVP
 
 Репозиторий: `Kabalod/Vocal`.  
-Исходная точка этапа 0: `b59e78a0a177442dd7fc30e02217153c634eb98f` (`main`).  
-План: [cursor-plan/README.md](cursor-plan/README.md).  
-Ветка отправлена: да, `origin/feat/personal-mvp-00-baseline`, draft PR https://github.com/Kabalod/Vocal/pull/1 (без force push).
+План: [cursor-plan/README.md](cursor-plan/README.md).
 
 Легенда статуса: `не начат` · `в работе` · `на ревью` · `принят` · `есть замечания`.
 
-## Коммиты этапа 0 (не путать)
-
-| Роль | SHA | Комментарий |
-|---|---|---|
-| BASE (до этапа 0) | `b59e78a0a177442dd7fc30e02217153c634eb98f` | `main`, принятая исходная точка |
-| Коммит реализации | `50cd67713c8ed2f4c730da62c7a7b19803312f68` | `docs: complete personal MVP stage 00` |
-| Проверенный ревьюером HEAD | `e515782c78ad368f3131f8a80edeb94518781289` | первая отправка ветки; включает запись SHA `50cd677` |
-| Итоговый HEAD | вершина `feat/personal-mvp-00-baseline` после коммита исправлений | не совпадает с коммитом реализации |
-
 | Этап | Название | Статус | Ветка | BASE_SHA | HEAD_SHA | Проверки | Замечания |
 |---|---|---|---|---|---|---|---|
-| 0 | Исходное состояние и правила | на ревью | `feat/personal-mvp-00-baseline` | `b59e78a0a177442dd7fc30e02217153c634eb98f` | вершина ветки после исправлений | lint ок; typecheck/build падают на исходных ошибках | исправления ревью в той же ветке; этап не принят |
-| 1 | Карточки роликов и дубли | не начат | — | — | — | — | ждёт принятия этапа 0 |
-| 2 | Экран «Мои ролики» | не начат | — | — | — | — | |
+| 0 | Исходное состояние и правила | принят | `feat/personal-mvp-00-baseline` | `b59e78a0a177442dd7fc30e02217153c634eb98f` | `89c52c52160f4ac2ce8155f6ece178bc259c7092` | lint ок; typecheck/build — исходные ошибки | принято внешним ревью |
+| 1 | Карточки роликов и дубли | на ревью | `feat/personal-mvp-01-reels-and-takes` | `89c52c52160f4ac2ce8155f6ece178bc259c7092` | вершина ветки после коммита этапа | `test:reels` ок; lint ок; typecheck/build — те же исходные ошибки | не принят |
+| 2 | Экран «Мои ролики» | не начат | — | — | — | — | ждёт принятия этапа 1 |
 | 3 | Материалы, плеер, перезаписи | не начат | — | — | — | — | |
 | 4 | Расшифровки и надёжная обработка | не начат | — | — | — | — | |
 | 5 | Анкета автора | не начат | — | — | — | — | |
@@ -30,20 +19,27 @@
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
-## Зафиксировано до правок этапа 0
+## Коммиты
 
-- Ветка на момент старта: `main` @ `b59e78a0a177442dd7fc30e02217153c634eb98f`. Дерево продукта чистое; неотслеживаемые `Analyz/` и `Vocal_Cursor_MVP/` в коммит не входят.
-- Схема Prisma: `Job`, `AnalysisResult`, `Criterion`. Каталога `prisma/migrations` нет; схема накатывается `npx prisma db push`.
-- Локальная пользовательская БД есть (`prisma/dev.db`). Этап 0 и это исправление схему не меняют.
-- Стек по установленным пакетам: Node v22.17.1, Next 15.5.23, TypeScript 5.9.3, Prisma 6.19.3, ESLint 9.39.5. Lock-файл и зависимости не обновлялись.
-- `next lint` сообщает, что команда deprecated к Next.js 16; ESLint-ошибок нет.
+| Роль | SHA |
+|---|---|
+| Принятый этап 0 / BASE этапа 1 | `89c52c52160f4ac2ce8155f6ece178bc259c7092` |
 
-## Повторные проверки после исправления ревью
+## Этап 1 — данные
+
+- Резервная копия (без содержимого): `%USERPROFILE%\Vocal-backups\stage01-2026-09-07-171257` (`dev.db` + `storage`).
+- Восстановление на копии: совпали 2 Job, 2 AnalysisResult (длины payload 12299 и 25589), 22 Criterion.
+- БД раньше через `db push`. Baseline: `20260907120000_init` помечен `--applied` без выполнения SQL. Затем `20260907121000_reels_and_takes`.
+- Миграция и backfill сначала на копии, затем на рабочей `prisma/dev.db`. Повтор backfill: created=0, reels/takes без изменения.
+- Старые Job, AnalysisResult и файлы в `storage/` сохранены. Payload не переписывался.
+
+## Проверки этапа 1
 
 | Команда | Результат |
 |---|---|
-| `npm run typecheck` | exit 2. Сначала `scripts/score-analyz.ts(93,67)`: TS1501, флаг `s` у `/…/is` при `compilerOptions.target` ES2017. Далее ряд strict-ошибок в `src/lib/analyze.ts` (первая: 395, `parsed.video` possibly undefined). `analyze.ts` не менялся. |
-| `npm run lint` | exit 0, без предупреждений ESLint; deprecation `next lint` |
-| `npm run build` | compile ok (~2.7s), падает на typecheck `scripts/score-analyz.ts:93` (TS1501), до ошибок `analyze.ts` не доходит |
+| `npm run test:reels` | pass (временная БД: migrate, backfill×2, конкурентные номера, idempotency, архив) |
+| `npm run lint` | exit 0; deprecation `next lint` |
+| `npm run typecheck` | exit 2, только исходные: `scripts/score-analyz.ts:93` TS1501 и `src/lib/analyze.ts` |
+| `npm run build` | compile ок, падает на исходной TS1501 в `score-analyz.ts:93` |
 
-Успех lint не означает работу STT, Groq или видеоплеера. Платных вызовов модели не было.
+Новых ошибок typecheck/build в файлах этапа 1 нет. Платных вызовов модели не было.

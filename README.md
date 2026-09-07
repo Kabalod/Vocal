@@ -23,7 +23,7 @@
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 # при необходимости впишите GROQ_API_KEY в .env
 npm install
-npx prisma db push
+npx prisma migrate deploy
 npx prisma db seed
 npm run dev
 ```
@@ -38,11 +38,18 @@ npm run dev
 npm run dev
 ```
 
-Проверки кода (без вызова модели):
+## Существующая БД (после db push)
+
+Если база уже была создана через `db push` (нет таблицы `_prisma_migrations`), не выполняйте `migrate deploy` сразу: сначала `npm run db:migrate:existing` (пометит baseline `20260907120000_init` как applied), затем `npm run db:backfill-reels`. Не используйте `db push --force-reset`.
+
+## Проверки кода
+
+Без вызова модели:
 
 ```powershell
 npm run typecheck
 npm run lint
+npm run test:reels
 npm run build
 ```
 
