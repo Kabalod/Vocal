@@ -1,76 +1,98 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { REEL_STATUS_LABELS, REEL_STATUSES, type ReelDto, type ReelStatus } from "@/types/reel";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { isBrowserLeaveWarningNeeded, ReelEditorSession } from "@/lib/reel-editor-session";
+import type { ReelDto, ReelStatus, UpdateReelInput } from "@/types/reel";
+import { REEL_STATUS_LABELS, REEL_STATUSES } from "@/types/reel";
 
-type SaveState = "idle" | "saving" | "saved" | "error";
-
-export function ReelWorkspace({ id }: { id: string }) {
-  const [reel, setReel] = useState<ReelDto | null>(null);
-  const [title, setTitle] = useState("");
-  const [note, setNote] = useState("");
-  const [status, setStatus] = useState<ReelStatus>("idea");
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const seq = useRef(0);
-  const noteTimer = useRef<number | null>(null);
-
-  const applyReel = useCallback((next: ReelDto) => {
-    setReel(next);
-    setTitle(next.title);
-    setNote(next.initialNote);
-    setStatus(next.status);
-  }, []);
-
-  const load = useCallback(async () => {
-    setLoadError(null);
-    const res = await fetch(`/api/reels/${id}`, { cache: "no-store" });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? "Карточка не найдена.");
-    applyReel(data.reel as ReelDto);
-  }, [applyReel, id]);
-
-  useEffect(() => {
-    void load().catch((err: unknown) => {
-      setLoadError(err instanceof Error ? err.message : "Ошибка.");
-    });
-  }, [load]);
-
-  async function patch(body: Record<string, unknown>) {
-    if (!reel) return;
-    const requestId = ++seq.current;
-    setSaveState("saving");
-    setSaveError(null);
-    const res = await fetch(`/api/reels/${id}`, {
+async function patchReel(id: string, patch: UpdateReelInput): Promise<ReelDto> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/reels/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...body, expectedUpdatedAt: reel.updatedAt }),
+      body: JSON.stringify(patch),
     });
-    const data = await res.json();
-    if (requestId !== seq.current) return;
-    if (!res.ok) {
-      setSaveState("error");
-      setSaveError(data.error ?? "Не удалось сохранить.");
-      if (res.status === 409) {
-        try {
-          await load();
-        } catch {
-          /* оставляем ошибку сохранения */
-        }
-      }
-      return;
-    }
-    applyReel(data.reel as ReelDto);
-    setSaveState("saved");
+  } catch {
+    throw Object.assign(new Error("Нет связи. Черновик на месте — повторите сохранение."), {
+      code: "NETWORK",
+      status: 0,
+    });
   }
+  let data: { reel?: ReelDto; error?: string; code?: string } = {};
+  try {
+    data = await res.json();
+  } catch {
+    throw Object.assign(new Error("Нет связи. Черновик на месте — повторите сохранение."), {
+      code: "NETWORK",
+      status: 0,
+    });
+  }
+  if (!res.ok) {
+    throw Object.assign(new Error(data.error ?? "Не удалось сохранить."), {
+      code: data.code ?? "SAVE",
+      status: res.status,
+    });
+  }
+  if (!data.reel) throw new Error("Пустой ответ сервера.");
+  return data.reel;
+}
 
-  function scheduleNoteSave(value: string) {
+async function loadReel(id: string): Promise<ReelDto> {
+  const res = await fetch(`/api/reels/${id}`, { cache: "no-store" });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "Карточка не найдена.");
+  return data.reel as ReelDto;
+}
+
+export function ReelWorkspace({ id }: { id: string }) {
+  const [, bump] = useState(0);
+  const session = useMemo(
+    () => new ReelEditorSession((patch) => patchReel(id, patch), () => loadReel(id)),
+    [id],
+  );
+  const noteTimer = useRef<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    return session.subscribe(() => bump((n) => n + 1));
+  }, [session]);
+
+  useEffect(() => {
+    let cancelled = false;
+    session
+      .bootstrap()
+      .then(() => {
+        if (!cancelled) setReady(true);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : "Ошибка.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
+  useEffect(() => {
+    const onLeave = (event: BeforeUnloadEvent) => {
+      if (!isBrowserLeaveWarningNeeded(session)) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onLeave);
+    return () => {
+      window.removeEventListener("beforeunload", onLeave);
+      if (noteTimer.current) window.clearTimeout(noteTimer.current);
+      session.requestSave();
+      session.dispose();
+    };
+  }, [session]);
+
+  function scheduleNoteSave() {
     if (noteTimer.current) window.clearTimeout(noteTimer.current);
-    noteTimer.current = window.setTimeout(() => {
-      void patch({ initialNote: value });
-    }, 450);
+    noteTimer.current = window.setTimeout(() => session.requestSave(), 450);
   }
 
   if (loadError) {
@@ -84,18 +106,20 @@ export function ReelWorkspace({ id }: { id: string }) {
     );
   }
 
-  if (!reel) {
+  if (!ready || !session.confirmed) {
     return <p className="text-muted">Загрузка…</p>;
   }
 
   const saveLabel =
-    saveState === "saving"
+    session.saveState === "saving"
       ? "Сохраняется…"
-      : saveState === "saved"
+      : session.saveState === "saved"
         ? "Сохранено"
-        : saveState === "error"
-          ? saveError ?? "Ошибка сохранения"
-          : "Изменения ещё не отправлялись";
+        : session.saveState === "error"
+          ? session.saveError ?? "Ошибка сохранения"
+          : session.isDirty()
+            ? "Есть несохранённые правки"
+            : "Изменения ещё не отправлялись";
 
   return (
     <div className="space-y-8">
@@ -103,20 +127,26 @@ export function ReelWorkspace({ id }: { id: string }) {
         <Link href="/reels" className="text-sm text-muted hover:text-text">
           ← Мои ролики
         </Link>
-        <p className={`text-sm ${saveState === "error" ? "text-bad" : "text-muted"}`}>{saveLabel}</p>
+        <div className="flex items-center gap-3">
+          <p className={`text-sm ${session.saveState === "error" ? "text-bad" : "text-muted"}`}>{saveLabel}</p>
+          {session.saveState === "error" ? (
+            <button
+              type="button"
+              className="rounded-full bg-accent px-3 py-1 text-sm text-[#1a140c]"
+              onClick={() => session.retry()}
+            >
+              Повторить сохранение
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <label className="block space-y-2">
         <span className="text-sm text-muted">Название</span>
         <input
-          value={title}
-          onChange={(e) => {
-            setTitle(e.target.value);
-            setSaveState("idle");
-          }}
-          onBlur={() => {
-            if (title.trim() !== reel.title) void patch({ title });
-          }}
+          value={session.draftTitle}
+          onChange={(e) => session.setTitle(e.target.value)}
+          onBlur={() => session.requestSave()}
           className="w-full rounded-xl border border-line bg-bg-elev px-3 py-2 text-xl outline-none focus:border-accent/50"
         />
       </label>
@@ -124,11 +154,10 @@ export function ReelWorkspace({ id }: { id: string }) {
       <label className="block space-y-2">
         <span className="text-sm text-muted">Заметка</span>
         <textarea
-          value={note}
+          value={session.draftNote}
           onChange={(e) => {
-            setNote(e.target.value);
-            setSaveState("idle");
-            scheduleNoteSave(e.target.value);
+            session.setNote(e.target.value);
+            scheduleNoteSave();
           }}
           rows={8}
           className="w-full rounded-xl border border-line bg-bg-elev px-3 py-2 outline-none focus:border-accent/50"
@@ -138,12 +167,8 @@ export function ReelWorkspace({ id }: { id: string }) {
       <label className="block space-y-2">
         <span className="text-sm text-muted">Статус</span>
         <select
-          value={status}
-          onChange={(e) => {
-            const next = e.target.value as ReelStatus;
-            setStatus(next);
-            void patch({ status: next });
-          }}
+          value={session.draftStatus}
+          onChange={(e) => session.setStatus(e.target.value as ReelStatus)}
           className="rounded-xl border border-line bg-bg-elev px-3 py-2 outline-none"
         >
           {REEL_STATUSES.map((item) => (
@@ -154,7 +179,9 @@ export function ReelWorkspace({ id }: { id: string }) {
         </select>
       </label>
 
-      <p className="text-sm text-muted">Дублей: {reel.takeCount}. Финальный дубль выбирается позже, когда появятся материалы.</p>
+      <p className="text-sm text-muted">
+        Дублей: {session.confirmed.takeCount}. Финальный дубль выбирается позже, когда появятся материалы.
+      </p>
       <p className="text-sm text-muted">
         Расшифровка, вопросы и сценарий — следующие этапы. Здесь они не включены и не имитируются.
       </p>

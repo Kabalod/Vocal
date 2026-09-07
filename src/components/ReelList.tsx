@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ReelCard } from "@/components/ReelCard";
+import { GenerationGuard } from "@/lib/generation-guard";
 import { REEL_STATUS_LABELS, type ReelDto, type ReelStatus } from "@/types/reel";
 
 const FILTERS: Array<{ id: "open" | "all" | ReelStatus; label: string }> = [
@@ -46,20 +47,25 @@ export function ReelList() {
     return params.toString();
   }, [debouncedQ, status, sort]);
 
+  const loadGen = useRef(new GenerationGuard());
+
   const load = useCallback(async () => {
+    const req = loadGen.current.begin();
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/reels?${queryString}`, { cache: "no-store" });
       const data = await res.json();
+      if (!req.isCurrent()) return;
       if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить карточки.");
       setReels(data.reels);
       setTruncated(Boolean(data.truncated));
     } catch (err) {
+      if (!req.isCurrent()) return;
       setError(err instanceof Error ? err.message : "Ошибка.");
       setReels([]);
     } finally {
-      setLoading(false);
+      if (req.isCurrent()) setLoading(false);
     }
   }, [queryString]);
 

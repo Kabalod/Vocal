@@ -6,7 +6,7 @@
 - Репозиторий: Kabalod/Vocal
 - Ветка: feat/personal-mvp-02-reel-workspace
 - BASE_SHA (до изменений): ba283c9e9e20e634e76994a43183f1d2d3660e60
-- HEAD_SHA (после изменений): вершина ветки после коммита; точное значение в сообщении после push
+- HEAD_SHA (после изменений): будет записан после коммита исправления ревью
 - Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-02-reel-workspace
 - Ветка отправлена в GitHub: да, без force push
 - Предыдущий этап принят: да, этап 1 на `ba283c9e9e20e634e76994a43183f1d2d3660e60`
@@ -24,13 +24,16 @@
 | Путь | Изменение и причина |
 |---|---|
 | src/types/reel.ts | Новые статусы, лимиты, hasScript/takeCount |
-| src/lib/reels.ts | listReels с фильтром, длины полей, STALE |
+| src/lib/reels.ts | listReels с фильтром; STALE через updateMany по id+updatedAt |
 | src/lib/serialize.ts | normalizeReelStatus, DTO без путей |
 | src/app/api/reels/route.ts | GET список, POST создание |
 | src/app/api/reels/[id]/route.ts | GET/PATCH, 400/404/409 |
 | src/components/ReelCard.tsx | Карточка списка |
 | src/components/ReelList.tsx | Поиск, фильтры, создание, пустое/ошибка |
-| src/components/ReelWorkspace.tsx | Редактор с очередью сохранений |
+| src/components/ReelWorkspace.tsx | Черновик отдельно от сервера; очередь сохранений |
+| src/lib/reel-editor-session.ts | Последовательное сохранение, 409/сеть без затирания ввода |
+| src/lib/generation-guard.ts | Актуальный запрос списка |
+| tests/reels-editor-session.test.ts | Задержанные ответы, сеть, 409, фильтр |
 | src/app/reels/page.tsx | Экран списка |
 | src/app/reels/[id]/page.tsx | Рабочая карточка |
 | src/app/page.tsx, layout.tsx | Навигация, главная |
@@ -50,7 +53,7 @@
 
 | Команда или ручной сценарий | Выполнено? | Результат | Ограничения |
 |---|---|---|---|
-| npm run test:reels | да | 5/5 | временная БД |
+| npm run test:reels | да | 10/10 | без браузера; задержанные ответы в unit-тестах сессии |
 | npm run lint | да | ok | next lint deprecated |
 | npm run typecheck | да | исходные ошибки | не этап 2 |
 | npm run build | да | падает на score-analyz.ts:93 | исходная |
@@ -58,7 +61,7 @@
 | STT / Groq | нет | не вызывались | |
 
 - Исходные ошибки проекта: TS1501 `scripts/score-analyz.ts:93`; strict в `src/lib/analyze.ts`
-- Новые ошибки этапа: нет
+- Новые ошибки этапа: нет (TS подписки редактора исправлен в этом коммите)
 - Платные вызовы: нет
 - Нужен компьютер пользователя: визуальная проверка списка и карточки, перезагрузка страницы
 
@@ -82,7 +85,13 @@
 
 ## После замечаний
 
-- Замечание:
-- Исправление:
-- Новый commit SHA:
-- Повторная проверка:
+- Замечание: автосохранение затирало черновик ответом PATCH / load() при 409.
+- Исправление: `ReelEditorSession` — серверные данные отдельно; ответ не пишет в поле, если черновик новее; 409 оставляет текст и кнопку повтора. Очередь drain, не seq на каждый fetch.
+- Замечание: expectedUpdatedAt читался отдельно от update.
+- Исправление: `updateMany` с `id` + `updatedAt` в WHERE; конкурентный тест двух PATCH с одной версией.
+- Замечание: сеть оставляла «Сохраняется…»; таймер при уходе.
+- Исправление: try/catch, ошибка и повтор; beforeunload; таймер сбрасывается, затем requestSave.
+- Замечание: старый поиск/фильтр мог перезаписать новый список.
+- Исправление: `GenerationGuard` для load и после создания.
+- Новый commit SHA: вершина ветки после push
+- Повторная проверка: `npm run test:reels` 10/10; lint ок; typecheck без новых ошибок кроме исходных analyze/score-analyz. Браузер не гонялся.

@@ -162,4 +162,24 @@ test("reel workspace API: create, isolate edits, search, archive, stale", async 
   });
   const ideas = await (await listGet(new Request("http://vocal.local/api/reels?status=idea"))).json();
   assert.ok(ideas.reels.some((row: { title: string }) => row.title === "legacy draft"));
+
+  const race = await prisma.reel.create({
+    data: { title: "гонка", initialNote: "0", status: "idea" },
+  });
+  const version = race.updatedAt.toISOString();
+  const { updateReel, ReelError } = await import("../src/lib/reels");
+  const raced = await Promise.allSettled([
+    updateReel(race.id, { initialNote: "alpha", expectedUpdatedAt: version }),
+    updateReel(race.id, { initialNote: "beta", expectedUpdatedAt: version }),
+  ]);
+  const ok = raced.filter((row) => row.status === "fulfilled");
+  const bad = raced.filter((row) => row.status === "rejected");
+  assert.equal(ok.length, 1);
+  assert.equal(bad.length, 1);
+  const reason = (bad[0] as PromiseRejectedResult).reason;
+  assert.ok(reason instanceof ReelError && reason.code === "STALE");
+  const winner = (ok[0] as PromiseFulfilledResult<{ initialNote: string }>).value;
+  const stored = await prisma.reel.findUnique({ where: { id: race.id } });
+  assert.equal(stored?.initialNote, winner.initialNote);
+  assert.ok(stored?.initialNote === "alpha" || stored?.initialNote === "beta");
 });

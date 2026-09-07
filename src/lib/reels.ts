@@ -106,19 +106,7 @@ export async function listReels(
 }
 
 export async function updateReel(id: string, input: UpdateReelInput): Promise<ReelDto> {
-  const existing = await prisma.reel.findUnique({ where: { id } });
-  if (!existing) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
-
-  if (input.expectedUpdatedAt) {
-    if (existing.updatedAt.toISOString() !== input.expectedUpdatedAt) {
-      throw new ReelError(
-        "Карточка уже изменилась. Обновите данные и повторите.",
-        "STALE",
-        409,
-      );
-    }
-  }
-  const data: Prisma.ReelUpdateInput = {};
+  const data: Prisma.ReelUpdateManyMutationInput = {};
   if (input.title !== undefined) {
     const title = input.title.trim();
     if (!title) throw new ReelError("Нужно название карточки.", "TITLE_REQUIRED");
@@ -151,7 +139,28 @@ export async function updateReel(id: string, input: UpdateReelInput): Promise<Re
     }
   }
 
-  const row = await prisma.reel.update({ where: { id }, data, include: reelInclude });
+  if (Object.keys(data).length === 0) {
+    throw new ReelError("Нет полей для сохранения.", "EMPTY_PATCH");
+  }
+
+  const where: Prisma.ReelWhereInput = { id };
+  if (input.expectedUpdatedAt) {
+    const expected = new Date(input.expectedUpdatedAt);
+    if (Number.isNaN(expected.getTime())) {
+      throw new ReelError("Некорректная версия карточки.", "STALE", 400);
+    }
+    where.updatedAt = expected;
+  }
+
+  const updated = await prisma.reel.updateMany({ where, data });
+  if (updated.count !== 1) {
+    const exists = await prisma.reel.findUnique({ where: { id } });
+    if (!exists) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+    throw new ReelError("Карточка уже изменилась. Обновите данные и повторите.", "STALE", 409);
+  }
+
+  const row = await prisma.reel.findUnique({ where: { id }, include: reelInclude });
+  if (!row) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
   return asReelDto(row);
 }
 
