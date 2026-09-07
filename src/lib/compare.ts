@@ -16,7 +16,15 @@ export class CompareError extends Error {
 
 function parseDiff(raw: string): TextDiffDto {
   try {
-    return JSON.parse(raw) as TextDiffDto;
+    const parsed = JSON.parse(raw) as Partial<TextDiffDto>;
+    if (!parsed || !Array.isArray(parsed.chunks)) return diffTexts("", "");
+    return {
+      ...diffTexts("", ""),
+      ...parsed,
+      chunks: parsed.chunks,
+      truncated: Boolean(parsed.truncated),
+      note: typeof parsed.note === "string" ? parsed.note : diffTexts("", "").note,
+    };
   } catch {
     return diffTexts("", "");
   }

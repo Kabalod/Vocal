@@ -258,6 +258,7 @@ export function TakeComparison({ reelId }: { reelId: string }) {
       </div>
       {preview ? (
         <div className="rounded-2xl border border-line bg-bg-elev p-4 text-sm">
+          {preview.truncated ? <p className="text-bad">Сравнение усечено.</p> : null}
           <p className="text-muted">{preview.note}</p>
           <p className="mt-2 whitespace-pre-wrap">
             {preview.chunks.map((chunk, index) => (

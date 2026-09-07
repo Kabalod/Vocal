@@ -174,6 +174,7 @@ test("personal MVP cycle, export, compare, backup restore, failures", async (t) 
   assert.equal(qs[0].answers.at(-1)?.text.includes("согреться"), true);
 
   const exported = await exportReel(ideaA.id);
+  assert.equal(exported.reel.selectedScriptId, editedScript.headId);
   assert.equal(exported.takes.length, 3);
   assert.equal(exported.scripts.some((row) => row.body.includes("Правка вручную")), true);
   assert.equal(exported.questions[0].answers.length >= 1, true);
