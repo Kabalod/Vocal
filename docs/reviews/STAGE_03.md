@@ -6,7 +6,7 @@
 - Репозиторий: Kabalod/Vocal
 - Ветка: feat/personal-mvp-03-take-media
 - BASE_SHA (до изменений): b08929b1e1328e75c7e9d3bf6ecf1697dce46daa
-- HEAD_SHA (после изменений): `4c7879eb25fc8315fa68500dafedfdf3ee1c3ba5`
+- HEAD_SHA (после изменений): `f84c3d0bc92c9b21f9ea14934c813fffa3c825a0`
 - Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-03-take-media
 - Ветка отправлена в GitHub: да, без force push
 - Предыдущий этап принят: да, этап 2 на `b08929b1e1328e75c7e9d3bf6ecf1697dce46daa`
@@ -92,5 +92,5 @@
 - Исправление: createTake по-прежнему пишет mediaStatus/originalName/mimeType; запись файла только после атомарного claim (`updateMany` pending/failed + storedPath null). Второй запрос при pending ждёт результат, не пишет. Сбой claimer → failed и unlink только своего dest.
 - Замечание: у backfill Take originalName=null, браузерный плеер выключен при hasFile.
 - Исправление: DTO и media берут originalName/MIME с Job; backfill копирует их на Take. Тест old.mp4 + Range.
-- Новый commit SHA: будет записан после коммита
+- Новый commit SHA: `f84c3d0bc92c9b21f9ea14934c813fffa3c825a0`
 - Повторная проверка: `npm run test:reels`; браузер не гонялся. Этап 4 не начинался.
