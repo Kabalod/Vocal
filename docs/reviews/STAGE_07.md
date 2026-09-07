@@ -6,9 +6,9 @@
 - Репозиторий: Kabalod/Vocal
 - Ветка: feat/personal-mvp-07-script-editor
 - BASE_SHA (до изменений): d265b0d287b791e981577774b9b1a5215f5d2fc3
-- HEAD_SHA (после изменений): (заполнится docs-коммитом)
+- HEAD_SHA (после изменений): `146c63bf94b1eadcbe3e2d59cdda4eb72d51eec9`
 - Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-07-script-editor
-- Ветка отправлена в GitHub: будет после push без force
+- Ветка отправлена в GitHub: да, без force push (если push прошёл)
 - Предыдущий этап принят: да, этап 6 на `d265b0d287b791e981577774b9b1a5215f5d2fc3`
 
 ## Реализовано

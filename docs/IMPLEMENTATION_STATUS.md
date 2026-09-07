@@ -14,7 +14,7 @@
 | 4 | Расшифровки и надёжная обработка | принят | `feat/personal-mvp-04-transcripts-and-jobs` | `1d8f26c1cb3d137f133fc8f35b0dfd7eac8302be` | `0dd0d04edbcf1cee9cff3b58d00f6290be5bd15e` | `test:reels` 20/20; lint ок | принято внешним ревью |
 | 5 | Анкета автора | принят | `feat/personal-mvp-05-creator-profile` | `0dd0d04edbcf1cee9cff3b58d00f6290be5bd15e` | `437d8f2f1fd8a74aa17cbe810088ae58b31b4ae5` | `test:reels` 22/22; lint ок | принято внешним ревью |
 | 6 | Разбор и вопросы | принят | `feat/personal-mvp-06-reviews-and-questions` | `437d8f2f1fd8a74aa17cbe810088ae58b31b4ae5` | `d265b0d287b791e981577774b9b1a5215f5d2fc3` | `test:reels` 25/25; lint ок | принято внешним ревью |
-| 7 | Сценарий и версии | на ревью | `feat/personal-mvp-07-script-editor` | `d265b0d287b791e981577774b9b1a5215f5d2fc3` | (после docs-коммита) | `test:reels` 26/26; lint ок | ждёт внешнего ревью |
+| 7 | Сценарий и версии | на ревью | `feat/personal-mvp-07-script-editor` | `d265b0d287b791e981577774b9b1a5215f5d2fc3` | `146c63bf94b1eadcbe3e2d59cdda4eb72d51eec9` | `test:reels` 26/26; lint ок | ждёт внешнего ревью |
 | 8 | Сравнение, экспорт, итоговая проверка | не начат | — | — | — | — | ждёт принятия этапа 7 |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
@@ -33,6 +33,7 @@
 | Коммит этапа 6 | `7858783c2a419ce78d3bcdb9fa7e604d6c926a56` |
 | Исправление ревью этапа 6 | `53609fd9fd00e990f2776f47b4018cbdac13163d` |
 | Документация SHA этапа 6 | `d265b0d287b791e981577774b9b1a5215f5d2fc3` |
+| Коммит этапа 7 | `146c63bf94b1eadcbe3e2d59cdda4eb72d51eec9` |
 
 ## Этап 7 — проверки
 
