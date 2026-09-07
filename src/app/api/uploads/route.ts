@@ -4,6 +4,7 @@ import path from "path";
 import { ALLOWED_EXTENSIONS, MAX_UPLOAD_MB } from "@/lib/config";
 import { ensureCriteria, prisma } from "@/lib/db";
 import { enqueueJob } from "@/lib/pipeline";
+import { createReel, createTake } from "@/lib/reels";
 import { toJobDto } from "@/lib/serialize";
 import { ensureStorageDirs, videoPathFor } from "@/lib/storage";
 
@@ -53,6 +54,10 @@ export async function POST(request: Request) {
       where: { id: job.id },
       data: { videoPath: dest },
     });
+
+    const title = path.parse(file.name).name.trim() || "Ролик без названия";
+    const reel = await createReel({ title });
+    await createTake(reel.id, { inputType: "video", jobId: job.id });
 
     after(() => {
       enqueueJob(job.id);

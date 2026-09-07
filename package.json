@@ -8,8 +8,12 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test:reels": "tsx --test tests/reels-migration.test.ts",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:existing": "tsx scripts/migrate-existing-sqlite.ts",
+    "db:backfill-reels": "tsx scripts/backfill-reels.ts",
     "db:seed": "tsx prisma/seed.ts"
   },
   "prisma": {

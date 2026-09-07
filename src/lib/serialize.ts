@@ -6,6 +6,12 @@ import type {
   JobStatus,
   JobWithAnalysis,
 } from "@/types/analysis";
+import {
+  isReelStatus,
+  isTakeInputType,
+  type ReelDto,
+  type TakeDto,
+} from "@/types/reel";
 
 export function toJobDto(job: Job): JobDto {
   return {
@@ -48,5 +54,53 @@ export function toJobWithAnalysis(
   return {
     ...toJobDto(job),
     analysis: job.analysis ? parsePayload(job.analysis.payload) : null,
+  };
+}
+
+type TakeWithJobs = {
+  id: string;
+  reelId: string;
+  number: number;
+  inputType: string;
+  authorNote: string;
+  createdAt: Date;
+  jobs: { id: string; status: string }[];
+};
+
+type ReelWithTakes = {
+  id: string;
+  title: string;
+  initialNote: string;
+  status: string;
+  selectedTakeId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  takes: TakeWithJobs[];
+};
+
+export function toTakeDto(take: TakeWithJobs): TakeDto {
+  const inputType = isTakeInputType(take.inputType) ? take.inputType : "video";
+  return {
+    id: take.id,
+    reelId: take.reelId,
+    number: take.number,
+    inputType,
+    authorNote: take.authorNote,
+    createdAt: take.createdAt.toISOString(),
+    jobs: take.jobs.map((job) => ({ id: job.id, status: job.status })),
+  };
+}
+
+export function toReelDto(reel: ReelWithTakes): ReelDto {
+  const status = isReelStatus(reel.status) ? reel.status : "draft";
+  return {
+    id: reel.id,
+    title: reel.title,
+    initialNote: reel.initialNote,
+    status,
+    selectedTakeId: reel.selectedTakeId,
+    createdAt: reel.createdAt.toISOString(),
+    updatedAt: reel.updatedAt.toISOString(),
+    takes: reel.takes.map(toTakeDto),
   };
 }
