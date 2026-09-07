@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { mimeFromName } from "../src/lib/take-playback";
 
 function titleFromJob(originalName: string): string {
   const base = originalName.replace(/\.[^.]+$/, "").trim();
@@ -33,6 +34,9 @@ export async function backfillReels(client: PrismaClient) {
           number: 1,
           inputType: "video",
           authorNote: "",
+          mediaStatus: "ready",
+          originalName: fresh.originalName,
+          mimeType: mimeFromName(fresh.originalName),
         },
       });
 

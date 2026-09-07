@@ -56,7 +56,7 @@
 | Команда или ручной сценарий | Выполнено? | Результат | Ограничения |
 |---|---|---|---|
 | бэкап SHA256 | да | совпал с живой до migrate | не git |
-| npm run test:reels | да | 16/16 | временная БД, без Groq |
+| npm run test:reels | да | 19/19 | без браузера; гонка загрузки и backfill mp4 |
 | npm run lint | да | ok | next lint deprecated |
 | npm run typecheck | да | исходные ошибки | не этап 3 |
 | npm run build | нет | — | не гонялся в этом этапе; ранее падал на score-analyz.ts |
@@ -88,7 +88,9 @@
 
 ## После замечаний
 
-- Замечание:
-- Исправление:
-- Новый commit SHA:
-- Повторная проверка:
+- Замечание: pending не держался как эксклюзивная запись; параллельный повтор с тем же ключом мог писать тот же файл и пометить Take failed после чужого успеха.
+- Исправление: createTake по-прежнему пишет mediaStatus/originalName/mimeType; запись файла только после атомарного claim (`updateMany` pending/failed + storedPath null). Второй запрос при pending ждёт результат, не пишет. Сбой claimer → failed и unlink только своего dest.
+- Замечание: у backfill Take originalName=null, браузерный плеер выключен при hasFile.
+- Исправление: DTO и media берут originalName/MIME с Job; backfill копирует их на Take. Тест old.mp4 + Range.
+- Новый commit SHA: будет записан после коммита
+- Повторная проверка: `npm run test:reels`; браузер не гонялся. Этап 4 не начинался.

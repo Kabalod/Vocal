@@ -13,7 +13,7 @@ import {
   type ReelDto,
   type TakeDto,
 } from "@/types/reel";
-import { canPlayInBrowser } from "@/lib/take-playback";
+import { canPlayInBrowser, mimeFromName } from "@/lib/take-playback";
 
 export function toJobDto(job: Job): JobDto {
   return {
@@ -71,7 +71,13 @@ type TakeWithJobs = {
   mimeType?: string | null;
   bodyText?: string | null;
   createdAt: Date;
-  jobs: { id: string; status: string; videoPath?: string | null; audioPath?: string | null }[];
+  jobs: {
+    id: string;
+    status: string;
+    videoPath?: string | null;
+    audioPath?: string | null;
+    originalName?: string | null;
+  }[];
 };
 
 function jobHasFile(job: { videoPath?: string | null; audioPath?: string | null }) {
@@ -85,8 +91,10 @@ export function toTakeDto(take: TakeWithJobs): TakeDto {
   const rawStatus = take.mediaStatus ?? "ready";
   const mediaStatus = isTakeMediaStatus(rawStatus) ? rawStatus : "ready";
   const hasOwnFile = Boolean(take.storedPath && mediaStatus === "ready");
-  const hasFile = hasOwnFile || take.jobs.some(jobHasFile);
-  const originalName = take.originalName ?? null;
+  const fileJob = take.jobs.find(jobHasFile);
+  const hasFile = hasOwnFile || Boolean(fileJob);
+  const originalName = take.originalName ?? fileJob?.originalName ?? null;
+  const mimeType = take.mimeType ?? (originalName ? mimeFromName(originalName) : null);
   return {
     id: take.id,
     reelId: take.reelId,
@@ -95,7 +103,7 @@ export function toTakeDto(take: TakeWithJobs): TakeDto {
     authorNote: take.authorNote,
     mediaStatus,
     originalName,
-    mimeType: take.mimeType ?? null,
+    mimeType,
     bodyText: take.bodyText ?? "",
     hasFile,
     browserPlayback: hasFile && canPlayInBrowser(inputType, originalName),

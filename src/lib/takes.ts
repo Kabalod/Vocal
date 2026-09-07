@@ -20,7 +20,7 @@ import {
 
 const takeInclude = {
   jobs: {
-    select: { id: true, status: true, videoPath: true, audioPath: true },
+    select: { id: true, status: true, videoPath: true, audioPath: true, originalName: true },
     orderBy: { createdAt: "asc" as const },
   },
 } as const;
@@ -83,35 +83,63 @@ export async function resolveTakeFilePath(takeId: string): Promise<{
     return {
       storedPath: take.storedPath,
       originalName: take.originalName,
-      mimeType: take.mimeType,
+      mimeType: take.mimeType ?? (take.originalName ? mimeFromName(take.originalName) : null),
     };
   }
   for (const job of take.jobs) {
     if (job.videoPath && job.videoPath !== "pending") {
+      const originalName = take.originalName ?? job.originalName;
       return {
         storedPath: job.videoPath,
-        originalName: job.originalName,
-        mimeType: take.mimeType,
+        originalName,
+        mimeType: take.mimeType ?? mimeFromName(originalName),
       };
     }
     if (job.audioPath) {
+      const originalName = take.originalName ?? job.originalName;
       return {
         storedPath: job.audioPath,
-        originalName: job.originalName,
-        mimeType: take.mimeType,
+        originalName,
+        mimeType: take.mimeType ?? mimeFromName(originalName),
       };
     }
   }
   return null;
 }
 
-export async function saveUploadedTake(options: {
-  reelId: string;
-  file: File;
-  inputType: TakeInputType;
-  authorNote?: string;
-  idempotencyKey?: string;
-}): Promise<TakeDto> {
+export type TakeUploadIo = {
+  writeFile: (dest: string, data: Buffer) => Promise<void>;
+  unlink: (dest: string) => Promise<void>;
+};
+
+const defaultUploadIo: TakeUploadIo = {
+  writeFile: (dest, data) => writeFile(dest, data),
+  unlink: (dest) => unlink(dest),
+};
+
+async function waitForSettledUpload(takeId: string): Promise<TakeDto> {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const row = await prisma.take.findUnique({ where: { id: takeId }, include: takeInclude });
+    if (!row) throw new ReelError("Дубль не найден.", "TAKE_NOT_FOUND", 404);
+    if (row.mediaStatus === "ready" && row.storedPath) return toTakeDto(row);
+    if (row.mediaStatus === "failed") {
+      throw new ReelError("Загрузка не записалась. Файл не сохранён как успешный.", "UPLOAD_FAILED");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new ReelError("Загрузка ещё выполняется. Повторите позже.", "UPLOAD_IN_PROGRESS");
+}
+
+export async function saveUploadedTake(
+  options: {
+    reelId: string;
+    file: File;
+    inputType: TakeInputType;
+    authorNote?: string;
+    idempotencyKey?: string;
+  },
+  io: TakeUploadIo = defaultUploadIo,
+): Promise<TakeDto> {
   if (options.inputType !== "video" && options.inputType !== "audio") {
     throw new ReelError("Загрузка файла — только для видео или аудио.", "INPUT_TYPE");
   }
@@ -130,6 +158,7 @@ export async function saveUploadedTake(options: {
     throw new ReelError(`Файл больше ${MAX_UPLOAD_MB} МБ.`, "FILE_TOO_LARGE");
   }
 
+  const mimeType = options.file.type || mimeFromName(options.file.name);
   await ensureStorageDirs();
   const take = await createTake(options.reelId, {
     inputType: options.inputType,
@@ -137,7 +166,7 @@ export async function saveUploadedTake(options: {
     idempotencyKey: options.idempotencyKey,
     mediaStatus: "pending",
     originalName: options.file.name,
-    mimeType: options.file.type || mimeFromName(options.file.name),
+    mimeType,
   });
 
   if (take.mediaStatus === "ready" && take.storedPath) {
@@ -146,31 +175,51 @@ export async function saveUploadedTake(options: {
     return dto;
   }
 
-  const dest = take.storedPath ?? takeMediaPathFor(take.id, options.file.name, options.inputType);
+  const dest = takeMediaPathFor(take.id, take.originalName || options.file.name, options.inputType);
+  const claimed = await prisma.take.updateMany({
+    where: {
+      id: take.id,
+      mediaStatus: { in: ["pending", "failed"] },
+      storedPath: null,
+    },
+    data: {
+      mediaStatus: "pending",
+      storedPath: dest,
+      originalName: options.file.name,
+      mimeType,
+    },
+  });
+  if (claimed.count !== 1) {
+    return waitForSettledUpload(take.id);
+  }
+
   try {
     const buffer = Buffer.from(await options.file.arrayBuffer());
-    await writeFile(dest, buffer);
-    const updated = await prisma.take.update({
-      where: { id: take.id },
-      data: {
-        storedPath: dest,
-        mediaStatus: "ready",
-        originalName: options.file.name,
-        mimeType: options.file.type || mimeFromName(options.file.name),
-      },
-      include: takeInclude,
+    await io.writeFile(dest, buffer);
+    const ready = await prisma.take.updateMany({
+      where: { id: take.id, mediaStatus: "pending" },
+      data: { mediaStatus: "ready", storedPath: dest },
     });
-    return toTakeDto(updated);
+    if (ready.count !== 1) {
+      return waitForSettledUpload(take.id);
+    }
+    const dto = await getTakeDto(take.id);
+    if (!dto) throw new ReelError("Дубль не найден.", "TAKE_NOT_FOUND", 404);
+    return dto;
   } catch (error) {
     try {
-      await unlink(dest);
+      await io.unlink(dest);
     } catch {
       /* файла могло не быть */
     }
-    await prisma.take.update({
-      where: { id: take.id },
+    await prisma.take.updateMany({
+      where: { id: take.id, mediaStatus: "pending" },
       data: { mediaStatus: "failed", storedPath: null },
     });
-    throw error;
+    if (error instanceof ReelError) throw error;
+    throw new ReelError(
+      error instanceof Error ? error.message : "Загрузка не записалась.",
+      "UPLOAD_FAILED",
+    );
   }
 }

@@ -22,7 +22,7 @@ const reelInclude = {
     orderBy: { number: "asc" as const },
     include: {
       jobs: {
-        select: { id: true, status: true, videoPath: true, audioPath: true },
+        select: { id: true, status: true, videoPath: true, audioPath: true, originalName: true },
         orderBy: { createdAt: "asc" as const },
       },
     },
