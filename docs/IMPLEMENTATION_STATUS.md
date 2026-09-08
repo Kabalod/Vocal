@@ -2,7 +2,7 @@
 
 Репозиторий: `Kabalod/Vocal`.  
 План: [cursor-plan/README.md](cursor-plan/README.md).  
-Следующая последовательность (дизайн, затем профиль 10–15): локальная папка `vocal_complete_plan_10_15/`. База: `d4c06fad0f1b468ff70a79effd461a65ec7cfcc5`.
+Следующая последовательность (дизайн, затем профиль 10–15): локальная папка `vocal_complete_plan_10_15/`. DESIGN_01 принят на `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36`.
 
 Легенда статуса: `не начат` · `в работе` · `на ревью` · `принят` · `есть замечания`.
 
@@ -18,7 +18,8 @@
 | 7 | Сценарий и версии | принят | `feat/personal-mvp-07-script-editor` | `d265b0d287b791e981577774b9b1a5215f5d2fc3` | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` | `test:reels` 26/26; lint ок | принято внешним ревью |
 | 8 | Сравнение, экспорт, итоговая проверка | принят | `feat/personal-mvp-08-comparison-and-release-check` | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` | `086292d9d0db4285382c9a3ca6f47231423928ad` | `test:reels` 29/29; lint ок | принято внешним ревью |
 | 9 | Стабилизация MVP и браузерная проверка | на ревью | `feat/personal-mvp-09-mvp-stabilization` | `086292d9d0db4285382c9a3ca6f47231423928ad` | `21b4858f70306cd8df29b9d450c30a4356fd49f9` | `test:reels` 29/29; lint; build | не принят формально; план 10–15 стартует от `d4c06fa` |
-| D01 | Визуальный фундамент | на ревью | `feat/personal-mvp-design-01-foundation` | `d4c06fad0f1b468ff70a79effd461a65ec7cfcc5` | `e8ec4b655fe879a922d32a0a55636c905314b63a` | lint; typecheck; build; test:reels 29/29 | не принят; код `6ad19cff`, HEAD docs-only |
+| D01 | Визуальный фундамент | принят | `feat/personal-mvp-design-01-foundation` | `d4c06fad0f1b468ff70a79effd461a65ec7cfcc5` | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` | lint; typecheck; build; test:reels 29/29 | принято внешним ревью; код `6ad19cff` |
+| D02 | Shell и навигация | на ревью | `feat/personal-mvp-design-02-shell` | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` | `3fa3cc654faeab19caf33af9ea4f144ccea31122` | lint; typecheck; build; test:reels 30/30 | не принят; код `3fa3cc6` |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
@@ -41,6 +42,8 @@
 | Документация SHA этапа 8 | `086292d9d0db4285382c9a3ca6f47231423928ad` |
 | Инструкция этапа 9 (ветка 8, не база) | `33d7ff175559a3a87aee78bdbe11a3fb77ca669d` |
 | Коммит этапа 9 | `21b4858f70306cd8df29b9d450c30a4356fd49f9` |
+| Принятый DESIGN_01 | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` |
+| Коммит кода DESIGN_02 | `3fa3cc654faeab19caf33af9ea4f144ccea31122` |
 
 ## Этап 9 — проверки
 
