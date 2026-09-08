@@ -24,7 +24,7 @@ export function RecordingCard({
               : (event) => onChange({ ...value, [key]: event.target.value })
           }
           rows={2}
-          className="w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none"
+          className="vocal-input"
         />
       </label>
     );

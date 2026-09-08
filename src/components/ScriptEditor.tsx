@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { RecordingCard } from "@/components/RecordingCard";
 import { ScriptVersionList, versionById } from "@/components/ScriptVersionList";
+import { ScriptVersionTimeline } from "@/components/ScriptVersionTimeline";
+import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
 import {
   emptyRecording,
   type RecordingCardDto,
@@ -118,23 +120,34 @@ export function ScriptEditor({ reelId }: { reelId: string }) {
       <div>
         <h2 className="font-[family-name:var(--font-display)] text-2xl">Ваша версия</h2>
         <p className="text-sm text-muted">
-          Ручное сохранение не вызывает модель. Генерация пишет отдельное предложение и не затирает текст в редакторе.
-          Финальный сценарий и финальный дубль — разные выборы.
+          Последняя сохранённая версия — главный текст. Ручное сохранение не вызывает модель. Помощь модели пишет
+          отдельное предложение и не затирает черновик. Финальный сценарий и финальный дубль — разные выборы.
         </p>
       </div>
-      {error ? <p className="text-bad">{error}</p> : null}
+      {error ? <ShellError message={error} /> : null}
       {status ? <p className="text-sm text-muted">{status}</p> : null}
-      <div className="grid gap-6 lg:grid-cols-[1fr_minmax(16rem,20rem)]">
-        <div className="space-y-3 rounded-2xl border border-line bg-bg-elev p-4">
+      {bundle ? (
+        <ScriptVersionTimeline
+          versions={bundle.versions}
+          viewingId={viewingId}
+          headId={bundle.headId}
+          finalScriptId={bundle.finalScriptId}
+          onView={setViewingId}
+        />
+      ) : (
+        <ShellLoading label="Загрузка версий…" />
+      )}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(16rem,0.8fr)]">
+        <div className="space-y-4">
           <textarea
             value={body}
             onChange={(event) => {
               setBody(event.target.value);
               setDirty(true);
             }}
-            rows={10}
+            rows={16}
             placeholder="Текст сценария"
-            className="w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none"
+            className="vocal-input min-h-[22rem] resize-y font-[family-name:var(--font-display)] text-lg leading-relaxed"
           />
           <RecordingCard
             value={recording}
@@ -146,7 +159,10 @@ export function ScriptEditor({ reelId }: { reelId: string }) {
           <fieldset className="space-y-2">
             <legend className="text-sm text-muted">Источники (выбираете сами, ничего не склеивается само)</legend>
             {(bundle?.sources ?? []).length === 0 ? (
-              <p className="text-sm text-muted">Пока нет заметок, расшифровок, ответов или прошлых сценариев.</p>
+              <ShellEmpty
+                title="Нет источников"
+                description="Пока нет заметок, расшифровок, ответов или прошлых сценариев."
+              />
             ) : (
               bundle?.sources.map((source) => {
                 const key = sourceKey(source);
@@ -173,7 +189,7 @@ export function ScriptEditor({ reelId }: { reelId: string }) {
               type="button"
               onClick={() => void save()}
               disabled={saving || !body.trim()}
-              className="rounded-full bg-accent px-4 py-2 text-sm text-[#1a140c] disabled:opacity-50"
+              className="vocal-btn vocal-btn-primary disabled:opacity-50"
             >
               {saving ? "Сохраняем…" : dirty ? "Сохранить новую версию" : "Сохранить"}
             </button>
@@ -181,9 +197,9 @@ export function ScriptEditor({ reelId }: { reelId: string }) {
               type="button"
               onClick={() => void generate()}
               disabled={generating || selected.length === 0}
-              className="rounded-full border border-line px-4 py-2 text-sm disabled:opacity-50"
+              className="vocal-btn disabled:opacity-50"
             >
-              {generating ? "Собираем…" : "Собрать с ИИ"}
+              {generating ? "Собираем…" : "Помочь сформулировать сценарий"}
             </button>
           </div>
         </div>
@@ -198,12 +214,12 @@ export function ScriptEditor({ reelId }: { reelId: string }) {
               onAccept={(id) => void post("accept", { proposalId: id }).catch((err) => setError(err.message))}
             />
           ) : (
-            <p className="text-muted">Загрузка версий…</p>
+            <ShellLoading label="Загрузка версий…" />
           )}
           {viewing ? (
-            <div className="rounded-2xl border border-line p-3 text-sm">
+            <div className="vocal-card p-4 text-sm">
               <p className="text-muted">Просмотр версии</p>
-              <p className="mt-2 whitespace-pre-wrap">{viewing.body}</p>
+              <p className="mt-2 whitespace-pre-wrap leading-relaxed">{viewing.body}</p>
               {viewing.inventedIdeas.length > 0 ? (
                 <p className="mt-2 text-muted">Новые идеи модели: {viewing.inventedIdeas.join("; ")}</p>
               ) : null}
