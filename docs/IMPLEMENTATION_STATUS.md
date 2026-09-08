@@ -3,7 +3,7 @@
 Репозиторий: `Kabalod/Vocal`.  
 План: [cursor-plan/README.md](cursor-plan/README.md).  
 Следующая последовательность (дизайн, затем профиль 10–15): локальная папка `vocal_complete_plan_10_15/`.  
-Принятый DESIGN_03 / база DESIGN_04: `7f32e9db6ef12562651a1801c904e959117f840d`.
+Принятый DESIGN_04 / база DESIGN_05: `729d1e586a65712b21433c106d13ec77fd99795c`.
 
 Легенда статуса: `не начат` · `в работе` · `на ревью` · `принят` · `есть замечания`.
 
@@ -22,7 +22,8 @@
 | D01 | Визуальный фундамент | принят | `feat/personal-mvp-design-01-foundation` | `d4c06fad0f1b468ff70a79effd461a65ec7cfcc5` | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` | lint; typecheck; build; test:reels 29/29 | принято внешним ревью; код `6ad19cff` |
 | D02 | Shell и навигация | принят | `feat/personal-mvp-design-02-shell` | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` | `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b` | lint; typecheck; build; test:reels 30/30 | принято внешним ревью; код `3fa3cc6` |
 | D03 | Экран «Записи» | принят | `feat/personal-mvp-design-03-recordings` | `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b` | `7f32e9db6ef12562651a1801c904e959117f840d` | lint; typecheck; build; test:reels 31/31 | принято внешним ревью; код `2cd5bc1` |
-| D04 | Рабочая область записи | на ревью | `feat/personal-mvp-design-04-reel-workspace` | `7f32e9db6ef12562651a1801c904e959117f840d` | `b81d747fd68a2a8c19b11434bde5cd569a6fb87c` | lint; typecheck; build; test:reels 32/32 | не принят; код `505024d`, HEAD docs-only |
+| D04 | Рабочая область записи | принят | `feat/personal-mvp-design-04-reel-workspace` | `7f32e9db6ef12562651a1801c904e959117f840d` | `729d1e586a65712b21433c106d13ec77fd99795c` | lint; typecheck; build; test:reels 32/32 | принято внешним ревью; код `505024d` |
+| D05 | Сценарий и версии | на ревью | `feat/personal-mvp-design-05-script-versions` | `729d1e586a65712b21433c106d13ec77fd99795c` | `df861de26c7c44be262bc1170b7408478cd1826d` | lint; typecheck; build; test:reels 33/33 | не принят; код `df861de` |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
@@ -51,6 +52,8 @@
 | Коммит кода DESIGN_03 | `2cd5bc128358eefb7c0dd5dc5318330c46ef0f9a` |
 | Принятый DESIGN_03 / база DESIGN_04 | `7f32e9db6ef12562651a1801c904e959117f840d` |
 | Коммит кода DESIGN_04 | `505024d3888ee3a73e974a15b0f26d23fa70b7d6` |
+| Принятый DESIGN_04 / база DESIGN_05 | `729d1e586a65712b21433c106d13ec77fd99795c` |
+| Коммит кода DESIGN_05 | `df861de26c7c44be262bc1170b7408478cd1826d` |
 
 ## Этап 9 — проверки
 
