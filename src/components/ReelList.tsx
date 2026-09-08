@@ -2,18 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ReelCard } from "@/components/ReelCard";
+import { MORE_RECORDING_FILTERS, RECORDING_FILTERS, type RecordingFilterId } from "@/components/reel-filters";
+import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
 import { GenerationGuard } from "@/lib/generation-guard";
-import { REEL_STATUS_LABELS, type ReelDto, type ReelStatus } from "@/types/reel";
-
-const FILTERS: Array<{ id: "open" | "all" | ReelStatus; label: string }> = [
-  { id: "open", label: "Открытые" },
-  { id: "all", label: "Все" },
-  { id: "idea", label: REEL_STATUS_LABELS.idea },
-  { id: "in_progress", label: REEL_STATUS_LABELS.in_progress },
-  { id: "ready_to_record", label: REEL_STATUS_LABELS.ready_to_record },
-  { id: "completed", label: REEL_STATUS_LABELS.completed },
-  { id: "archived", label: REEL_STATUS_LABELS.archived },
-];
+import type { ReelDto } from "@/types/reel";
 
 const SORTS: Array<{ id: "updated" | "created" | "title"; label: string }> = [
   { id: "updated", label: "По обновлению" },
@@ -21,10 +13,35 @@ const SORTS: Array<{ id: "updated" | "created" | "title"; label: string }> = [
   { id: "title", label: "По названию" },
 ];
 
+function FilterChip({
+  id,
+  label,
+  selected,
+  onSelect,
+}: {
+  id: RecordingFilterId;
+  label: string;
+  selected: boolean;
+  onSelect: (id: RecordingFilterId) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(id)}
+      aria-pressed={selected}
+      className={`rounded-full px-3 py-1.5 text-sm ${
+        selected ? "bg-accent text-[#1a140c]" : "bg-bg-elev text-muted hover:text-text"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
 export function ReelList() {
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
-  const [status, setStatus] = useState<(typeof FILTERS)[number]["id"]>("open");
+  const [status, setStatus] = useState<RecordingFilterId>("open");
   const [sort, setSort] = useState<(typeof SORTS)[number]["id"]>("updated");
   const [reels, setReels] = useState<ReelDto[]>([]);
   const [truncated, setTruncated] = useState(false);
@@ -101,27 +118,23 @@ export function ReelList() {
 
   return (
     <div className="space-y-6">
-      <form onSubmit={onCreate} className="space-y-3 rounded-2xl border border-line bg-bg-elev p-4">
-        <p className="text-sm text-muted">Новая идея — без видео и без ключа Groq.</p>
+      <form onSubmit={onCreate} className="vocal-card space-y-3 p-4">
+        <p className="text-sm text-muted">Новая запись — без видео и без ключа Groq. ИИ не вызывается.</p>
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Название"
-          className="w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none focus:border-accent/50"
+          className="vocal-input"
         />
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Заметка (необязательно)"
           rows={3}
-          className="w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none focus:border-accent/50"
+          className="vocal-input"
         />
-        <button
-          type="submit"
-          disabled={creating || !title.trim()}
-          className="rounded-full bg-accent px-4 py-2 text-sm text-[#1a140c] disabled:opacity-50"
-        >
-          {creating ? "Создаём…" : "Создать карточку"}
+        <button type="submit" disabled={creating || !title.trim()} className="vocal-btn vocal-btn-primary">
+          {creating ? "Создаём…" : "Создать запись"}
         </button>
       </form>
 
@@ -130,30 +143,39 @@ export function ReelList() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Поиск по названию и заметке"
-          className="w-full rounded-xl border border-line bg-bg-elev px-3 py-2 outline-none focus:border-accent/50"
+          className="vocal-input"
         />
-        <div className="flex flex-wrap gap-2">
-          {FILTERS.map((item) => (
-            <button
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Фильтры записей">
+          {RECORDING_FILTERS.map((item) => (
+            <FilterChip
               key={item.id}
-              type="button"
-              onClick={() => setStatus(item.id)}
-              className={`rounded-full px-3 py-1.5 text-sm ${
-                status === item.id ? "bg-accent text-[#1a140c]" : "bg-bg-elev text-muted"
-              }`}
-            >
-              {item.label}
-            </button>
+              id={item.id}
+              label={item.label}
+              selected={status === item.id}
+              onSelect={setStatus}
+            />
           ))}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Дополнительные статусы">
+          {MORE_RECORDING_FILTERS.map((item) => (
+            <FilterChip
+              key={item.id}
+              id={item.id}
+              label={item.label}
+              selected={status === item.id}
+              onSelect={setStatus}
+            />
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Сортировка">
           {SORTS.map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={() => setSort(item.id)}
+              aria-pressed={sort === item.id}
               className={`rounded-full px-3 py-1.5 text-sm ${
-                sort === item.id ? "bg-accent text-[#1a140c]" : "bg-bg-elev text-muted"
+                sort === item.id ? "bg-accent text-[#1a140c]" : "bg-bg-elev text-muted hover:text-text"
               }`}
             >
               {item.label}
@@ -162,19 +184,20 @@ export function ReelList() {
         </div>
       </div>
 
-      {error ? <p className="text-bad">{error}</p> : null}
-      {loading ? <p className="text-muted">Загрузка…</p> : null}
-      {!loading && reels.length === 0 ? (
-        <p className="text-muted">Пока пусто. Создайте первую идею выше.</p>
-      ) : (
-        <ul className="space-y-3">
+      {error ? <ShellError message={error} onRetry={() => void load()} /> : null}
+      {loading ? <ShellLoading label="Загрузка записей…" /> : null}
+      {!loading && reels.length === 0 && !error ? (
+        <ShellEmpty title="Пока нет записей" description="Создайте первую карточку выше. Поиск и фильтры не вызывают ИИ." />
+      ) : null}
+      {!loading && reels.length > 0 ? (
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {reels.map((reel) => (
             <li key={reel.id}>
               <ReelCard reel={reel} />
             </li>
           ))}
         </ul>
-      )}
+      ) : null}
       {truncated ? (
         <p className="text-sm text-muted">Показаны первые карточки. Уточните поиск или фильтр.</p>
       ) : null}

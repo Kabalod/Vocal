@@ -126,7 +126,13 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
           <p className="min-w-0 flex-1 truncate font-[family-name:var(--font-display)] text-lg">{title}</p>
         </header>
 
-        <main className="mx-auto min-w-0 w-full max-w-5xl flex-1 px-4 py-6 md:px-8 md:pb-16">{children}</main>
+        <main
+          className={`mx-auto min-w-0 w-full flex-1 px-4 py-6 md:px-8 md:pb-16 ${
+            pathname === "/reels" ? "max-w-6xl" : "max-w-5xl"
+          }`}
+        >
+          {children}
+        </main>
       </div>
 
       {sheetOpen ? (
