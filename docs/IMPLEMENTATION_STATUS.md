@@ -19,7 +19,7 @@
 | 8 | Сравнение, экспорт, итоговая проверка | принят | `feat/personal-mvp-08-comparison-and-release-check` | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` | `086292d9d0db4285382c9a3ca6f47231423928ad` | `test:reels` 29/29; lint ок | принято внешним ревью |
 | 9 | Стабилизация MVP и браузерная проверка | на ревью | `feat/personal-mvp-09-mvp-stabilization` | `086292d9d0db4285382c9a3ca6f47231423928ad` | `21b4858f70306cd8df29b9d450c30a4356fd49f9` | `test:reels` 29/29; lint; build | не принят формально; план 10–15 стартует от `d4c06fa` |
 | D01 | Визуальный фундамент | принят | `feat/personal-mvp-design-01-foundation` | `d4c06fad0f1b468ff70a79effd461a65ec7cfcc5` | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` | lint; typecheck; build; test:reels 29/29 | принято внешним ревью; код `6ad19cff` |
-| D02 | Shell и навигация | на ревью | `feat/personal-mvp-design-02-shell` | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` | `3fa3cc654faeab19caf33af9ea4f144ccea31122` | lint; typecheck; build; test:reels 30/30 | не принят; код `3fa3cc6` |
+| D02 | Shell и навигация | на ревью | `feat/personal-mvp-design-02-shell` | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` | `a98cc8e10a9584e80a09c38c96788e1b1998744d` | lint; typecheck; build; test:reels 30/30 | не принят; код `3fa3cc6`, HEAD docs-only |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 

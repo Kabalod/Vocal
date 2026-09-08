@@ -5,9 +5,9 @@
 - Этап: DESIGN_02 — shell и навигация
 - BASE_SHA: `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36`
 - Коммит кода: `3fa3cc654faeab19caf33af9ea4f144ccea31122`
-- HEAD_SHA: `3fa3cc654faeab19caf33af9ea4f144ccea31122`
+- HEAD_SHA: `a98cc8e10a9584e80a09c38c96788e1b1998744d`
 - Ветка: feat/personal-mvp-design-02-shell
-- Состав ветки поверх BASE: коммит кода `3fa3cc6` (shell). Документационный коммит, если есть на вершине, не меняет `src/`.
+- Состав ветки поверх BASE: два коммита. `3fa3cc6` — код (shell). `a98cc8e` (`docs: record DESIGN_02 HEAD_SHA`) — **только документационный**, без изменений `src/`.
 
 ## Изменения
 
