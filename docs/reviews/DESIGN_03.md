@@ -5,9 +5,9 @@
 - Этап: DESIGN_03 — экран «Записи»
 - BASE_SHA: `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b`
 - Коммит кода: `2cd5bc128358eefb7c0dd5dc5318330c46ef0f9a`
-- HEAD_SHA: `2cd5bc128358eefb7c0dd5dc5318330c46ef0f9a`
+- HEAD_SHA: `4a5e35d033511868c5d3174d7c77cee335950f4d`
 - Ветка: feat/personal-mvp-design-03-recordings
-- Состав ветки поверх BASE: коммит кода `2cd5bc1`. Документационный коммит на вершине, если есть, не меняет `src/`.
+- Состав ветки поверх BASE: два коммита. `2cd5bc1` — код (экран записей). `4a5e35d` (`docs: record DESIGN_03 HEAD_SHA`) — **только документационный**, без изменений `src/`.
 
 ## Изменения
 

@@ -21,7 +21,7 @@
 | 9 | Стабилизация MVP и браузерная проверка | на ревью | `feat/personal-mvp-09-mvp-stabilization` | `086292d9d0db4285382c9a3ca6f47231423928ad` | `21b4858f70306cd8df29b9d450c30a4356fd49f9` | `test:reels` 29/29; lint; build | не принят формально; план 10–15 стартует от `d4c06fa` |
 | D01 | Визуальный фундамент | принят | `feat/personal-mvp-design-01-foundation` | `d4c06fad0f1b468ff70a79effd461a65ec7cfcc5` | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` | lint; typecheck; build; test:reels 29/29 | принято внешним ревью; код `6ad19cff` |
 | D02 | Shell и навигация | принят | `feat/personal-mvp-design-02-shell` | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` | `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b` | lint; typecheck; build; test:reels 30/30 | принято внешним ревью; код `3fa3cc6` |
-| D03 | Экран «Записи» | на ревью | `feat/personal-mvp-design-03-recordings` | `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b` | `2cd5bc128358eefb7c0dd5dc5318330c46ef0f9a` | lint; typecheck; build; test:reels 31/31 | не принят; код `2cd5bc1` |
+| D03 | Экран «Записи» | на ревью | `feat/personal-mvp-design-03-recordings` | `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b` | `4a5e35d033511868c5d3174d7c77cee335950f4d` | lint; typecheck; build; test:reels 31/31 | не принят; код `2cd5bc1`, HEAD docs-only |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
