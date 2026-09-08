@@ -23,7 +23,7 @@
 | D02 | Shell и навигация | принят | `feat/personal-mvp-design-02-shell` | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` | `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b` | lint; typecheck; build; test:reels 30/30 | принято внешним ревью; код `3fa3cc6` |
 | D03 | Экран «Записи» | принят | `feat/personal-mvp-design-03-recordings` | `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b` | `7f32e9db6ef12562651a1801c904e959117f840d` | lint; typecheck; build; test:reels 31/31 | принято внешним ревью; код `2cd5bc1` |
 | D04 | Рабочая область записи | принят | `feat/personal-mvp-design-04-reel-workspace` | `7f32e9db6ef12562651a1801c904e959117f840d` | `729d1e586a65712b21433c106d13ec77fd99795c` | lint; typecheck; build; test:reels 32/32 | принято внешним ревью; код `505024d` |
-| D05 | Сценарий и версии | на ревью | `feat/personal-mvp-design-05-script-versions` | `729d1e586a65712b21433c106d13ec77fd99795c` | `df861de26c7c44be262bc1170b7408478cd1826d` | lint; typecheck; build; test:reels 33/33 | не принят; код `df861de` |
+| D05 | Сценарий и версии | на ревью | `feat/personal-mvp-design-05-script-versions` | `729d1e586a65712b21433c106d13ec77fd99795c` | `0dcca31239fb3732525839f8199de6f042aec790` | lint; typecheck; build; test:reels 33/33 | не принят; код `df861de`, HEAD docs-only |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
