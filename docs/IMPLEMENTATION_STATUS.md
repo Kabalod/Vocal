@@ -18,7 +18,7 @@
 | 7 | Сценарий и версии | принят | `feat/personal-mvp-07-script-editor` | `d265b0d287b791e981577774b9b1a5215f5d2fc3` | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` | `test:reels` 26/26; lint ок | принято внешним ревью |
 | 8 | Сравнение, экспорт, итоговая проверка | принят | `feat/personal-mvp-08-comparison-and-release-check` | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` | `086292d9d0db4285382c9a3ca6f47231423928ad` | `test:reels` 29/29; lint ок | принято внешним ревью |
 | 9 | Стабилизация MVP и браузерная проверка | на ревью | `feat/personal-mvp-09-mvp-stabilization` | `086292d9d0db4285382c9a3ca6f47231423928ad` | `21b4858f70306cd8df29b9d450c30a4356fd49f9` | `test:reels` 29/29; lint; build | не принят формально; план 10–15 стартует от `d4c06fa` |
-| D01 | Визуальный фундамент | на ревью | `feat/personal-mvp-design-01-foundation` | `d4c06fad0f1b468ff70a79effd461a65ec7cfcc5` | `6ad19cffb913a572cdba91b8af679d1819b8524f` | lint; typecheck; build; test:reels 29/29 | не принят |
+| D01 | Визуальный фундамент | на ревью | `feat/personal-mvp-design-01-foundation` | `d4c06fad0f1b468ff70a79effd461a65ec7cfcc5` | `e8ec4b655fe879a922d32a0a55636c905314b63a` | lint; typecheck; build; test:reels 29/29 | не принят; код `6ad19cff`, HEAD docs-only |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
