@@ -4,8 +4,8 @@
 
 - Этап: DESIGN_01 — визуальный фундамент
 - BASE_SHA: `d4c06fad0f1b468ff70a79effd461a65ec7cfcc5`
-- Коммит кода: см. `style:` коммит ветки после push
-- HEAD_SHA: вершина `feat/personal-mvp-design-01-foundation` после push
+- Коммит кода: `6ad19cffb913a572cdba91b8af679d1819b8524f`
+- HEAD_SHA: `6ad19cffb913a572cdba91b8af679d1819b8524f`
 - Ветка: feat/personal-mvp-design-01-foundation
 
 ## Изменения
