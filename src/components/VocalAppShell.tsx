@@ -128,7 +128,7 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
 
         <main
           className={`mx-auto min-w-0 w-full flex-1 px-4 py-6 md:px-8 md:pb-16 ${
-            pathname === "/reels" ? "max-w-6xl" : "max-w-5xl"
+            pathname === "/reels" || pathname.startsWith("/reels/") ? "max-w-6xl" : "max-w-5xl"
           }`}
         >
           {children}

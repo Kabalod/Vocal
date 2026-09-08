@@ -10,7 +10,7 @@ export function isShellNavActive(pathname: string, href: string): boolean {
 
 export function shellBack(pathname: string): { href: string; label: string } | null {
   if (pathname.startsWith("/reels/") && pathname !== "/reels") {
-    return { href: "/reels", label: "Записи" };
+    return null;
   }
   if (pathname.startsWith("/jobs/")) {
     return { href: "/history", label: "История" };

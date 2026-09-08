@@ -11,7 +11,7 @@ test("shell nav is only recordings and profile", () => {
   assert.equal(isShellNavActive("/profile", "/reels"), false);
   assert.equal(shellBack("/reels"), null);
   assert.equal(shellBack("/profile"), null);
-  assert.deepEqual(shellBack("/reels/cmexample"), { href: "/reels", label: "Записи" });
+  assert.equal(shellBack("/reels/cmexample"), null);
   assert.deepEqual(shellBack("/"), { href: "/reels", label: "Записи" });
   assert.deepEqual(shellBack("/jobs/cmexample"), { href: "/history", label: "История" });
   assert.equal(shellHeaderTitle("/reels"), "Записи");

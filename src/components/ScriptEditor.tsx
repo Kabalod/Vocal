@@ -116,7 +116,7 @@ export function ScriptEditor({ reelId }: { reelId: string }) {
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="font-display text-2xl">Сценарий</h2>
+        <h2 className="font-[family-name:var(--font-display)] text-2xl">Ваша версия</h2>
         <p className="text-sm text-muted">
           Ручное сохранение не вызывает модель. Генерация пишет отдельное предложение и не затирает текст в редакторе.
           Финальный сценарий и финальный дубль — разные выборы.

@@ -113,7 +113,7 @@ export function ReelWorkspace({ id }: { id: string }) {
   }
 
   if (!ready || !session.confirmed) {
-    return <p className="text-muted">Загрузка…</p>;
+    return <p className="text-muted">Загрузка записи…</p>;
   }
 
   const saveLabel =
@@ -130,36 +130,48 @@ export function ReelWorkspace({ id }: { id: string }) {
               : "Изменения ещё не отправлялись";
 
   return (
-    <div className="space-y-8">
+    <header className="space-y-4 border-b border-line pb-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href="/reels" onClick={onGoToList} className="text-sm text-muted hover:text-text">
-          ← Мои ролики
+          ← Записи
         </Link>
         <div className="flex items-center gap-3">
           <p className={`text-sm ${session.saveState === "error" ? "text-bad" : "text-muted"}`}>{saveLabel}</p>
           {session.saveState === "error" ? (
-            <button
-              type="button"
-              className="rounded-full bg-accent px-3 py-1 text-sm text-[#1a140c]"
-              onClick={() => session.retry()}
-            >
+            <button type="button" className="vocal-btn vocal-btn-primary text-sm" onClick={() => session.retry()}>
               Повторить сохранение
             </button>
           ) : null}
         </div>
       </div>
 
-      <label className="block space-y-2">
-        <span className="text-sm text-muted">Название</span>
-        <input
-          value={session.draftTitle}
-          onChange={(e) => session.setTitle(e.target.value)}
-          onBlur={() => session.requestSave()}
-          className="w-full rounded-xl border border-line bg-bg-elev px-3 py-2 text-xl outline-none focus:border-accent/50"
-        />
-      </label>
+      <div className="flex flex-col gap-3 md:flex-row md:items-end">
+        <label className="min-w-0 flex-1 space-y-1">
+          <span className="text-sm text-muted">Название</span>
+          <input
+            value={session.draftTitle}
+            onChange={(e) => session.setTitle(e.target.value)}
+            onBlur={() => session.requestSave()}
+            className="vocal-input font-[family-name:var(--font-display)] text-2xl"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-sm text-muted">Статус</span>
+          <select
+            value={session.draftStatus}
+            onChange={(e) => session.setStatus(e.target.value as ReelStatus)}
+            className="vocal-input"
+          >
+            {REEL_STATUSES.map((item) => (
+              <option key={item} value={item}>
+                {REEL_STATUS_LABELS[item]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
-      <label className="block space-y-2">
+      <label className="block space-y-1">
         <span className="text-sm text-muted">Заметка</span>
         <textarea
           value={session.draftNote}
@@ -167,32 +179,13 @@ export function ReelWorkspace({ id }: { id: string }) {
             session.setNote(e.target.value);
             scheduleNoteSave();
           }}
-          rows={8}
-          className="w-full rounded-xl border border-line bg-bg-elev px-3 py-2 outline-none focus:border-accent/50"
+          rows={3}
+          className="vocal-input"
         />
       </label>
-
-      <label className="block space-y-2">
-        <span className="text-sm text-muted">Статус</span>
-        <select
-          value={session.draftStatus}
-          onChange={(e) => session.setStatus(e.target.value as ReelStatus)}
-          className="rounded-xl border border-line bg-bg-elev px-3 py-2 outline-none"
-        >
-          {REEL_STATUSES.map((item) => (
-            <option key={item} value={item}>
-              {REEL_STATUS_LABELS[item]}
-            </option>
-          ))}
-        </select>
-      </label>
-
       <p className="text-sm text-muted">
-        Дублей: {session.confirmed.takeCount}. Финальный дубль выбирается в списке попыток ниже, вручную.
+        Дублей: {session.confirmed.takeCount}. Финальный дубль — вручную в панели дублей.
       </p>
-      <p className="text-sm text-muted">
-        Расшифровка уже в карточке. Вопросы и сценарий — следующие этапы. Загрузка файла их не запускает.
-      </p>
-    </div>
+    </header>
   );
 }

@@ -1,15 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { TakeList } from "@/components/TakeList";
 import { TakePlayer } from "@/components/TakePlayer";
 import { TakeUploadDropzone } from "@/components/TakeUploadDropzone";
 import { TranscriptEditor } from "@/components/TranscriptEditor";
 import { QuestionList } from "@/components/QuestionList";
 import { ReviewPanel } from "@/components/ReviewPanel";
+import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
 import type { ReelDto } from "@/types/reel";
 
-export function ReelTakes({ reelId }: { reelId: string }) {
+type ReelTakesSlots = {
+  media: ReactNode;
+  vocal: ReactNode;
+};
+
+export function ReelTakes({
+  reelId,
+  children,
+}: {
+  reelId: string;
+  children?: (slots: ReelTakesSlots) => ReactNode;
+}) {
   const [reel, setReel] = useState<ReelDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
@@ -105,15 +117,33 @@ export function ReelTakes({ reelId }: { reelId: string }) {
   }
 
   if (!reel) {
-    return error ? <p className="text-bad">{error}</p> : <p className="text-muted">Загрузка попыток…</p>;
+    const pending = error ? <ShellError message={error} /> : <ShellLoading label="Загрузка попыток…" />;
+    if (children) return <>{children({ media: pending, vocal: pending })}</>;
+    return pending;
   }
 
   const viewing = reel.takes.find((take) => take.id === viewingId) ?? null;
 
-  return (
+  const vocal = (
+    <div className="space-y-6">
+      <div>
+        <h2 className="font-[family-name:var(--font-display)] text-2xl">Vocal</h2>
+        <p className="text-sm text-muted">Вопросы и разбор по выбранному дублю. Обычные ответы не вызывают ИИ.</p>
+      </div>
+      {error ? <p className="text-bad">{error}</p> : null}
+      {viewing ? (
+        <ReviewPanel key={`review-${viewing.id}`} takeId={viewing.id} />
+      ) : (
+        <ShellEmpty title="Нет дубля" description="Добавьте попытку — разбор появится рядом." />
+      )}
+      <QuestionList reelId={reelId} takeId={viewingId} />
+    </div>
+  );
+
+  const media = (
     <section className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl">Попытки</h2>
+        <h2 className="font-[family-name:var(--font-display)] text-2xl">Попытки</h2>
         <p className="text-sm text-muted">
           Новый дубль не заменяет старый и не становится финальным сам. Расшифровку можно править версиями; распознавание
           речи по-прежнему запускается отдельно через задачу обработки.
@@ -131,7 +161,6 @@ export function ReelTakes({ reelId }: { reelId: string }) {
         <div className="space-y-4">
           <TakePlayer take={viewing} seekTo={seekTo} />
           {viewing ? <TranscriptEditor key={viewing.id} takeId={viewing.id} /> : null}
-          {viewing ? <ReviewPanel key={`review-${viewing.id}`} takeId={viewing.id} /> : null}
           {viewing && viewing.inputType !== "text" && viewing.browserPlayback ? (
             <form
               className="flex flex-wrap items-end gap-2"
@@ -149,16 +178,15 @@ export function ReelTakes({ reelId }: { reelId: string }) {
                   className="ml-2 w-24 rounded-lg border border-line bg-bg px-2 py-1"
                 />
               </label>
-              <button type="submit" className="rounded-full bg-accent px-3 py-1 text-sm text-[#1a140c]">
+              <button type="submit" className="vocal-btn vocal-btn-primary text-sm">
                 К таймкоду
               </button>
             </form>
           ) : null}
         </div>
       </div>
-      <QuestionList reelId={reelId} takeId={viewingId} />
       <TakeUploadDropzone reelId={reelId} onUploaded={() => void load()} />
-      <form onSubmit={addText} className="space-y-3 rounded-2xl border border-line bg-bg-elev p-4">
+      <form onSubmit={addText} className="space-y-3 p-1">
         <p className="text-sm text-muted">Текстовая попытка. Текст сразу сохраняется как исходная версия расшифровки.</p>
         <textarea
           value={textBody}
@@ -191,11 +219,19 @@ export function ReelTakes({ reelId }: { reelId: string }) {
         <button
           type="submit"
           disabled={savingText || !textBody.trim()}
-          className="rounded-full bg-accent px-4 py-2 text-sm text-[#1a140c] disabled:opacity-50"
+          className="vocal-btn vocal-btn-primary disabled:opacity-50"
         >
           {savingText ? "Сохраняем…" : "Добавить текст"}
         </button>
       </form>
     </section>
+  );
+
+  if (children) return <>{children({ media, vocal })}</>;
+  return (
+    <div className="space-y-8">
+      {media}
+      {vocal}
+    </div>
   );
 }
