@@ -2,7 +2,8 @@
 
 Репозиторий: `Kabalod/Vocal`.  
 План: [cursor-plan/README.md](cursor-plan/README.md).  
-Следующая последовательность (дизайн, затем профиль 10–15): локальная папка `vocal_complete_plan_10_15/`. DESIGN_01 принят на `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36`.
+Следующая последовательность (дизайн, затем профиль 10–15): локальная папка `vocal_complete_plan_10_15/`.  
+Принятый DESIGN_02 / база DESIGN_03: `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b`.
 
 Легенда статуса: `не начат` · `в работе` · `на ревью` · `принят` · `есть замечания`.
 
@@ -19,7 +20,8 @@
 | 8 | Сравнение, экспорт, итоговая проверка | принят | `feat/personal-mvp-08-comparison-and-release-check` | `87cf50b8dc8d01f98a2e64120d51ab308b9921db` | `086292d9d0db4285382c9a3ca6f47231423928ad` | `test:reels` 29/29; lint ок | принято внешним ревью |
 | 9 | Стабилизация MVP и браузерная проверка | на ревью | `feat/personal-mvp-09-mvp-stabilization` | `086292d9d0db4285382c9a3ca6f47231423928ad` | `21b4858f70306cd8df29b9d450c30a4356fd49f9` | `test:reels` 29/29; lint; build | не принят формально; план 10–15 стартует от `d4c06fa` |
 | D01 | Визуальный фундамент | принят | `feat/personal-mvp-design-01-foundation` | `d4c06fad0f1b468ff70a79effd461a65ec7cfcc5` | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` | lint; typecheck; build; test:reels 29/29 | принято внешним ревью; код `6ad19cff` |
-| D02 | Shell и навигация | на ревью | `feat/personal-mvp-design-02-shell` | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` | `a98cc8e10a9584e80a09c38c96788e1b1998744d` | lint; typecheck; build; test:reels 30/30 | не принят; код `3fa3cc6`, HEAD docs-only |
+| D02 | Shell и навигация | принят | `feat/personal-mvp-design-02-shell` | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` | `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b` | lint; typecheck; build; test:reels 30/30 | принято внешним ревью; код `3fa3cc6` |
+| D03 | Экран «Записи» | на ревью | `feat/personal-mvp-design-03-recordings` | `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b` | `2cd5bc128358eefb7c0dd5dc5318330c46ef0f9a` | lint; typecheck; build; test:reels 31/31 | не принят; код `2cd5bc1` |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
@@ -44,6 +46,8 @@
 | Коммит этапа 9 | `21b4858f70306cd8df29b9d450c30a4356fd49f9` |
 | Принятый DESIGN_01 | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` |
 | Коммит кода DESIGN_02 | `3fa3cc654faeab19caf33af9ea4f144ccea31122` |
+| Принятый DESIGN_02 / база DESIGN_03 | `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b` |
+| Коммит кода DESIGN_03 | `2cd5bc128358eefb7c0dd5dc5318330c46ef0f9a` |
 
 ## Этап 9 — проверки
 
