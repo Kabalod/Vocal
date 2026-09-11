@@ -6,7 +6,7 @@
 - BASE_SHA: `da1396f138e1be2b549a623a859ee8084cded420`
 - Коммит(ы) кода: `968d3cf6a7e7fa3aa40d5ce7deebd07662066e83`
 - Коммит исправления: `a1a28530908265f44809a6bdcec9f3f808565912`
-- HEAD_SHA: `a1a28530908265f44809a6bdcec9f3f808565912`
+- HEAD_SHA: `802500bf757454b59a9e9868fcd80ea1fa65d323`
 - Ветка: `feat/vocal-v2-01-foundation-shell`
 - Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-01-foundation-shell
 

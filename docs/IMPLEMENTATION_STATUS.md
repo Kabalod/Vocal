@@ -23,7 +23,7 @@
 | D03 | Экран «Записи» | принят | `feat/personal-mvp-design-03-recordings` | `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b` | `7f32e9db6ef12562651a1801c904e959117f840d` | lint; typecheck; build; test:reels 31/31 | принято внешним ревью; код `2cd5bc1` |
 | D04 | Рабочая область записи | принят | `feat/personal-mvp-design-04-reel-workspace` | `7f32e9db6ef12562651a1801c904e959117f840d` | `729d1e586a65712b21433c106d13ec77fd99795c` | lint; typecheck; build; test:reels 32/32 | принято внешним ревью; код `505024d` |
 | D05 | Сценарий и версии | принят | `feat/personal-mvp-design-05-script-versions` | `729d1e586a65712b21433c106d13ec77fd99795c` | `da1396f138e1be2b549a623a859ee8084cded420` | lint; typecheck; build; test:reels 35/35 | принято внешним ревью; код `df861de` + fix `620c692`; docs `da1396f` — база Stage 01 |
-| S01 | Визуальная основа и shell | есть замечания | `feat/vocal-v2-01-foundation-shell` | `da1396f138e1be2b549a623a859ee8084cded420` | `a1a28530908265f44809a6bdcec9f3f808565912` | lint; typecheck; test:reels 41/41 | код `968d3cf`; focus-trap `a1a2853`; Stage 02 не начат |
+| S01 | Визуальная основа и shell | есть замечания | `feat/vocal-v2-01-foundation-shell` | `da1396f138e1be2b549a623a859ee8084cded420` | `802500bf757454b59a9e9868fcd80ea1fa65d323` | lint; typecheck; test:reels 41/41 | код `968d3cf`; focus-trap `a1a2853`; Stage 02 не начат |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
