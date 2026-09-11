@@ -6,7 +6,7 @@
 - BASE_SHA: `da1396f138e1be2b549a623a859ee8084cded420`
 - Коммит(ы) кода: `968d3cf6a7e7fa3aa40d5ce7deebd07662066e83`
 - Коммит исправления: `a1a28530908265f44809a6bdcec9f3f808565912`
-- HEAD_SHA: `802500bf757454b59a9e9868fcd80ea1fa65d323`
+- HEAD_SHA: `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f`
 - Ветка: `feat/vocal-v2-01-foundation-shell`
 - Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-01-foundation-shell
 
@@ -75,10 +75,19 @@ DESIGN_05 принят на SHA `da1396f138e1be2b549a623a859ee8084cded420`. Эт
 - Замечание: `role="dialog"` без переноса фокуса, без Tab-trap, backdrop в tab-порядке, фокус не возвращался на «Меню».
 - Исправление: `menuButtonRef` / `sheetPanelRef`, `trapSheetTab`, backdrop `aria-hidden` без кнопки, restore focus и `body.style.overflow` в cleanup.
 - Новый commit SHA: `a1a28530908265f44809a6bdcec9f3f808565912`
-- Повторная проверка: `test:reels` 41/41; lint; typecheck; браузер 390px — Tab, Shift+Tab, Escape. Stage 02 не начинался. Этап не объявлен принятым.
+- Повторная проверка: `test:reels` 41/41; lint; typecheck; браузер 390px — Tab, Shift+Tab, Escape.
+
+## Принятие
+
+```text
+Stage 01 принят на SHA: 7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f
+Код исправления: a1a28530908265f44809a6bdcec9f3f808565912
+Это BASE для Stage 02.
+```
+
+Документационный коммит после этого SHA со статусом «принят» базой Stage 02 не становится.
 
 ## Подтверждения
 
 - Force push не использовался.
-- Следующий этап не начинался.
-- Этап не объявляется принятым до внешнего ревью.
+- Stage 02 из этого коммита не начинался.
