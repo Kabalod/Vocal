@@ -6,7 +6,8 @@
 Принятый Stage 01 / база Stage 02: `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f`.  
 Принятый Stage 02 / база Stage 03: `aadc2a8b309ad246286977e559553240dfb7d149`.  
 Принятый Stage 03 / база Stage 04: `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7`.  
-Принятый Stage 04 / база Stage 05: `facb78d03942506b9e9e79fa768fca097ae18b61`.
+Принятый Stage 04 / база Stage 05: `facb78d03942506b9e9e79fa768fca097ae18b61`.  
+Принятый Stage 05 / база Stage 06: `a38989733bc701b74a9690cc81518c6ce277b836`.
 
 Легенда статуса: `не начат` · `в работе` · `на ревью` · `принят` · `есть замечания`.
 
@@ -31,7 +32,8 @@
 | S02 | Библиотека компонентов Vocal | принят | `feat/vocal-v2-02-ui-kit` | `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f` | `aadc2a8b309ad246286977e559553240dfb7d149` | lint; typecheck; build; test:reels 47/47 | принято внешним ревью; код `c3c908f`; focus-fix `d1b9e6f`; docs `aadc2a8` — база Stage 03 |
 | S03 | Экран «Мысли» | принят | `feat/vocal-v2-03-thoughts` | `aadc2a8b309ad246286977e559553240dfb7d149` | `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7` | lint; typecheck; build; test:reels 52/52 | принято внешним ревью; код `54c4221`; review-fix `29ff92b`; docs `cc3e296` — база Stage 04 |
 | S04 | Создание мысли текстом | принят | `feat/vocal-v2-04-text-creation` | `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7` | `facb78d03942506b9e9e79fa768fca097ae18b61` | lint; typecheck; build; test:reels 54/54 | принято внешним ревью; код `ffde3d1`; review-fix `754b041`; docs `facb78d` — база Stage 05 |
-| S05 | Голос, видео и обработка | на ревью | `feat/vocal-v2-05-media-processing` | `facb78d03942506b9e9e79fa768fca097ae18b61` | `5176e73f7017f921d4d0412a8404f407d60e3c98` | lint; typecheck; build; test:reels 60/60 | код `f887ef0`; review-fix `2af98a2` + `1611f27`; docs `5176e73`; Stage 06 не начат |
+| S05 | Голос, видео и обработка | принят | `feat/vocal-v2-05-media-processing` | `facb78d03942506b9e9e79fa768fca097ae18b61` | `a38989733bc701b74a9690cc81518c6ce277b836` | lint; typecheck; build; test:reels 60/60 | принято внешним ревью; код `f887ef0`; review-fix `2af98a2` + `1611f27`; docs HEAD `a389897` — база Stage 06 |
+| S06 | Студия и единый диалог | на ревью | `feat/vocal-v2-06-studio-dialogue` | `a38989733bc701b74a9690cc81518c6ce277b836` | `94d8d2487564ed85eeee418494dbd60162fec62c` | lint; typecheck; build; test:reels 63/63 | код `94d8d24`; Stage 07 не начат |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
@@ -82,6 +84,8 @@
 | Документация Stage 05 review-fix | `a0e58dc7e6d37f0c5952f199232548da4cf571e4` |
 | Исправление ревью Stage 05 (unmount abort) | `1611f2784b4114d0a17a06e4399365312b76f5ac` |
 | Документация Stage 05 unmount abort | `5176e73f7017f921d4d0412a8404f407d60e3c98` |
+| Принятый Stage 05 / база Stage 06 | `a38989733bc701b74a9690cc81518c6ce277b836` |
+| Коммит кода Stage 06 | `94d8d2487564ed85eeee418494dbd60162fec62c` |
 
 ## Этап 9 — проверки
 

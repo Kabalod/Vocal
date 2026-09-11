@@ -1,87 +1,80 @@
-# Отчёт после этапа для проверки через GitHub
+# Отчёт этапа
 
 ## Идентификация
 
-- Этап: 6 — содержательный разбор и вопросы
-- Репозиторий: Kabalod/Vocal
-- Ветка: feat/personal-mvp-06-reviews-and-questions
-- BASE_SHA (до изменений): 437d8f2f1fd8a74aa17cbe810088ae58b31b4ae5
-- HEAD_SHA (после изменений): `d265b0d287b791e981577774b9b1a5215f5d2fc3`
-- Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-06-reviews-and-questions
-- Ветка отправлена в GitHub: да, без force push (если push прошёл)
-- Предыдущий этап принят: да, этап 5 на `437d8f2f1fd8a74aa17cbe810088ae58b31b4ae5`
+- Этап: Stage 06 — рабочая студия и единый диалог
+- BASE_SHA: `a38989733bc701b74a9690cc81518c6ce277b836`
+- Коммит(ы) кода: `94d8d2487564ed85eeee418494dbd60162fec62c`
+- HEAD_SHA: `94d8d2487564ed85eeee418494dbd60162fec62c`
+- Ветка: `feat/vocal-v2-06-studio-dialogue`
+- Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-06-studio-dialogue
 
-## Реализовано
+Stage 05 принят на SHA `a38989733bc701b74a9690cc81518c6ce277b836` (код правки `1611f2784b4114d0a17a06e4399365312b76f5ac`). Это BASE Stage 06. Ветка создана от этой вершины. Stage 07 не начинался.
 
-По кнопке разбирается выбранная версия расшифровки дубля: снимок контекста фиксируется до вызова, результат без баллов (мысль автора / предложение модели / что сохранить / чего не хватает / вопросы). Цитаты сверяются с текстом; ненайденные помечаются, повтор модели из‑за этого не стартует. Вопросы живут на карточке: ответ и статусы (открыт / ответил / пропущен / не актуален) без ИИ. «Продолжить с ИИ» даёт небольшую порцию и не стирает старые. Новые ответы не меняют старый Review. Пустой или битый JSON не сохраняется как успешный разбор. collectScores и подстановка оценки 5 не используются.
+## Что реализовано
 
-## Файлы
+- Миграция `DialogueThread` / `DialogueMessage` (thread только у мысли). Старые `Review` / `Question` / `Answer` не удаляются и читаются как legacy-сообщения.
+- Новые реплики пишутся только в `DialogueMessage`. Список — cursor pagination (последние 20, «более ранние» без дублей).
+- `POST /api/thoughts/:id/dialogue` — текст; multipart — голос (ffmpeg + STT, затем тот же диалог). `help` — предложение в диалоге. `transfer` — готовая версия `accepted_ai`, повтор не копирует.
+- AI `kind: dialogue` через `AiCall`, inflight-ключ и опциональный `VOCAL_DAILY_TOKEN_LIMIT`. Playbook не дублируется отдельной рубрикой.
+- Desktop: слева Дубли/Сценарий, справа постоянный «Диалог с Vocal». Mobile: три вкладки. Composer: текст, микрофон, send; Enter/Shift+Enter/IME. Автопрокрутка с «К новым сообщениям». Уход отменяет fetch и останавливает mic.
+- «Перенести в сценарий»; на телефоне после переноса открывается Сценарий. «Помочь со сценарием» пишет предложение в диалог. «Перейти к записи» открывает Дубли без микрофона.
 
-| Путь | Изменение и причина |
-|---|---|
-| prisma/schema.prisma | Review, Question, Answer, AiCall |
-| prisma/migrations/20260907130000_reviews_and_questions | ADD без reset |
-| src/types/review.ts | контракт JSON и статусы вопросов |
-| src/lib/evidence.ts | вхождение цитаты в выбранный текст |
-| src/lib/ai/complete.ts | Groq JSON без скоринга |
-| src/lib/ai/review.ts | разбор + снимок входа |
-| src/lib/ai/questions.ts | продолжение вопросов и ответы без ИИ |
-| src/lib/reel-context.ts | freezeReelContext перед вызовом |
-| src/app/api/takes/[id]/review/route.ts | GET/POST разбора |
-| src/app/api/reels/[id]/questions/route.ts | список и явное продолжение |
-| src/app/api/questions/[id]/route.ts | PATCH ответа/статуса |
-| src/components/ReviewPanel.tsx | UI разбора |
-| src/components/QuestionList.tsx | вопросы и ответы |
-| src/components/ReelTakes.tsx | панели на карточке |
-| tests/reviews-questions.test.ts | mock-провайдер, версии, цитаты, invalid JSON |
-| docs/IMPLEMENTATION_STATUS.md | этап 5 принят; этап 6 на ревью |
-| docs/PERSONAL_MVP.md | состояние после этапа 6 |
+## Что намеренно не реализовано
 
-## Данные и миграции
+- Профильный чат (Stage 10).
+- `ScriptDraft` и новая семантика черновика (Stage 07).
+- Запись нового дубля со сценарием (Stage 08); кнопка не запускает микрофон.
+- Автосоздание готовой версии без действия пользователя.
+- Вкладка «Вопросы» и «Продолжить обсуждение».
+- Живой Groq в этом отчёте.
 
-- Требуемые команды: `npx prisma migrate deploy`
-- Как сохранены старые данные: новые таблицы; payload AnalysisResult не менялся
-- Где находится локальная резервная копия (без её содержимого): `%USERPROFILE%\Vocal-backups\stage06-2026-09-07-204536`
-- Проверялось ли восстановление: SHA256 копии backup совпал с файлом до миграции
-- Проверялся ли повтор миграционного переноса: хеши payload AnalysisResult live vs backup совпали (2 записи)
+## Изменённые файлы
+
+- `prisma/schema.prisma`, `prisma/migrations/20260912020000_dialogue_thread/migration.sql`
+- `src/lib/dialogue.ts`, `dialogue-cursor.ts`, `dialogue-client.ts`, `ai/usage-guard.ts`, `scripts.ts`, `types/dialogue.ts`
+- `src/app/api/thoughts/[id]/dialogue/route.ts`, `help/route.ts`, `transfer/route.ts`
+- `src/components/ReelStudio.tsx`, `ReelStudioFrame.tsx`, `reel-studio.ts`, `ThoughtDialogue.tsx`, `ScriptEditor.tsx`, `vocal-ui/Composer.tsx`
+- `tests/thought-dialogue.test.ts`, `tests/reel-studio.test.ts`, `package.json`
+
+## Миграции и данные
+
+- Новая миграция: да, `20260912020000_dialogue_thread`
+- Проверка существующей SQLite: `prisma migrate deploy` на `prisma/dev.db` применил dialogue (и ранее отложенную thought_create_idempotency)
+- Проверка чистой SQLite: `reels-migration` empty deploy, 10 миграций
+- Backfill: нет; Q&A/review остаются в своих таблицах
+- Возможность отката: git revert коммита кода + откат миграции
 
 ## Проверки
 
-| Команда или ручной сценарий | Выполнено? | Результат | Ограничения |
-|---|---|---|---|
-| `npm run test:reels` | да | 25/25 после правок ревью | mock Groq, вымышленные тексты |
-| `npm run lint` | да | exit 0 | — |
-| `npm run typecheck` | да | исходные ошибки analyze.ts и score-analyz.ts | новых ошибок этапа нет |
-| `npm run build` | нет | — | не запускался |
-| Живой Groq / браузер | нет | — | не называю пройденным |
+| Проверка | Результат | Ограничения |
+|---|---|---|
+| `npm run test:reels` | 63/63 | mock complete; legacy Q&A; idempotent send; transfer once; cursor; abort helper |
+| `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01 |
+| `npm run typecheck` | exit 0 | `scripts` в exclude |
+| `npm run build` | успех | маршруты `/api/thoughts/[id]/dialogue*` |
+| Browser 390×844 | вкладки Дубли / Сценарий / Диалог; composer без видео; `scrollWidth=390` | живой send/STT не гонялись |
+| Browser 1280×800 | слева Сценарий, справа Диалог с Vocal; нет вкладки Вопросы | живой Groq не гонялся |
 
-- Исходные ошибки проекта: `src/lib/analyze.ts`, `scripts/score-analyz.ts`
-- Новые ошибки этапа: нет
-- Платные вызовы использовались: нет
-- Какие проверки требуют компьютера пользователя: кнопка разбора и «Продолжить с ИИ» с ключом Groq в UI
+## AI и внешние сервисы
 
-## ИИ
+- Какие AI-вызовы добавлены или изменены: `AiCall.kind = dialogue` при ответе и help
+- Проверено mock: да
+- Проверено live: нет
+- Что не проверено: живой Groq диалог, живой STT голоса в composer, длинная история pagination в UI
 
-- Какие действия реально вызывают модель: POST `/api/takes/:id/review`, POST `/api/reels/:id/questions`
-- Какие действия проверены без ключа: ответы, статусы, цитаты, invalid JSON, снимок версий (mock)
-- Какие версии входов сохраняются: transcriptRevisionId, contextSnapshotId, inputSnapshotJson на AiCall
-- Что происходит при ошибке или повторе: Review.status=error, result пустой; старый успешный Review не переписывается; вопросы при ошибке продолжения не добавляются
+## Совместимость с будущим обучением
 
-## Осталось
+Свободный чат additive. Review/Question/Answer сохранены. Завершение мысли не трогалось.
 
-- Невыполненные условия готовности: нет по автотестам; живой Groq и UI не гонялись
-- Известные проблемы: разбор синхронный в запросе (может долго ждать Groq); сценарий — этап 7
-- Отклонения от плана и причины: playbook передаётся как необязательные варианты, не как обязательный стиль; этап 7 не начинался
+- Какие исторические данные затронуты: только новые thread/message; legacy читается
+- Может ли что-либо перезаписаться/удалиться при завершении, retry или возврате в работу: retry того же idempotencyKey не создаёт второе user/AI
+- Сохраняются ли source metadata, порядок, итоговые ссылки и snapshots: порядок по createdAt; transfer пишет `accepted_ai` и payload
+- Не создана ли новая рубрика в обход `playbook.ts`/`framework.ts`: нет; диалог не копирует playbook списком
+- Можно ли позднее добавить read-only learning job без изменения смысла текущих моделей: да
 
-## Запрос ревьюеру
+## Подтверждения
 
-Проверь изменения BASE_SHA..HEAD_SHA и соответствие инструкции этапа.
-Укажи блокирующие ошибки отдельно от необязательных улучшений.
-Не считай этап принятым только на основании этого отчёта.
-
-## После замечаний
-
-- Замечание: previousReviewId только по reelId; ответ в UI не редактируется; PATCH частично применяет статус; дубли вопросов только в промпте.
-- Исправление: previous только same take + status done; PATCH валидирует всё до транзакции и правит последний Answer; поле ответа заполняется текущим текстом, старые записи в истории; точные дубли вопросов отсекаются до записи.
-- Новый commit SHA: `53609fd9fd00e990f2776f47b4018cbdac13163d`
-- Повторная проверка: `npm run test:reels` 25/25; lint ок. Build и живой Groq по-прежнему не гонялись.
+- Force push не использовался.
+- Следующий этап не начинался.
+- Этап не объявляется принятым до внешнего ревью.
