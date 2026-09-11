@@ -5,7 +5,8 @@
 - Этап: Stage 04 — создание мысли текстом
 - BASE_SHA: `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7`
 - Коммит(ы) кода: `ffde3d1ec9cc54224d72669c3ec1ece07be39c9b`
-- HEAD_SHA: `ffde3d1ec9cc54224d72669c3ec1ece07be39c9b`
+- Коммит исправления: `754b041112c74aaa413ac979541e0f4f414aa214`
+- HEAD_SHA: `754b041112c74aaa413ac979541e0f4f414aa214`
 - Ветка: `feat/vocal-v2-04-text-creation`
 - Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-04-text-creation
 
@@ -33,21 +34,22 @@ Stage 03 принят на SHA `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7` (ко�
 - `src/lib/thought-create.ts`, `src/lib/thought-draft.ts`
 - `src/app/api/thoughts/route.ts`
 - `tests/thought-text-create.test.ts`, `package.json`
+- после ревью: `prisma/schema.prisma`, `prisma/migrations/20260912001000_thought_create_idempotency/migration.sql`, `src/lib/thought-create.ts`
 
 ## Миграции и данные
 
-- Новая миграция: нет
-- Проверка существующей SQLite: создание пишет новые Reel/Take/Transcript/Script; существующие мысли не менялись схемой
-- Проверка чистой SQLite: `thought-text-create` на временной БД (`migrate deploy`)
+- Новая миграция: да, `20260912001000_thought_create_idempotency` (таблица `ThoughtCreateKey`)
+- Проверка существующей SQLite: таблица пустая; старые мысли без ключа не трогаются. Ограничение Take `@@unique([reelId, idempotencyKey])` не менялось
+- Проверка чистой SQLite: `thought-text-create` и `reels-migration` на временной БД (`migrate deploy`, 9 миграций)
 - Backfill: нет
-- Возможность отката: git revert коммита кода
-- Искусственный сбой `VOCAL_FAIL_THOUGHT_CREATE=after-reel` откатывает транзакцию: строк Reel/Take/Script/Transcript не остаётся
+- Возможность отката: git revert коммита исправления + откат миграции
+- Искусственный сбой `VOCAL_FAIL_THOUGHT_CREATE=after-reel` откатывает транзакцию: строк Reel/Take/Script/Transcript и ключа не остаётся
 
 ## Проверки
 
 | Проверка | Результат | Ограничения |
 |---|---|---|
-| `npm run test:reels` | 53/53 | mock Groq; пустое тело 400; rollback; idempotency; reload reel/takes/scripts/transcript; untitled → «Новая мысль» |
+| `npm run test:reels` | 54/54 | mock Groq; пустое тело 400; rollback; sequential + concurrent idempotency; reload reel/takes/scripts/transcript; untitled → «Новая мысль» |
 | `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01, не трогалось |
 | `npm run typecheck` | exit 0 | `scripts` в exclude; `analyze.ts` с `@ts-nocheck` |
 | `npm run build` | успех | перед сборкой остановлен `next dev`; в маршрутах есть `/api/thoughts` |
@@ -76,3 +78,10 @@ Stage 03 принят на SHA `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7` (ко�
 - Force push не использовался.
 - Следующий этап не начинался.
 - Этап не объявляется принятым до внешнего ревью.
+
+## После замечаний
+
+- Замечание: `@@unique([reelId, idempotencyKey])` не защищает создание мысли: у конкурентных запросов разные `reelId`, два `findFirst` не заменяют уникальность; тест был только последовательный.
+- Исправление: таблица `ThoughtCreateKey` с уникальным `key`; запись в той же транзакции; при P2002 возвращается уже созданная мысль (не 500). Клиентский disabled без изменений.
+- Новый commit SHA: `754b041112c74aaa413ac979541e0f4f414aa214`
+- Повторная проверка: `test:reels` 54/54; lint; typecheck; build. Браузер не гонялся — правка серверная. Stage 05 не начинался.
