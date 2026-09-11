@@ -3,7 +3,8 @@
 Репозиторий: `Kabalod/Vocal`.  
 План: локальная папка `vocal_cursor_plan_2026-09-10` (не в git). Старый `vocal_complete_plan_10_15` закрыт после DESIGN_05.  
 Принятый DESIGN_05 / база Stage 01: `da1396f138e1be2b549a623a859ee8084cded420`.  
-Принятый Stage 01 / база Stage 02: `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f`.
+Принятый Stage 01 / база Stage 02: `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f`.  
+Принятый Stage 02 / база Stage 03: `aadc2a8b309ad246286977e559553240dfb7d149`.
 
 Легенда статуса: `не начат` · `в работе` · `на ревью` · `принят` · `есть замечания`.
 
@@ -25,7 +26,8 @@
 | D04 | Рабочая область записи | принят | `feat/personal-mvp-design-04-reel-workspace` | `7f32e9db6ef12562651a1801c904e959117f840d` | `729d1e586a65712b21433c106d13ec77fd99795c` | lint; typecheck; build; test:reels 32/32 | принято внешним ревью; код `505024d` |
 | D05 | Сценарий и версии | принят | `feat/personal-mvp-design-05-script-versions` | `729d1e586a65712b21433c106d13ec77fd99795c` | `da1396f138e1be2b549a623a859ee8084cded420` | lint; typecheck; build; test:reels 35/35 | принято внешним ревью; код `df861de` + fix `620c692`; docs `da1396f` — база Stage 01 |
 | S01 | Визуальная основа и shell | принят | `feat/vocal-v2-01-foundation-shell` | `da1396f138e1be2b549a623a859ee8084cded420` | `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f` | lint; typecheck; test:reels 41/41 | принято внешним ревью; код `968d3cf`; focus-trap `a1a2853`; база Stage 02 — `7e0d4b7` |
-| S02 | Библиотека компонентов Vocal | есть замечания | `feat/vocal-v2-02-ui-kit` | `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f` | `d1b9e6fe297ccb9a76e5a54f5874d37ab76e5fe4` | lint; typecheck; build; test:reels 47/47 | код `c3c908f`; focus-fix `d1b9e6f`; Stage 03 не начат |
+| S02 | Библиотека компонентов Vocal | принят | `feat/vocal-v2-02-ui-kit` | `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f` | `aadc2a8b309ad246286977e559553240dfb7d149` | lint; typecheck; build; test:reels 47/47 | принято внешним ревью; код `c3c908f`; focus-fix `d1b9e6f`; docs `aadc2a8` — база Stage 03 |
+| S03 | Экран «Мысли» | на ревью | `feat/vocal-v2-03-thoughts` | `aadc2a8b309ad246286977e559553240dfb7d149` | `54c4221a765ec4ecfbd17e38b28f867a87b35334` | lint; typecheck; build; test:reels 49/49 | код `54c4221`; Stage 04 не начат |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
@@ -63,6 +65,8 @@
 | Принятый Stage 01 / база Stage 02 | `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f` |
 | Коммит кода Stage 02 | `c3c908f6bce2f52ad91270f06817bba9a94a8394` |
 | Исправление ревью Stage 02 | `d1b9e6fe297ccb9a76e5a54f5874d37ab76e5fe4` |
+| Принятый Stage 02 / база Stage 03 | `aadc2a8b309ad246286977e559553240dfb7d149` |
+| Коммит кода Stage 03 | `54c4221a765ec4ecfbd17e38b28f867a87b35334` |
 
 ## Этап 9 — проверки
 
