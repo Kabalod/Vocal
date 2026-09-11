@@ -5,8 +5,8 @@
 - Этап: Stage 03 — экран «Мысли»
 - BASE_SHA: `aadc2a8b309ad246286977e559553240dfb7d149`
 - Коммит(ы) кода: `54c4221a765ec4ecfbd17e38b28f867a87b35334`
-- Коммит исправления: нет
-- HEAD_SHA: `54c4221a765ec4ecfbd17e38b28f867a87b35334`
+- Коммит исправления: `29ff92b5e4f87a8c61ea7ad5a8c3a805de969a1f`
+- HEAD_SHA: `29ff92b5e4f87a8c61ea7ad5a8c3a805de969a1f`
 - Ветка: `feat/vocal-v2-03-thoughts`
 - Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-03-thoughts
 
@@ -50,12 +50,12 @@ Stage 02 принят на SHA `aadc2a8b309ad246286977e559553240dfb7d149` (ко�
 
 | Проверка | Результат | Ограничения |
 |---|---|---|
-| `npm run test:reels` | 49/49 | mock Groq; добавлены группировка статусов, compact DTO, cursor, empty-поиск |
+| `npm run test:reels` | 52/52 | mock Groq; +иконки групп, приоритет сценария, reset, compact DTO без текста сценария |
 | `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01, не трогалось |
 | `npm run typecheck` | exit 0 | `scripts` в exclude; `analyze.ts` с `@ts-nocheck` |
 | `npm run build` | успех | перед сборкой остановлен `next dev` на :3000; smoke шёл на :3001 |
-| Browser 390×844 | «Мысли», «Меню», фильтры 2×2, `scrollWidth=390`, тап открыл `/reels/:id` | постоянной кнопки профиля нет |
-| Browser 1280×800 | выбор карточки оставляет `/reels`, превью и «Открыть мысль»; empty фильтра и поиска | создание мысли не вызывается |
+| Browser 390×844 | «Мысли», «Меню», `scrollWidth=390`, круги без rect/часов | reset скрыт, пока есть результаты |
+| Browser 1280×800 | превью «Готовый текст версии 7» у мысли со сценарием; reset очищает q и фильтр `Все` | создание мысли не вызывается |
 
 ## AI и внешние сервисы
 
@@ -82,7 +82,7 @@ Stage 02 принят на SHA `aadc2a8b309ad246286977e559553240dfb7d149` (ко�
 
 ## После замечаний
 
-- Замечание:
-- Исправление:
-- Новый commit SHA:
-- Повторная проверка:
+- Замечание: карточки показывали внутренние иконки; превью брало `initialNote`; empty поиска/фильтра без сброса.
+- Исправление: иконки `IconStatusOpen/Progress/Done` по `statusGroup`; фрагмент final → selected → последняя готовая версия, заметка как fallback; кнопка «Сбросить поиск и фильтры».
+- Новый commit SHA: `29ff92b5e4f87a8c61ea7ad5a8c3a805de969a1f`
+- Повторная проверка: `test:reels` 52/52; lint; typecheck; build; браузер 390 и 1280. Stage 04 не начинался.
