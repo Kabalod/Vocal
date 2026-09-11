@@ -34,17 +34,17 @@ export function ThoughtMediaProcessing({
       setPhase("upload");
       return;
     }
-    let cancelled = false;
+    const controller = new AbortController();
     async function poll() {
       try {
-        const res = await fetch(`/api/thoughts/${reelId}/processing`);
+        const res = await fetch(`/api/thoughts/${reelId}/processing`, { signal: controller.signal });
         const data = (await res.json()) as {
           phase?: Phase;
           scriptReady?: boolean;
           job?: { id: string };
           error?: { message: string; retry: "upload" | "stt" | "analysis" };
         };
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         if (!res.ok) throw new Error("Нет связи. Не удалось обновить состояние.");
         setJobId(data.job?.id ?? null);
         const next = data.phase ?? "saved";
@@ -60,13 +60,14 @@ export function ThoughtMediaProcessing({
           onReady(reelId);
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Нет связи. Не удалось обновить состояние.");
+        if (controller.signal.aborted || (err instanceof DOMException && err.name === "AbortError")) return;
+        setError(err instanceof Error ? err.message : "Нет связи. Не удалось обновить состояние.");
       }
     }
     void poll();
     const timer = window.setInterval(() => void poll(), 1200);
     return () => {
-      cancelled = true;
+      controller.abort();
       window.clearInterval(timer);
     };
   }, [reelId, onReady]);

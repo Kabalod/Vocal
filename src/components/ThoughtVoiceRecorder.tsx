@@ -4,7 +4,19 @@ import { useEffect, useRef, useState } from "react";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
 import { InlineError } from "@/components/vocal-ui/InlineError";
-import { formatRecordingDuration, revokePreviewUrl, stopMediaStream } from "@/lib/media-session";
+import {
+  adoptGrantedMicrophone,
+  cancelVoiceCaptureSession,
+  closeAudioContext,
+  createVoiceCaptureSession,
+  detachRecorderHandlers,
+  formatRecordingDuration,
+  previewUrlIfSessionActive,
+  revokePreviewUrl,
+  stopMediaStream,
+  stopRecorderIfActive,
+  type VoiceCaptureSession,
+} from "@/lib/media-session";
 
 type VoiceState = "idle" | "requesting" | "recording" | "preview";
 
@@ -22,6 +34,7 @@ export function ThoughtVoiceRecorder({
   const [seconds, setSeconds] = useState(0);
   const [level, setLevel] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const sessionRef = useRef<VoiceCaptureSession>(createVoiceCaptureSession());
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -38,18 +51,20 @@ export function ThoughtVoiceRecorder({
     rafRef.current = null;
   }
 
-  function releaseLive() {
-    recorderRef.current?.stop();
+  function releaseHardware() {
+    detachRecorderHandlers(recorderRef.current);
+    stopRecorderIfActive(recorderRef.current);
     recorderRef.current = null;
     stopMediaStream(streamRef.current);
     streamRef.current = null;
-    void audioCtxRef.current?.close();
+    closeAudioContext(audioCtxRef.current);
     audioCtxRef.current = null;
     clearTimers();
   }
 
   function releaseAll() {
-    releaseLive();
+    cancelVoiceCaptureSession(sessionRef.current);
+    releaseHardware();
     revokePreviewUrl(previewUrlRef.current);
     previewUrlRef.current = null;
     blobRef.current = null;
@@ -77,6 +92,7 @@ export function ThoughtVoiceRecorder({
       source.connect(analyser);
       const data = new Uint8Array(analyser.frequencyBinCount);
       const tick = () => {
+        if (sessionRef.current.cancelled) return;
         analyser.getByteTimeDomainData(data);
         let sum = 0;
         for (const value of data) {
@@ -95,26 +111,33 @@ export function ThoughtVoiceRecorder({
   async function startRecording() {
     if (disabled) return;
     setError(null);
+    const session = createVoiceCaptureSession();
+    sessionRef.current = session;
     setState("requesting");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!adoptGrantedMicrophone(session, stream)) return;
       streamRef.current = stream;
       chunksRef.current = [];
       const recorder = new MediaRecorder(stream);
       recorderRef.current = recorder;
       recorder.ondataavailable = (event) => {
+        if (session.cancelled) return;
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
       recorder.onstop = () => {
+        if (session.cancelled) return;
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
         blobRef.current = blob;
         revokePreviewUrl(previewUrlRef.current);
-        previewUrlRef.current = URL.createObjectURL(blob);
+        const url = previewUrlIfSessionActive(session, blob);
+        previewUrlRef.current = url;
         stopMediaStream(streamRef.current);
         streamRef.current = null;
-        void audioCtxRef.current?.close();
+        closeAudioContext(audioCtxRef.current);
         audioCtxRef.current = null;
         clearTimers();
+        if (!url) return;
         setState("preview");
       };
       recorder.start();
@@ -123,14 +146,15 @@ export function ThoughtVoiceRecorder({
       startMeter(stream);
       setState("recording");
     } catch {
-      releaseLive();
+      if (session.cancelled) return;
+      releaseHardware();
       setState("idle");
       setError("Нет доступа к микрофону. Разрешите доступ в настройках браузера и нажмите «Начать запись» снова.");
     }
   }
 
   function finishRecording() {
-    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+    stopRecorderIfActive(recorderRef.current);
   }
 
   function requestDiscard() {
@@ -141,6 +165,7 @@ export function ThoughtVoiceRecorder({
   function discard() {
     setConfirmOpen(false);
     releaseAll();
+    sessionRef.current = createVoiceCaptureSession();
     setSeconds(0);
     setLevel(0);
     setState("idle");
@@ -227,4 +252,3 @@ export function ThoughtVoiceRecorder({
     </div>
   );
 }
-

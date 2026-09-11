@@ -9,7 +9,8 @@ import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
 import { InlineError } from "@/components/vocal-ui/InlineError";
 import { SegmentedTabs } from "@/components/vocal-ui/SegmentedTabs";
-import { uploadThoughtMedia } from "@/lib/thought-media-upload";
+import { thoughtLeaveKind, type ThoughtLeaveKind } from "@/lib/thought-leave";
+import { ThoughtUploadAbortedError, uploadThoughtMedia } from "@/lib/thought-media-upload";
 import {
   clearThoughtDraft,
   newThoughtIdempotencyKey,
@@ -48,8 +49,10 @@ export function NewThoughtSheet({
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [processing, setProcessing] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  const [leaveKind, setLeaveKind] = useState<ThoughtLeaveKind>("none");
   const pendingMethod = useRef<MethodId | null>(null);
   const leaveAfterConfirm = useRef<"close" | "switch" | null>(null);
+  const uploadRef = useRef<{ abort: () => void } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -115,26 +118,43 @@ export function NewThoughtSheet({
     setError(null);
     setProcessing(true);
     setUploadPercent(0);
+    const upload = uploadThoughtMedia({ file, inputType, idempotencyKey: mediaKey }, (percent) =>
+      setUploadPercent(percent),
+    );
+    uploadRef.current = upload;
     try {
-      const result = await uploadThoughtMedia(
-        { file, inputType, idempotencyKey: mediaKey },
-        (percent) => setUploadPercent(percent),
-      );
+      const result = await upload.promise;
       setReelId(result.reelId);
       setUploadPercent(null);
     } catch (err) {
+      if (err instanceof ThoughtUploadAbortedError) {
+        setProcessing(false);
+        setUploadPercent(null);
+        return;
+      }
       setError(err instanceof Error ? err.message : "Не удалось загрузить файл.");
       setProcessing(false);
       setUploadPercent(null);
     } finally {
+      uploadRef.current = null;
       setSubmitting(false);
     }
   }
 
+  function currentLeaveKind(): ThoughtLeaveKind {
+    return thoughtLeaveKind({
+      voiceDirty,
+      uploading: processing && !reelId,
+      reelId,
+    });
+  }
+
   function requestLeave(kind: "close" | "switch", next?: MethodId) {
-    if (voiceDirty || processing) {
+    const nextKind = currentLeaveKind();
+    if (nextKind !== "none") {
       leaveAfterConfirm.current = kind;
       pendingMethod.current = next ?? null;
+      setLeaveKind(nextKind);
       setLeaveOpen(true);
       return;
     }
@@ -146,20 +166,42 @@ export function NewThoughtSheet({
     onClose();
   }
 
-  function confirmLeave() {
-    const kind = leaveAfterConfirm.current;
-    setLeaveOpen(false);
+  function resetLocalMedia() {
     setVoiceDirty(false);
     setVoiceKey((value) => value + 1);
     setProcessing(false);
     setReelId(null);
     setUploadPercent(null);
-    if (kind === "switch" && pendingMethod.current) {
+    setMediaKey(newThoughtIdempotencyKey());
+  }
+
+  function confirmLeave() {
+    const action = leaveAfterConfirm.current;
+    const kind = leaveKind;
+    setLeaveOpen(false);
+    if (kind === "abort-upload") {
+      uploadRef.current?.abort();
+      resetLocalMedia();
+    } else if (kind === "discard-local") {
+      resetLocalMedia();
+    }
+    if (action === "switch" && pendingMethod.current && kind !== "saved-continue") {
       setMethod(pendingMethod.current);
       pendingMethod.current = null;
       return;
     }
+    if (kind !== "saved-continue") onClose();
+  }
+
+  function dismissSavedAndClose() {
+    setLeaveOpen(false);
     onClose();
+  }
+
+  function openSavedThought() {
+    if (!reelId) return;
+    setLeaveOpen(false);
+    openThought(reelId);
   }
 
   const canContinue = Boolean(draft.body.trim()) && saved && !submitting;
@@ -241,14 +283,53 @@ export function NewThoughtSheet({
         {method !== "text" && error && !processing ? <InlineError message={error} /> : null}
       </div>
 
-      <VocalModal open={leaveOpen} title="Удалить эту запись?" initialFocus="safe" onClose={() => setLeaveOpen(false)}>
-        <p className="text-sm text-muted">Несохранённый фрагмент пропадёт. Исходник на сервере не создаётся, пока загрузка не закончилась.</p>
-        <ConfirmActions
-          cancelLabel="Вернуться к записи"
-          confirmLabel="Удалить запись"
-          onCancel={() => setLeaveOpen(false)}
-          onConfirm={confirmLeave}
-        />
+      <VocalModal
+        open={leaveOpen}
+        title={
+          leaveKind === "abort-upload"
+            ? "Остановить загрузку?"
+            : leaveKind === "saved-continue"
+              ? "Материал сохранён"
+              : "Удалить эту запись?"
+        }
+        initialFocus="safe"
+        onClose={() => setLeaveOpen(false)}
+      >
+        {leaveKind === "abort-upload" ? (
+          <>
+            <p className="text-sm text-muted">Файл ещё не сохранён. Загрузка будет прервана, мысль не создастся.</p>
+            <ConfirmActions
+              cancelLabel="Продолжить загрузку"
+              confirmLabel="Остановить загрузку"
+              onCancel={() => setLeaveOpen(false)}
+              onConfirm={confirmLeave}
+            />
+          </>
+        ) : null}
+        {leaveKind === "saved-continue" ? (
+          <>
+            <p className="text-sm text-muted">Материал уже на сервере. Обработка продолжится. Удаления не будет.</p>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <ActionButton variant="secondary" data-vocal-initial="safe" onClick={dismissSavedAndClose}>
+                Закрыть
+              </ActionButton>
+              <ActionButton variant="primary" onClick={openSavedThought}>
+                Открыть мысль
+              </ActionButton>
+            </div>
+          </>
+        ) : null}
+        {leaveKind === "discard-local" ? (
+          <>
+            <p className="text-sm text-muted">Несохранённый фрагмент пропадёт. На сервер он ещё не отправлялся.</p>
+            <ConfirmActions
+              cancelLabel="Вернуться к записи"
+              confirmLabel="Удалить запись"
+              onCancel={() => setLeaveOpen(false)}
+              onConfirm={confirmLeave}
+            />
+          </>
+        ) : null}
       </VocalModal>
     </VocalModal>
   );

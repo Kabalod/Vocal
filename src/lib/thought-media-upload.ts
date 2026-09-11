@@ -1,3 +1,15 @@
+export class ThoughtUploadAbortedError extends Error {
+  constructor() {
+    super("Загрузка отменена.");
+    this.name = "ThoughtUploadAbortedError";
+  }
+}
+
+export type ThoughtMediaUploadHandle = {
+  promise: Promise<{ reelId: string; jobId: string }>;
+  abort: () => void;
+};
+
 export function uploadThoughtMedia(
   input: {
     file: File;
@@ -5,9 +17,10 @@ export function uploadThoughtMedia(
     idempotencyKey: string;
   },
   onProgress?: (percent: number) => void,
-): Promise<{ reelId: string; jobId: string }> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
+  createXhr: () => XMLHttpRequest = () => new XMLHttpRequest(),
+): ThoughtMediaUploadHandle {
+  const xhr = createXhr();
+  const promise = new Promise<{ reelId: string; jobId: string }>((resolve, reject) => {
     xhr.open("POST", "/api/thoughts/media");
     xhr.setRequestHeader("Idempotency-Key", input.idempotencyKey);
     xhr.responseType = "json";
@@ -24,11 +37,15 @@ export function uploadThoughtMedia(
       reject(new Error(data.error ?? "Не удалось загрузить файл."));
     };
     xhr.onerror = () => reject(new Error("Нет связи. Не удалось обновить состояние."));
-    xhr.onabort = () => reject(new Error("Загрузка отменена."));
+    xhr.onabort = () => reject(new ThoughtUploadAbortedError());
     const form = new FormData();
     form.set("file", input.file);
     form.set("inputType", input.inputType);
     form.set("idempotencyKey", input.idempotencyKey);
     xhr.send(form);
   });
+  return {
+    promise,
+    abort: () => xhr.abort(),
+  };
 }

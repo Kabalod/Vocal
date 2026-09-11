@@ -1,3 +1,57 @@
+export type VoiceCaptureSession = {
+  cancelled: boolean;
+};
+
+export function createVoiceCaptureSession(): VoiceCaptureSession {
+  return { cancelled: false };
+}
+
+export function cancelVoiceCaptureSession(session: VoiceCaptureSession): void {
+  session.cancelled = true;
+}
+
+export function adoptGrantedMicrophone(session: VoiceCaptureSession, stream: MediaStream): boolean {
+  if (session.cancelled) {
+    stopMediaStream(stream);
+    return false;
+  }
+  return true;
+}
+
+export function stopRecorderIfActive(recorder: { state: string; stop: () => void } | null | undefined): void {
+  if (!recorder) return;
+  if (recorder.state === "recording" || recorder.state === "paused") {
+    recorder.stop();
+  }
+}
+
+export function detachRecorderHandlers(recorder: {
+  ondataavailable: ((event: BlobEvent) => void) | null;
+  onstop: ((event: Event) => void) | null;
+} | null | undefined): void {
+  if (!recorder) return;
+  recorder.ondataavailable = null;
+  recorder.onstop = null;
+}
+
+export function previewUrlIfSessionActive(
+  session: VoiceCaptureSession,
+  blob: Blob,
+  createObjectURL: (value: Blob) => string = (value) => URL.createObjectURL(value),
+): string | null {
+  if (session.cancelled) return null;
+  return createObjectURL(blob);
+}
+
+export function closeAudioContext(ctx: { close: () => Promise<void> | void } | null | undefined): void {
+  if (!ctx) return;
+  try {
+    void ctx.close();
+  } catch {
+    /* already closed */
+  }
+}
+
 export function stopMediaStream(stream: MediaStream | null | undefined): void {
   if (!stream) return;
   for (const track of stream.getTracks()) {
