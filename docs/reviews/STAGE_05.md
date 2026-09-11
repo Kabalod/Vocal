@@ -1,85 +1,77 @@
-# Отчёт после этапа для проверки через GitHub
+# Отчёт этапа
 
 ## Идентификация
 
-- Этап: 5 — стартовая анкета и контекст автора
-- Репозиторий: Kabalod/Vocal
-- Ветка: feat/personal-mvp-05-creator-profile
-- BASE_SHA (до изменений): 0dd0d04edbcf1cee9cff3b58d00f6290be5bd15e
-- HEAD_SHA (после изменений): `84f5e62749998b24db636dbcbf5d495ac1698ba3`
-- Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-05-creator-profile
-- Ветка отправлена в GitHub: да, без force push (если push прошёл)
-- Предыдущий этап принят: да, этап 4 на `0dd0d04edbcf1cee9cff3b58d00f6290be5bd15e`
+- Этап: Stage 05 — голос, видео и обработка материалов
+- BASE_SHA: `facb78d03942506b9e9e79fa768fca097ae18b61`
+- Коммит(ы) кода: `f887ef08b8a9792d5356eec6acb5509c02007388`
+- HEAD_SHA: `f887ef08b8a9792d5356eec6acb5509c02007388`
+- Ветка: `feat/vocal-v2-05-media-processing`
+- Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-05-media-processing
 
-## Реализовано
+Stage 04 принят на SHA `facb78d03942506b9e9e79fa768fca097ae18b61` (исправление `754b041112c74aaa413ac979541e0f4f414aa214`). Это BASE Stage 05. Ветка создана от этой вершины. Stage 06 не начинался.
 
-Анкета одного локального автора открывается и сохраняется без API-ключа. Восемь блоков можно пропускать; у каждого поля выбор «можно использовать в тексте» или «только для понимания». В карточке задаются цель и аудитория этого ролика и какие поля анкеты брать. Предпросмотр показывает, что ушло бы в модель: публичные поля отдельно от understanding-only. Невыбранные поля не входят в контекст. Пустые выбранные поля тоже не отправляются. Сохранение контекста пишет неизменяемый снимок; смена анкеты меняет только живой контекст, старый снимок остаётся. Анкета не заполняется догадками о личности.
+## Что реализовано
 
-## Файлы
+- Голос: idle «Готовы к записи» / «Начать запись»; микрофон запрашивается только по кнопке; запись, таймер, уровень, «Завершить» / «Отменить»; перед потерей фрагмента confirm с длительностью.
+- Видео: только file picker; камера не создаётся. Формат и размер проверяются до успешного дубля (реальные списки и `MAX_UPLOAD_MB` = 80).
+- `POST /api/thoughts/media` переиспользует `saveUploadedTake`, `Job`, `ThoughtCreateKey`, ffmpeg/STT/analyze pipeline и `/api/jobs/:id/retry`.
+- Состояния: прогресс загрузки, «Файл сохранён», «Расшифровываем», «Анализируем». После STT без подтверждения создаются сценарий v1 из распознанного текста и название (AI + fallback по первой фразе). Затем переход в существующую студию `/reels/:id`.
+- Пустая расшифровка не пишется как original (retry STT возможен); файл дубля остаётся. Сбой STT/анализа не удаляет исходник.
+- Cleanup: stop tracks, revoke object URL, сброс recorder при размонтировании / смене способа / закрытии sheet.
 
-| Путь | Изменение и причина |
-|---|---|
-| prisma/schema.prisma | CreatorProfile, ProfileRevision, ReelContextSnapshot, цель/аудитория/ключи у Reel |
-| prisma/migrations/20260907125000_creator_profile | ADD без reset |
-| src/types/profile.ts | поля, usage, DTO, лимиты |
-| src/lib/profile.ts | чтение/сохранение версий, без ИИ |
-| src/lib/reel-context.ts | детерминированная сборка и снимки |
-| src/app/api/profile/route.ts | GET/PUT анкеты |
-| src/app/api/reels/[id]/context/route.ts | GET/PUT контекста карточки |
-| src/components/ProfileForm.tsx | восемь блоков, черновик, ошибки |
-| src/app/profile/page.tsx | экран анкеты |
-| src/components/ReelContextForm.tsx | цель, аудитория, выбор полей, превью, история |
-| src/app/reels/[id]/page.tsx | контекст на карточке |
-| src/app/layout.tsx | ссылка «Анкета» |
-| tests/creator-profile.test.ts | сборка, API, снимок после смены профиля |
-| docs/IMPLEMENTATION_STATUS.md | этап 4 принят; этап 5 на ревью |
-| docs/PERSONAL_MVP.md | состояние после этапа 5 |
+## Что намеренно не реализовано
 
-## Данные и миграции
+- Второй media pipeline; камера; видео в composer диалога.
+- Запись нового дубля со сценарием (Stage 08).
+- Перестройка студии и единого диалога (Stage 06).
+- Live Groq STT/title/analysis в этом отчёте не гонялись.
 
-- Требуемые команды: `npx prisma migrate deploy`
-- Как сохранены старые данные: ADD COLUMN/TABLE; payload AnalysisResult не менялся
-- Где находится локальная резервная копия (без её содержимого): `%USERPROFILE%\Vocal-backups\stage05-2026-09-07-202300`
-- Проверялось ли восстановление: SHA256 копии backup совпал с файлом до миграции
-- Проверялся ли повтор миграционного переноса: хеши payload AnalysisResult live vs backup совпали (2 записи)
+## Изменённые файлы
+
+- `src/components/NewThoughtSheet.tsx`, `ThoughtVoiceRecorder.tsx`, `ThoughtVideoUpload.tsx`, `ThoughtMediaProcessing.tsx`
+- `src/lib/thought-media.ts`, `thought-title.ts`, `thought-media-upload.ts`, `media-session.ts`, `pipeline.ts`, `thought-create.ts`
+- `src/app/api/thoughts/media/route.ts`, `src/app/api/thoughts/[id]/processing/route.ts`
+- `tests/thought-media-create.test.ts`, `tests/thought-media-cleanup.test.ts`, `package.json`
+
+## Миграции и данные
+
+- Новая миграция: нет (таблица `ThoughtCreateKey` уже из Stage 04)
+- Проверка существующей SQLite: новые мысли пишут Reel/Take/Job; старые без ключа создания не получают auto-script/title из pipeline
+- Проверка чистой SQLite: `thought-media-create` на временной БД
+- Backfill: нет
+- Возможность отката: git revert коммита кода
 
 ## Проверки
 
-| Команда или ручной сценарий | Выполнено? | Результат | Ограничения |
-|---|---|---|---|
-| `npm run test:reels` | да | 22/22 | временные SQLite, вымышленные тексты |
-| `npm run lint` | да | exit 0 | — |
-| `npm run typecheck` | да | исходные ошибки analyze.ts и score-analyz.ts | новых ошибок этапа нет |
-| `npm run build` | нет | — | не запускался |
-| Браузер /profile и контекст карточки | нет | — | только код и API-тесты |
+| Проверка | Результат | Ограничения |
+|---|---|---|
+| `npm run test:reels` | 56/56 | mock STT/AI; формат/размер без строк; idempotency + гонка; пустой STT не пишет transcript; retry создаёт v1; cleanup helpers |
+| `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01 |
+| `npm run typecheck` | exit 0 | `scripts` в exclude |
+| `npm run build` | успех | маршруты `/api/thoughts/media` и `/api/thoughts/[id]/processing` |
+| Browser 390×844 | Sheet, Голос idle «Готовы к записи», `scrollWidth=390`, микрофон не стартовал | live запись не проверялась |
+| Browser 1280×800 | вкладка Видео: «Выбрать файл», текст про отсутствие камеры | живой upload/STT не проверялись |
 
-- Исходные ошибки проекта: `src/lib/analyze.ts`, `scripts/score-analyz.ts`
-- Новые ошибки этапа: нет
-- Платные вызовы использовались: нет
-- Какие проверки требуют компьютера пользователя: ручное сохранение анкеты в UI, превью на карточке
+## AI и внешние сервисы
 
-## ИИ
+- Какие AI-вызовы добавлены или изменены: `thought_title` через `AiCall` после STT; существующие STT и Job-анализ без нового pipeline
+- Проверено mock: да
+- Проверено live: нет
+- Что не проверено: живой Groq STT, живое название, живой анализ, настоящая запись с микрофона
 
-- Какие действия реально вызывают модель: на этом этапе ни анкета, ни контекст карточки
-- Какие действия проверены без ключа: GET/PUT profile, GET/PUT context, assembleReelContext
-- Какие версии входов сохраняются: ProfileRevision при каждом сохранении анкеты; ReelContextSnapshot при изменении собранного контекста
-- Что происходит при ошибке или повторе: ошибка валидации 400; повтор PUT с тем же assembled не плодит снимок
+## Совместимость с будущим обучением
 
-## Осталось
+Исходное медиа и Job сохраняются при сбое STT/анализа. Сценарий v1 неизменяем. Title AI пишет snapshot. Старые Job без `ThoughtCreateKey` не получают новое название/скрипт.
 
-- Невыполненные условия готовности: нет по автотестам; UI в браузере не гонялся
-- Известные проблемы: нет аккаунтов, один профиль `local`; контекст ещё не передаётся в Job/LLM — это этап 6
-- Отклонения от плана и причины: снимки пишутся при сохранении контекста карточки, отдельной кнопки «заморозить» нет; этап 6 не начинался
+- Какие исторические данные затронуты: только новые media-мысли
+- Может ли что-либо перезаписаться/удалиться при завершении, retry или возврате в работу: retry того же ключа не создаёт второй дубль; empty STT не затирает файл
+- Сохраняются ли source metadata, порядок, итоговые ссылки и snapshots: sources JSON на original transcript; `AiCall` для названия
+- Не создана ли новая рубрика в обход `playbook.ts`/`framework.ts`: нет; Job-анализ прежний
+- Можно ли позднее добавить read-only learning job без изменения смысла текущих моделей: да
 
-## Запрос ревьюеру
+## Подтверждения
 
-Проверь изменения BASE_SHA..HEAD_SHA и соответствие инструкции этапа.
-Укажи блокирующие ошибки отдельно от необязательных улучшений.
-Не считай этап принятым только на основании этого отчёта.
-
-## После замечаний
-
-- Замечание:
-- Исправление:
-- Новый commit SHA:
-- Повторная проверка:
+- Force push не использовался.
+- Следующий этап не начинался.
+- Этап не объявляется принятым до внешнего ревью.

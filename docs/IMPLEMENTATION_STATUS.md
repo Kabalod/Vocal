@@ -5,7 +5,8 @@
 Принятый DESIGN_05 / база Stage 01: `da1396f138e1be2b549a623a859ee8084cded420`.  
 Принятый Stage 01 / база Stage 02: `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f`.  
 Принятый Stage 02 / база Stage 03: `aadc2a8b309ad246286977e559553240dfb7d149`.  
-Принятый Stage 03 / база Stage 04: `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7`.
+Принятый Stage 03 / база Stage 04: `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7`.  
+Принятый Stage 04 / база Stage 05: `facb78d03942506b9e9e79fa768fca097ae18b61`.
 
 Легенда статуса: `не начат` · `в работе` · `на ревью` · `принят` · `есть замечания`.
 
@@ -29,7 +30,8 @@
 | S01 | Визуальная основа и shell | принят | `feat/vocal-v2-01-foundation-shell` | `da1396f138e1be2b549a623a859ee8084cded420` | `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f` | lint; typecheck; test:reels 41/41 | принято внешним ревью; код `968d3cf`; focus-trap `a1a2853`; база Stage 02 — `7e0d4b7` |
 | S02 | Библиотека компонентов Vocal | принят | `feat/vocal-v2-02-ui-kit` | `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f` | `aadc2a8b309ad246286977e559553240dfb7d149` | lint; typecheck; build; test:reels 47/47 | принято внешним ревью; код `c3c908f`; focus-fix `d1b9e6f`; docs `aadc2a8` — база Stage 03 |
 | S03 | Экран «Мысли» | принят | `feat/vocal-v2-03-thoughts` | `aadc2a8b309ad246286977e559553240dfb7d149` | `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7` | lint; typecheck; build; test:reels 52/52 | принято внешним ревью; код `54c4221`; review-fix `29ff92b`; docs `cc3e296` — база Stage 04 |
-| S04 | Создание мысли текстом | на ревью | `feat/vocal-v2-04-text-creation` | `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7` | `754b041112c74aaa413ac979541e0f4f414aa214` | lint; typecheck; build; test:reels 54/54 | код `ffde3d1`; review-fix `754b041`; Stage 05 не начат |
+| S04 | Создание мысли текстом | принят | `feat/vocal-v2-04-text-creation` | `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7` | `facb78d03942506b9e9e79fa768fca097ae18b61` | lint; typecheck; build; test:reels 54/54 | принято внешним ревью; код `ffde3d1`; review-fix `754b041`; docs `facb78d` — база Stage 05 |
+| S05 | Голос, видео и обработка | на ревью | `feat/vocal-v2-05-media-processing` | `facb78d03942506b9e9e79fa768fca097ae18b61` | `f887ef08b8a9792d5356eec6acb5509c02007388` | lint; typecheck; build; test:reels 56/56 | код `f887ef0`; Stage 06 не начат |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
@@ -74,6 +76,8 @@
 | Коммит кода Stage 04 | `ffde3d1ec9cc54224d72669c3ec1ece07be39c9b` |
 | Документация Stage 04 | `afce97c1fbe96ca6eedf43013065519e81dd8ac6` |
 | Исправление ревью Stage 04 | `754b041112c74aaa413ac979541e0f4f414aa214` |
+| Принятый Stage 04 / база Stage 05 | `facb78d03942506b9e9e79fa768fca097ae18b61` |
+| Коммит кода Stage 05 | `f887ef08b8a9792d5356eec6acb5509c02007388` |
 
 ## Этап 9 — проверки
 
