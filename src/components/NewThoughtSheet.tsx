@@ -9,7 +9,12 @@ import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
 import { InlineError } from "@/components/vocal-ui/InlineError";
 import { SegmentedTabs } from "@/components/vocal-ui/SegmentedTabs";
-import { thoughtLeaveKind, type ThoughtLeaveKind } from "@/lib/thought-leave";
+import {
+  ABORT_UPLOAD_LEAVE_TEXT,
+  syncThoughtUploadToSheetVisibility,
+  thoughtLeaveKind,
+  type ThoughtLeaveKind,
+} from "@/lib/thought-leave";
 import { ThoughtUploadAbortedError, uploadThoughtMedia } from "@/lib/thought-media-upload";
 import {
   clearThoughtDraft,
@@ -53,6 +58,13 @@ export function NewThoughtSheet({
   const pendingMethod = useRef<MethodId | null>(null);
   const leaveAfterConfirm = useRef<"close" | "switch" | null>(null);
   const uploadRef = useRef<{ abort: () => void } | null>(null);
+
+  useEffect(() => {
+    syncThoughtUploadToSheetVisibility({ open }, uploadRef.current);
+    return () => {
+      syncThoughtUploadToSheetVisibility({ open: false, unmounting: true }, uploadRef.current);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -297,7 +309,7 @@ export function NewThoughtSheet({
       >
         {leaveKind === "abort-upload" ? (
           <>
-            <p className="text-sm text-muted">Файл ещё не сохранён. Загрузка будет прервана, мысль не создастся.</p>
+            <p className="text-sm text-muted">{ABORT_UPLOAD_LEAVE_TEXT}</p>
             <ConfirmActions
               cancelLabel="Продолжить загрузку"
               confirmLabel="Остановить загрузку"

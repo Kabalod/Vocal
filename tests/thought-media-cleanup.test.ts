@@ -13,7 +13,11 @@ import {
   stopMediaStream,
   stopRecorderIfActive,
 } from "../src/lib/media-session";
-import { thoughtLeaveKind } from "../src/lib/thought-leave";
+import {
+  ABORT_UPLOAD_LEAVE_TEXT,
+  syncThoughtUploadToSheetVisibility,
+  thoughtLeaveKind,
+} from "../src/lib/thought-leave";
 import { ThoughtUploadAbortedError, uploadThoughtMedia } from "../src/lib/thought-media-upload";
 
 test("media session stops tracks, revokes preview, and names real limits", () => {
@@ -136,4 +140,51 @@ test("closing during upload aborts xhr and saved state does not offer deletion",
   assert.equal(thoughtLeaveKind({ voiceDirty: false, uploading: true, reelId: null }), "abort-upload");
   assert.equal(thoughtLeaveKind({ voiceDirty: true, uploading: true, reelId: "reel-1" }), "saved-continue");
   assert.equal(thoughtLeaveKind({ voiceDirty: false, uploading: false, reelId: null }), "none");
+});
+
+test("hiding or unmounting the sheet aborts an in-flight upload", async () => {
+  let aborted = 0;
+  const upload = {
+    abort() {
+      aborted += 1;
+    },
+  };
+
+  assert.equal(syncThoughtUploadToSheetVisibility({ open: true }, upload), "kept");
+  assert.equal(aborted, 0);
+
+  assert.equal(syncThoughtUploadToSheetVisibility({ open: false }, upload), "aborted");
+  assert.equal(aborted, 1);
+
+  assert.equal(syncThoughtUploadToSheetVisibility({ open: true, unmounting: true }, upload), "aborted");
+  assert.equal(aborted, 2);
+
+  const xhr = {
+    open() {},
+    setRequestHeader() {},
+    send() {},
+    abort() {
+      this.onabort?.();
+    },
+    upload: { onprogress: null },
+    response: null,
+    status: 0,
+    responseType: "json",
+    onload: null as (() => void) | null,
+    onerror: null as (() => void) | null,
+    onabort: null as (() => void) | null,
+  };
+  const handle = uploadThoughtMedia(
+    { file: new File(["x"], "clip.webm", { type: "audio/webm" }), inputType: "audio", idempotencyKey: "k2" },
+    undefined,
+    () => xhr as unknown as XMLHttpRequest,
+  );
+  const settled = handle.promise.then(
+    () => "ok",
+    (error: unknown) => error,
+  );
+  syncThoughtUploadToSheetVisibility({ open: true, unmounting: true }, handle);
+  const result = await settled;
+  assert.ok(result instanceof ThoughtUploadAbortedError);
+  assert.doesNotMatch(ABORT_UPLOAD_LEAVE_TEXT, /не создаст/);
 });
