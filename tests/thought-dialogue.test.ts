@@ -11,7 +11,14 @@ import {
   encodeDialogueCursor,
   pageDialogueItems,
 } from "../src/lib/dialogue-cursor";
-import { abortDialogueRequest, retainDialogueSendKey } from "../src/lib/dialogue-client";
+import {
+  abortDialogueRequest,
+  beginVoiceFinalize,
+  canSendDialogueText,
+  canStartDialogueRecording,
+  dialogueComposerLocked,
+  retainDialogueSendKey,
+} from "../src/lib/dialogue-client";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { finishVoiceRecording } from "../src/lib/media-session";
 import { createThoughtFromText } from "../src/lib/thought-create";
@@ -185,6 +192,46 @@ test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", asy
   const stored = await prisma.dialogueMessage.count({ where: { threadId: first.threadId } });
   assert.ok(stored >= 3);
   assert.equal(await prisma.question.count({ where: { reelId: reel.id } }), 1);
+});
+
+test("delayed onstop keeps composer locked so a second send or recording cannot start", async () => {
+  const gate = beginVoiceFinalize({ recording: true, finalizing: false, sending: false });
+  assert.equal(gate.finalizing, true);
+  assert.equal(dialogueComposerLocked(gate), true);
+  assert.equal(canStartDialogueRecording(gate), false);
+  assert.equal(canSendDialogueText(gate), false);
+
+  let release!: () => void;
+  const delayed = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const recorder = {
+    state: "recording",
+    ondataavailable: null as ((event: { data?: Blob }) => void) | null,
+    onstop: null as (() => void) | null,
+    stop() {
+      this.state = "inactive";
+      void delayed.then(() => {
+        this.ondataavailable?.({ data: new Blob(["late"], { type: "audio/webm" }) });
+        this.onstop?.();
+      });
+    },
+  };
+  const pending = finishVoiceRecording({
+    recorder,
+    stream: { getTracks: () => [{ stop() {} }] } as unknown as MediaStream,
+    chunks: [],
+  });
+  recorder.stop();
+  assert.equal(canStartDialogueRecording(gate), false);
+  assert.equal(canSendDialogueText(gate), false);
+  assert.equal(dialogueComposerLocked(gate), true);
+  release();
+  const blob = await pending;
+  assert.equal(await blob.text(), "late");
+  const idle = { recording: false, finalizing: false, sending: false };
+  assert.equal(canStartDialogueRecording(idle), true);
+  assert.equal(canSendDialogueText(idle), true);
 });
 
 test("voice recorder blob is collected on stop after the last chunk", async () => {

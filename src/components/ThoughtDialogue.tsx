@@ -17,7 +17,12 @@ import {
   stopRecorderIfActive,
   type VoiceCaptureSession,
 } from "@/lib/media-session";
-import { abortDialogueRequest, retainDialogueSendKey } from "@/lib/dialogue-client";
+import {
+  abortDialogueRequest,
+  canSendDialogueText,
+  canStartDialogueRecording,
+  retainDialogueSendKey,
+} from "@/lib/dialogue-client";
 import type { DialogueMessageDto, DialoguePageDto } from "@/types/dialogue";
 
 function MessageBubble({
@@ -83,6 +88,7 @@ export function ThoughtDialogue({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [stuck, setStuck] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [voiceError, setVoiceError] = useState(false);
   const [transferringId, setTransferringId] = useState<string | null>(null);
@@ -165,7 +171,7 @@ export function ThoughtDialogue({
   }
 
   async function sendText(text: string) {
-    if (sending) return;
+    if (!canSendDialogueText({ recording, finalizing, sending })) return;
     setSending(true);
     setError(null);
     setVoiceError(false);
@@ -199,6 +205,7 @@ export function ThoughtDialogue({
   }
 
   async function startMic() {
+    if (!canStartDialogueRecording({ recording, finalizing, sending })) return;
     cancelVoiceCaptureSession(sessionRef.current);
     sessionRef.current = createVoiceCaptureSession();
     const session = sessionRef.current;
@@ -231,6 +238,7 @@ export function ThoughtDialogue({
   }
 
   function stopMicTracks() {
+    if (finalizing) return;
     cancelVoiceCaptureSession(sessionRef.current);
     detachRecorderHandlers(recorderRef.current);
     stopRecorderIfActive(recorderRef.current);
@@ -243,12 +251,14 @@ export function ThoughtDialogue({
   }
 
   async function sendVoice() {
+    if (finalizing || sending) return;
     const duration = formatRecordingDuration(seconds);
     const session = sessionRef.current;
     const recorder = recorderRef.current;
     const stream = streamRef.current;
     if (timerRef.current) window.clearInterval(timerRef.current);
     timerRef.current = null;
+    setFinalizing(true);
     setRecording(false);
     let blob: Blob;
     try {
@@ -262,18 +272,21 @@ export function ThoughtDialogue({
       stopMediaStream(stream);
       setError("Не удалось сохранить запись. Запишите голос заново.");
       setVoiceError(true);
-      recorderRef.current = null;
-      streamRef.current = null;
+      if (recorderRef.current === recorder) recorderRef.current = null;
+      if (streamRef.current === stream) streamRef.current = null;
+      setFinalizing(false);
       return;
     }
-    recorderRef.current = null;
-    streamRef.current = null;
+    if (recorderRef.current === recorder) recorderRef.current = null;
+    if (streamRef.current === stream) streamRef.current = null;
     if (!blob.size) {
       setError("Запись пуста. Запишите голос заново.");
       setVoiceError(true);
+      setFinalizing(false);
       return;
     }
     setSending(true);
+    setFinalizing(false);
     setError(null);
     voiceKeyRef.current = retainDialogueSendKey(voiceKeyRef.current);
     try {
@@ -378,15 +391,21 @@ export function ThoughtDialogue({
         >
           Перейти к записи
         </ActionButton>
-        {recording ? (
+        {recording || finalizing ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <p className="mr-auto text-sm text-muted">Запись · {formatRecordingDuration(seconds)}</p>
-            <ActionButton variant="secondary" onClick={stopMicTracks}>
-              Отмена
-            </ActionButton>
-            <ActionButton variant="primary" onClick={() => void sendVoice()}>
-              Отправить голос
-            </ActionButton>
+            <p className="mr-auto text-sm text-muted">
+              {finalizing ? "Собираем запись…" : `Запись · ${formatRecordingDuration(seconds)}`}
+            </p>
+            {finalizing ? null : (
+              <>
+                <ActionButton variant="secondary" onClick={stopMicTracks}>
+                  Отмена
+                </ActionButton>
+                <ActionButton variant="primary" onClick={() => void sendVoice()}>
+                  Отправить голос
+                </ActionButton>
+              </>
+            )}
           </div>
         ) : (
           <Composer
