@@ -6,7 +6,8 @@
 - BASE_SHA: `facb78d03942506b9e9e79fa768fca097ae18b61`
 - Коммит(ы) кода: `f887ef08b8a9792d5356eec6acb5509c02007388`
 - Коммит исправления: `2af98a2cdd855db4357d62c7bb8082cbdf2c0af1`
-- HEAD_SHA: `2af98a2cdd855db4357d62c7bb8082cbdf2c0af1`
+- Коммит исправления (unmount abort): `1611f2784b4114d0a17a06e4399365312b76f5ac`
+- HEAD_SHA: `1611f2784b4114d0a17a06e4399365312b76f5ac`
 - Ветка: `feat/vocal-v2-05-media-processing`
 - Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-05-media-processing
 
@@ -47,7 +48,7 @@ Stage 04 принят на SHA `facb78d03942506b9e9e79fa768fca097ae18b61` (ис�
 
 | Проверка | Результат | Ограничения |
 |---|---|---|
-| `npm run test:reels` | 59/59 | mock STT/AI; формат/размер без строк; idempotency + гонка; пустой STT не пишет transcript; retry создаёт v1; late mic; inactive stop; upload abort; leave kinds |
+| `npm run test:reels` | 60/60 | mock STT/AI; формат/размер без строк; idempotency + гонка; пустой STT не пишет transcript; retry создаёт v1; late mic; inactive stop; upload abort; hide/unmount abort; leave kinds |
 | `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01 |
 | `npm run typecheck` | exit 0 | `scripts` в exclude |
 | `npm run build` | успех | маршруты `/api/thoughts/media` и `/api/thoughts/[id]/processing`; перед сборкой остановлен `next dev` |
@@ -83,3 +84,8 @@ Stage 04 принят на SHA `facb78d03942506b9e9e79fa768fca097ae18b61` (ис�
 - Исправление: сессия записи + `adoptGrantedMicrophone`; `stopRecorderIfActive` / отсоединённые handlers / `previewUrlIfSessionActive`; upload `{ promise, abort }` и `ThoughtUploadAbortedError`; `thoughtLeaveKind` разделяет discard-local / abort-upload / saved-continue; polling через `AbortController`.
 - Новый commit SHA: `2af98a2cdd855db4357d62c7bb8082cbdf2c0af1`
 - Повторная проверка: `test:reels` 59/59; lint; typecheck; build. Smoke микрофона: запись стартовала, закрытие Sheet спросило про локальный фрагмент, не про серверное удаление. Stage 06 не начинался.
+
+- Замечание: XHR отменялся только после confirm закрытия/смены способа; при `open → false` и unmount (назад, уход со страницы) загрузка могла создать мысль. Текст обещал, что мысль не создастся.
+- Исправление: эффект вызывает `syncThoughtUploadToSheetVisibility` при скрытии и в cleanup unmount; формулировка предупреждает, что сервер мог успеть принять запрос.
+- Новый commit SHA: `1611f2784b4114d0a17a06e4399365312b76f5ac`
+- Повторная проверка: `test:reels` 60/60; lint; typecheck; build. Живой unmount во время XHR не гонялся — сценарий в тесте. Stage 06 не начинался.
