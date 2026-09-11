@@ -1,6 +1,22 @@
 "use client";
 
-import { timelineIndex, timelineNeighbor, timelineVersions } from "@/components/script-timeline";
+import {
+  timelineIndex,
+  timelineNeighbor,
+  timelineTickGapClass,
+  timelineTickStates,
+  timelineValueText,
+  timelineVersions,
+} from "@/components/script-timeline";
+
+function tickClass(tick: { viewing: boolean; head: boolean; final: boolean }, dense: boolean): string {
+  const height = dense ? "h-1.5" : "h-2";
+  if (tick.viewing && tick.final) return `${height} flex-1 min-w-0 rounded-full bg-accent ring-1 ring-good`;
+  if (tick.viewing) return `${height} flex-1 min-w-0 rounded-full bg-accent`;
+  if (tick.final) return `${height} flex-1 min-w-0 rounded-full bg-good`;
+  if (tick.head) return `${height} flex-1 min-w-0 rounded-full bg-muted`;
+  return `${height} flex-1 min-w-0 rounded-full bg-line`;
+}
 
 export function ScriptVersionTimeline({
   versions,
@@ -21,6 +37,14 @@ export function ScriptVersionTimeline({
   const nextId = timelineNeighbor(versions, viewingId, 1);
   const current = list[index] ?? null;
   const max = Math.max(list.length - 1, 0);
+  const ticks = timelineTickStates(versions, viewingId, headId, finalScriptId);
+  const dense = list.length > 20;
+  const valueText = timelineValueText({
+    index,
+    total: list.length,
+    isHead: Boolean(current && current.id === headId),
+    isFinal: Boolean(current && current.id === finalScriptId),
+  });
 
   if (list.length === 0) {
     return <p className="text-sm text-muted">Версий пока нет. Сохраните первую вручную.</p>;
@@ -60,6 +84,10 @@ export function ScriptVersionTimeline({
           step={1}
           value={index}
           disabled={list.length < 2}
+          aria-valuemin={0}
+          aria-valuemax={max}
+          aria-valuenow={index}
+          aria-valuetext={valueText}
           onChange={(event) => {
             const next = list[Number(event.target.value)];
             if (next) onView(next.id);
@@ -67,21 +95,15 @@ export function ScriptVersionTimeline({
           className="w-full accent-[var(--vocal-accent)]"
         />
       </label>
-      {list.length <= 24 ? (
-        <div className="flex justify-between gap-1" aria-hidden>
-          {list.map((version, i) => (
-            <button
-              key={version.id}
-              type="button"
-              title={new Date(version.createdAt).toLocaleString("ru")}
-              onClick={() => onView(version.id)}
-              className={`h-2 flex-1 rounded-full ${i === index ? "bg-accent" : "bg-line"}`}
-            />
-          ))}
-        </div>
-      ) : (
-        <p className="text-xs text-muted">Деления на ленте для каждой версии, число не ограничено.</p>
-      )}
+      <div
+        className={`flex min-w-0 overflow-hidden ${timelineTickGapClass(list.length)}`}
+        data-timeline-ticks={list.length}
+        aria-hidden="true"
+      >
+        {ticks.map((tick) => (
+          <span key={tick.id} data-timeline-tick={tick.id} className={tickClass(tick, dense)} />
+        ))}
+      </div>
     </div>
   );
 }
