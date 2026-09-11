@@ -1,5 +1,5 @@
 export const SHELL_NAV = [
-  { href: "/reels", label: "Записи" },
+  { href: "/reels", label: "Мысли" },
   { href: "/profile", label: "Профиль" },
 ] as const;
 
@@ -16,14 +16,14 @@ export function shellBack(pathname: string): { href: string; label: string } | n
     return { href: "/history", label: "История" };
   }
   if (pathname === "/" || pathname === "/history" || pathname === "/settings") {
-    return { href: "/reels", label: "Записи" };
+    return { href: "/reels", label: "Мысли" };
   }
   return null;
 }
 
 export function shellHeaderTitle(pathname: string): string {
-  if (pathname.startsWith("/reels/")) return "Запись";
-  if (pathname === "/reels") return "Записи";
+  if (pathname.startsWith("/reels/")) return "Мысль";
+  if (pathname === "/reels") return "Мысли";
   if (pathname === "/profile") return "Профиль";
   if (pathname === "/") return "Загрузка";
   if (pathname === "/history") return "История";

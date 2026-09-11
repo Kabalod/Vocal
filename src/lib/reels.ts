@@ -8,14 +8,16 @@ import {
   type CreateTakeInput,
   type ReelDto,
   type ReelListQuery,
+  type ReelListResult,
   type UpdateReelInput,
   REEL_LIST_LIMIT,
+  REEL_LIST_PAGE,
   REEL_NOTE_MAX,
   REEL_TITLE_MAX,
   TAKE_NOTE_MAX,
   TAKE_TEXT_MAX,
 } from "@/types/reel";
-import { toReelDto } from "@/lib/serialize";
+import { toReelDto, toReelListItemDto } from "@/lib/serialize";
 
 const reelInclude = {
   takes: {
@@ -73,44 +75,122 @@ export async function getReel(id: string): Promise<ReelDto | null> {
   return row ? asReelDto(row) : null;
 }
 
-export async function listReels(
-  query: ReelListQuery = {},
-): Promise<{ reels: ReelDto[]; truncated: boolean }> {
-  const limit = Math.min(Math.max(query.limit ?? REEL_LIST_LIMIT, 1), REEL_LIST_LIMIT);
+type ListCursor = {
+  sort: "updated" | "created" | "title";
+  k: string;
+  id: string;
+};
+
+function encodeListCursor(cursor: ListCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodeListCursor(raw: string): ListCursor | null {
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as ListCursor;
+    if (parsed?.sort !== "updated" && parsed?.sort !== "created" && parsed?.sort !== "title") {
+      return null;
+    }
+    if (typeof parsed.k !== "string" || typeof parsed.id !== "string" || !parsed.id) {
+      return null;
+    }
+    return { sort: parsed.sort, k: parsed.k, id: parsed.id };
+  } catch {
+    return null;
+  }
+}
+
+function reelListStatusWhere(status: ReelListQuery["status"]): Prisma.ReelWhereInput {
+  if (status === "open" || status === "all") {
+    return { NOT: { status: "archived" } };
+  }
+  if (status === "idea") return { status: { in: ["idea", "draft"] } };
+  if (status === "in_progress") {
+    return { status: { in: ["in_progress", "active", "ready_to_record"] } };
+  }
+  return { status };
+}
+
+function reelListCursorWhere(sort: ListCursor["sort"], cursor: ListCursor): Prisma.ReelWhereInput {
+  if (sort === "title") {
+    return {
+      OR: [
+        { title: { gt: cursor.k } },
+        { AND: [{ title: cursor.k }, { id: { gt: cursor.id } }] },
+      ],
+    };
+  }
+  const field = sort === "created" ? "createdAt" : "updatedAt";
+  const at = new Date(cursor.k);
+  if (Number.isNaN(at.getTime())) {
+    throw new ReelError("Некорректный курсор списка.", "LIST_CURSOR", 400);
+  }
+  return {
+    OR: [{ [field]: { lt: at } }, { AND: [{ [field]: at }, { id: { lt: cursor.id } }] }],
+  };
+}
+
+export async function listReels(query: ReelListQuery = {}): Promise<ReelListResult> {
+  const limit = Math.min(Math.max(query.limit ?? REEL_LIST_PAGE, 1), REEL_LIST_LIMIT);
   const q = query.q?.trim();
   const status = query.status ?? "open";
   const sort = query.sort ?? "updated";
 
-  const where: Prisma.ReelWhereInput = {};
-  if (status === "open") {
-    where.NOT = { status: "archived" };
-  } else if (status !== "all") {
-    if (status === "idea") where.status = { in: ["idea", "draft"] };
-    else if (status === "in_progress") where.status = { in: ["in_progress", "active"] };
-    else where.status = status;
-  }
+  const filters: Prisma.ReelWhereInput[] = [reelListStatusWhere(status)];
   if (q) {
-    where.OR = [{ title: { contains: q } }, { initialNote: { contains: q } }];
+    filters.push({ OR: [{ title: { contains: q } }, { initialNote: { contains: q } }] });
+  }
+  if (query.cursor) {
+    const cursor = decodeListCursor(query.cursor);
+    if (!cursor || cursor.sort !== sort) {
+      throw new ReelError("Некорректный курсор списка.", "LIST_CURSOR", 400);
+    }
+    filters.push(reelListCursorWhere(sort, cursor));
   }
 
-  const orderBy: Prisma.ReelOrderByWithRelationInput =
+  const where: Prisma.ReelWhereInput = { AND: filters };
+  const orderBy: Prisma.ReelOrderByWithRelationInput[] =
     sort === "title"
-      ? { title: "asc" }
+      ? [{ title: "asc" }, { id: "asc" }]
       : sort === "created"
-        ? { createdAt: "desc" }
-        : { updatedAt: "desc" };
+        ? [{ createdAt: "desc" }, { id: "desc" }]
+        : [{ updatedAt: "desc" }, { id: "desc" }];
 
-  const rows = await prisma.reel.findMany({
-    where,
-    orderBy,
-    take: limit + 1,
-    include: reelInclude,
-  });
-  const truncated = rows.length > limit;
-  return {
-    reels: rows.slice(0, limit).map(asReelDto),
-    truncated,
-  };
+  const matchFilters = q ? filters.slice(0, 2) : filters.slice(0, 1);
+  const [rows, totalCount, matchCount] = await Promise.all([
+    prisma.reel.findMany({
+      where,
+      orderBy,
+      take: limit + 1,
+      select: {
+        id: true,
+        title: true,
+        initialNote: true,
+        status: true,
+        selectedScriptId: true,
+        finalScriptId: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: { select: { takes: true, scripts: true } },
+      },
+    }),
+    prisma.reel.count({ where: { NOT: { status: "archived" } } }),
+    prisma.reel.count({ where: { AND: matchFilters } }),
+  ]);
+
+  const page = rows.slice(0, limit).map(toReelListItemDto);
+  const hasMore = rows.length > limit;
+  const last = page[page.length - 1];
+  const nextCursor =
+    hasMore && last
+      ? encodeListCursor({
+          sort,
+          id: last.id,
+          k: sort === "title" ? last.title : last[sort === "created" ? "createdAt" : "updatedAt"],
+        })
+      : null;
+
+  return { reels: page, nextCursor, hasMore, totalCount, matchCount };
 }
 
 export async function updateReel(id: string, input: UpdateReelInput): Promise<ReelDto> {

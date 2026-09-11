@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test:reels": "tsx --test tests/reels-migration.test.ts tests/reels-workspace.test.ts tests/reels-editor-session.test.ts tests/reels-takes.test.ts tests/pipeline-recovery.test.ts tests/creator-profile.test.ts tests/reviews-questions.test.ts tests/scripts.test.ts tests/text-diff.test.ts tests/personal-mvp.test.ts tests/shell-nav.test.ts tests/shell-layout.test.ts tests/shell-sheet.test.ts tests/vocal-ui-kit.test.ts tests/reel-filters.test.ts tests/reel-studio.test.ts tests/script-timeline.test.ts",
+    "test:reels": "tsx --test tests/reels-migration.test.ts tests/reels-workspace.test.ts tests/reels-editor-session.test.ts tests/reels-takes.test.ts tests/pipeline-recovery.test.ts tests/creator-profile.test.ts tests/reviews-questions.test.ts tests/scripts.test.ts tests/text-diff.test.ts tests/personal-mvp.test.ts tests/shell-nav.test.ts tests/shell-layout.test.ts tests/shell-sheet.test.ts tests/vocal-ui-kit.test.ts tests/reel-filters.test.ts tests/thoughts-list.test.ts tests/reel-studio.test.ts tests/script-timeline.test.ts",
     "backup": "tsx scripts/backup.ts",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",

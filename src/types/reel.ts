@@ -15,6 +15,23 @@ export const REEL_STATUS_LABELS: Record<ReelStatus, string> = {
   archived: "Архив",
 };
 
+export const REEL_STATUS_GROUPS = ["open", "in_progress", "completed", "archived"] as const;
+export type ReelStatusGroup = (typeof REEL_STATUS_GROUPS)[number];
+
+export const REEL_STATUS_GROUP_LABELS: Record<ReelStatusGroup, string> = {
+  open: "Не завершена",
+  in_progress: "В работе",
+  completed: "Успешно завершена",
+  archived: "Архив",
+};
+
+export function reelStatusGroup(status: ReelStatus): ReelStatusGroup {
+  if (status === "completed") return "completed";
+  if (status === "archived") return "archived";
+  if (status === "in_progress" || status === "ready_to_record") return "in_progress";
+  return "open";
+}
+
 export const TAKE_INPUT_TYPES = ["video", "audio", "text"] as const;
 export type TakeInputType = (typeof TAKE_INPUT_TYPES)[number];
 
@@ -57,6 +74,8 @@ export function isTakeInputType(value: string): value is TakeInputType {
 export const REEL_TITLE_MAX = 200;
 export const REEL_NOTE_MAX = 8000;
 export const REEL_LIST_LIMIT = 80;
+export const REEL_LIST_PAGE = 20;
+export const REEL_LIST_PREVIEW_MAX = 160;
 export const TAKE_NOTE_MAX = 8000;
 export const TAKE_TEXT_MAX = 20000;
 
@@ -97,6 +116,18 @@ export interface ReelDto {
   hasScript: boolean;
 }
 
+export interface ReelListItemDto {
+  id: string;
+  title: string;
+  status: ReelStatus;
+  statusGroup: ReelStatusGroup;
+  preview: string;
+  takeCount: number;
+  hasScript: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CreateReelInput {
   title: string;
   initialNote?: string;
@@ -134,4 +165,13 @@ export interface ReelListQuery {
   status?: ReelStatus | "all" | "open";
   sort?: "updated" | "created" | "title";
   limit?: number;
+  cursor?: string;
+}
+
+export interface ReelListResult {
+  reels: ReelListItemDto[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  totalCount: number;
+  matchCount: number;
 }

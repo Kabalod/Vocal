@@ -10,8 +10,11 @@ import {
   isTakeInputType,
   isTakeMediaStatus,
   normalizeReelStatus,
+  reelStatusGroup,
   type ReelDto,
+  type ReelListItemDto,
   type TakeDto,
+  REEL_LIST_PREVIEW_MAX,
 } from "@/types/reel";
 import { canPlayInBrowser, mimeFromName } from "@/lib/take-playback";
 
@@ -148,5 +151,33 @@ export function toReelDto(reel: ReelWithTakes): ReelDto {
     hasScript: Boolean(
       reel.selectedScriptId || reel.finalScriptId || (reel._count?.scripts ?? 0) > 0,
     ),
+  };
+}
+
+type ReelListRow = {
+  id: string;
+  title: string;
+  initialNote: string;
+  status: string;
+  selectedScriptId?: string | null;
+  finalScriptId?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  _count: { takes: number; scripts: number };
+};
+
+export function toReelListItemDto(reel: ReelListRow): ReelListItemDto {
+  const status = normalizeReelStatus(reel.status);
+  const note = reel.initialNote.trim();
+  return {
+    id: reel.id,
+    title: reel.title,
+    status,
+    statusGroup: reelStatusGroup(status),
+    preview: note.length > REEL_LIST_PREVIEW_MAX ? note.slice(0, REEL_LIST_PREVIEW_MAX) : note,
+    takeCount: reel._count.takes,
+    hasScript: Boolean(reel.selectedScriptId || reel.finalScriptId || reel._count.scripts > 0),
+    createdAt: reel.createdAt.toISOString(),
+    updatedAt: reel.updatedAt.toISOString(),
   };
 }

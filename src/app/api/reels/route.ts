@@ -19,6 +19,9 @@ export async function GET(request: Request) {
     const q = url.searchParams.get("q") ?? undefined;
     const statusRaw = url.searchParams.get("status") ?? "open";
     const sortRaw = url.searchParams.get("sort") ?? "updated";
+    const cursor = url.searchParams.get("cursor") ?? undefined;
+    const limitRaw = url.searchParams.get("limit");
+    const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
     const sort =
       sortRaw === "title" || sortRaw === "created" || sortRaw === "updated" ? sortRaw : "updated";
     let status: ReelListQuery["status"] = "open";
@@ -30,7 +33,13 @@ export async function GET(request: Request) {
       }
       status = parsed;
     }
-    const result = await listReels({ q, status, sort });
+    const result = await listReels({
+      q,
+      status,
+      sort,
+      cursor,
+      limit: Number.isFinite(limit) ? limit : undefined,
+    });
     return NextResponse.json(result);
   } catch (error) {
     return errorResponse(error);
