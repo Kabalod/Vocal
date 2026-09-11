@@ -352,30 +352,43 @@ export async function sendDialogueVoice(
   input: { file: File; idempotencyKey: string; voiceDurationLabel?: string },
   complete: CompleteJsonFn = defaultCompleteJson,
   transcribe: typeof transcribeAudio = transcribeAudio,
+  extract: typeof extractAudio = extractAudio,
 ): Promise<DialoguePageDto> {
   const dir = await mkdtemp(path.join(tmpdir(), "vocal-dialogue-voice-"));
   const rawPath = path.join(dir, "reply.webm");
   const mp3Path = path.join(dir, "reply.mp3");
-  let text = "Голосовой ответ";
   try {
+    if (!input.file.size) {
+      throw new DialogueError("Голосовой файл пуст. Запишите голос заново.", "VOICE_EMPTY");
+    }
     await writeFile(rawPath, Buffer.from(await input.file.arrayBuffer()));
-    await extractAudio(rawPath, mp3Path);
-    const stt = await transcribe(mp3Path);
-    if (stt.text.trim()) text = stt.text.trim();
-  } catch {
-    /* chip остаётся; модель увидит запасной текст */
+    try {
+      await extract(rawPath, mp3Path);
+    } catch {
+      throw new DialogueError("Не удалось подготовить голосовой ответ. Запишите голос заново.", "STT_PREPARE");
+    }
+    let stt;
+    try {
+      stt = await transcribe(mp3Path);
+    } catch {
+      throw new DialogueError("Не удалось расшифровать голос. Повторите отправку или запишите заново.", "STT_FAILED");
+    }
+    const text = stt.text.trim();
+    if (!text) {
+      throw new DialogueError("Речь не распознана. Запишите голос заново или отправьте текстом.", "EMPTY_TRANSCRIPT");
+    }
+    return sendDialogueMessage(
+      reelId,
+      {
+        text,
+        idempotencyKey: input.idempotencyKey,
+        voiceDurationLabel: input.voiceDurationLabel,
+      },
+      complete,
+    );
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
-  return sendDialogueMessage(
-    reelId,
-    {
-      text,
-      idempotencyKey: input.idempotencyKey,
-      voiceDurationLabel: input.voiceDurationLabel,
-    },
-    complete,
-  );
 }
 
 export async function requestScriptHelp(
@@ -398,28 +411,45 @@ export async function transferDialogueProposal(reelId: string, messageId: string
     where: { id: messageId, threadId: thread.id, kind: "script_proposal" },
   });
   if (!message) throw new DialogueError("Предложение не найдено.", "PROPOSAL_NOT_FOUND", 404);
-  const payload = parsePayload(message.payloadJson);
-  if (payload.transferred && payload.scriptVersionId) {
+  const existing = parsePayload(message.payloadJson);
+  if (message.claimKey && existing.transferred && existing.scriptVersionId) {
     return listDialoguePage(reelId);
   }
-  const body = (payload.script ?? message.body).trim();
-  const bundle = await createAcceptedScriptFromText(reelId, {
-    body,
-    inputSnapshotJson: JSON.stringify({ dialogueMessageId: message.id }),
-  });
-  const created = bundle.versions.find((row) => row.id === bundle.selectedScriptId) ?? bundle.versions.at(-1);
-  const index = created ? bundle.versions.filter((row) => row.kind !== "ai_proposal").findIndex((row) => row.id === created.id) + 1 : 0;
-  await prisma.dialogueMessage.update({
-    where: { id: message.id },
-    data: {
-      payloadJson: JSON.stringify({
-        ...payload,
-        script: body,
-        transferred: true,
-        scriptVersionId: created?.id ?? null,
-        versionLabel: index > 0 ? `версия ${index}` : null,
-      }),
-    },
+
+  await prisma.$transaction(async (tx) => {
+    const claimed = await tx.dialogueMessage.updateMany({
+      where: { id: message.id, claimKey: null },
+      data: { claimKey: `transfer:${message.id}` },
+    });
+    if (claimed.count === 0) return;
+    const fresh = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: message.id } });
+    const payload = parsePayload(fresh.payloadJson);
+    const body = (payload.script ?? fresh.body).trim();
+    const created = await createAcceptedScriptFromText(
+      reelId,
+      { body, inputSnapshotJson: JSON.stringify({ dialogueMessageId: fresh.id }) },
+      tx,
+    );
+    const numbered =
+      (
+        await tx.scriptVersion.findMany({
+          where: { reelId, kind: { not: "ai_proposal" } },
+          orderBy: { createdAt: "asc" },
+          select: { id: true },
+        })
+      ).findIndex((row) => row.id === created.id) + 1;
+    await tx.dialogueMessage.update({
+      where: { id: fresh.id },
+      data: {
+        payloadJson: JSON.stringify({
+          ...payload,
+          script: body,
+          transferred: true,
+          scriptVersionId: created.id,
+          versionLabel: numbered > 0 ? `версия ${numbered}` : null,
+        }),
+      },
+    });
   });
   return listDialoguePage(reelId);
 }

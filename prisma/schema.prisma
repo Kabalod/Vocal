@@ -252,6 +252,7 @@ model DialogueMessage {
   sourceId       String?
   status         String         @default("done")
   idempotencyKey String?
+  claimKey       String?        @unique
   createdAt      DateTime       @default(now())
 
   @@unique([threadId, idempotencyKey])

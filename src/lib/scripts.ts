@@ -1,4 +1,7 @@
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/db";
+
+type ScriptDb = PrismaClient | Prisma.TransactionClient;
 import { ReelError } from "@/lib/reels";
 import {
   SCRIPT_BODY_MAX,
@@ -239,6 +242,7 @@ async function createVersion(
     inputSnapshotJson?: string | null;
     select?: boolean;
   },
+  db: ScriptDb = prisma,
 ): Promise<ScriptVersionDto> {
   const body = input.body.trim();
   if (!body) throw new ScriptError("Введите текст сценария.", "SCRIPT_REQUIRED");
@@ -246,7 +250,7 @@ async function createVersion(
     throw new ScriptError(`Сценарий короче ${SCRIPT_BODY_MAX} символов.`, "SCRIPT_TOO_LONG");
   }
   const sources = await resolveSources(reelId, input.sources ?? []);
-  const created = await prisma.scriptVersion.create({
+  const created = await db.scriptVersion.create({
     data: {
       reelId,
       kind: input.kind,
@@ -262,7 +266,7 @@ async function createVersion(
     },
   });
   if (input.select !== false && isHeadKind(input.kind)) {
-    await prisma.reel.update({
+    await db.reel.update({
       where: { id: reelId },
       data: { selectedScriptId: created.id },
     });
@@ -359,14 +363,18 @@ export async function acceptScriptProposal(
 export async function createAcceptedScriptFromText(
   reelId: string,
   input: { body: string; model?: string | null; inputSnapshotJson?: string | null },
-): Promise<ScriptBundleDto> {
-  await createVersion(reelId, {
-    kind: "accepted_ai",
-    body: input.body,
-    model: input.model,
-    inputSnapshotJson: input.inputSnapshotJson,
-  });
-  return listScriptBundle(reelId);
+  db: ScriptDb = prisma,
+): Promise<ScriptVersionDto> {
+  return createVersion(
+    reelId,
+    {
+      kind: "accepted_ai",
+      body: input.body,
+      model: input.model,
+      inputSnapshotJson: input.inputSnapshotJson,
+    },
+    db,
+  );
 }
 
 export async function insertProposalVersion(

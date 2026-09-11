@@ -11,6 +11,7 @@ export function Composer({
   onChange,
   onSend,
   onMic,
+  clearOnSend = true,
 }: {
   placeholder?: string;
   disabled?: boolean;
@@ -19,6 +20,7 @@ export function Composer({
   onChange?: (value: string) => void;
   onSend?: (text: string) => void;
   onMic?: () => void;
+  clearOnSend?: boolean;
 }) {
   const fieldId = useId();
   const [inner, setInner] = useState("");
@@ -33,7 +35,7 @@ export function Composer({
     event.preventDefault();
     if (!canSend) return;
     onSend?.(text.trim());
-    setText("");
+    if (clearOnSend) setText("");
   }
 
   return (

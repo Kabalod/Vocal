@@ -11,8 +11,9 @@ import {
   encodeDialogueCursor,
   pageDialogueItems,
 } from "../src/lib/dialogue-cursor";
-import { abortDialogueRequest } from "../src/lib/dialogue-client";
+import { abortDialogueRequest, retainDialogueSendKey } from "../src/lib/dialogue-client";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
+import { finishVoiceRecording } from "../src/lib/media-session";
 import { createThoughtFromText } from "../src/lib/thought-create";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -96,7 +97,8 @@ test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", asy
     data: { questionId: question.id, text: "Главное — ясность." },
   });
 
-  const { listDialoguePage, sendDialogueMessage, transferDialogueProposal } = await import("../src/lib/dialogue");
+  const { listDialoguePage, sendDialogueMessage, sendDialogueVoice, transferDialogueProposal } =
+    await import("../src/lib/dialogue");
 
   const initial = await listDialoguePage(reel.id, { limit: 20 });
   assert.ok(initial.messages.some((item) => item.kind === "review" && item.body.includes("Мысль автора")));
@@ -131,10 +133,51 @@ test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", asy
   const proposal = first.messages.find((item) => item.kind === "script_proposal");
   assert.ok(proposal);
 
-  const transferred = await transferDialogueProposal(reel.id, proposal!.id);
+  const [transferred, parallel] = await Promise.all([
+    transferDialogueProposal(reel.id, proposal!.id),
+    transferDialogueProposal(reel.id, proposal!.id),
+  ]);
   const again = await transferDialogueProposal(reel.id, proposal!.id);
   const versions = await prisma.scriptVersion.findMany({ where: { reelId: reel.id, kind: "accepted_ai" } });
   assert.equal(versions.length, 1);
+  assert.equal(
+    parallel.messages.find((item) => item.id === proposal!.id)?.proposal?.scriptVersionId,
+    transferred.messages.find((item) => item.id === proposal!.id)?.proposal?.scriptVersionId,
+  );
+
+  let voiceComplete = 0;
+  await assert.rejects(
+    () =>
+      sendDialogueVoice(
+        reel.id,
+        { file: new File(["x"], "reply.webm", { type: "audio/webm" }), idempotencyKey: "voice-fail" },
+        async () => {
+          voiceComplete += 1;
+          return { text: JSON.stringify({ reply: "не должно" }), usage: {} };
+        },
+        async () => {
+          throw new Error("stt down");
+        },
+        async () => undefined,
+      ),
+    /расшифровать|распознан|подготовить/,
+  );
+  assert.equal(voiceComplete, 0);
+  await assert.rejects(
+    () =>
+      sendDialogueVoice(
+        reel.id,
+        { file: new File(["x"], "reply.webm", { type: "audio/webm" }), idempotencyKey: "voice-empty" },
+        async () => {
+          voiceComplete += 1;
+          return { text: JSON.stringify({ reply: "не должно" }), usage: {} };
+        },
+        async () => ({ text: "   ", segments: [], model: "mock" }),
+        async () => undefined,
+      ),
+    /не распознана/i,
+  );
+  assert.equal(voiceComplete, 0);
   const after = transferred.messages.find((item) => item.id === proposal!.id);
   assert.equal(after?.proposal?.transferred, true);
   assert.equal(again.messages.find((item) => item.id === proposal!.id)?.proposal?.scriptVersionId, after?.proposal?.scriptVersionId);
@@ -142,6 +185,32 @@ test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", asy
   const stored = await prisma.dialogueMessage.count({ where: { threadId: first.threadId } });
   assert.ok(stored >= 3);
   assert.equal(await prisma.question.count({ where: { reelId: reel.id } }), 1);
+});
+
+test("voice recorder blob is collected on stop after the last chunk", async () => {
+  const chunks: Blob[] = [];
+  const stream = {
+    getTracks: () => [{ stop() {} }],
+  } as unknown as MediaStream;
+  const recorder = {
+    state: "recording",
+    ondataavailable: null as ((event: { data?: Blob }) => void) | null,
+    onstop: null as (() => void) | null,
+    stop() {
+      this.state = "inactive";
+      this.ondataavailable?.({ data: new Blob(["late"], { type: "audio/webm" }) });
+      this.onstop?.();
+    },
+  };
+  const blob = await finishVoiceRecording({ recorder, stream, chunks });
+  assert.equal(await blob.text(), "late");
+  assert.equal(recorder.onstop, null);
+});
+
+test("send key is reused until the request succeeds", () => {
+  const first = retainDialogueSendKey(null);
+  assert.equal(retainDialogueSendKey(first), first);
+  assert.notEqual(retainDialogueSendKey(null), first);
 });
 
 test("leaving a dialogue fetch aborts the controller", () => {

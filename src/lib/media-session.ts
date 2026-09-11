@@ -18,6 +18,51 @@ export function adoptGrantedMicrophone(session: VoiceCaptureSession, stream: Med
   return true;
 }
 
+export type RecorderLike = {
+  state: string;
+  stop: () => void;
+  ondataavailable: unknown;
+  onstop: unknown;
+};
+
+export async function finishVoiceRecording(input: {
+  recorder: RecorderLike | null | undefined;
+  stream: MediaStream | null | undefined;
+  chunks: Blob[];
+  mimeType?: string;
+  cancelled?: () => boolean;
+}): Promise<Blob> {
+  const mimeType = input.mimeType ?? "audio/webm";
+  const recorder = input.recorder;
+  if (!recorder) {
+    stopMediaStream(input.stream);
+    return new Blob(input.chunks, { type: mimeType });
+  }
+  if (recorder.state !== "recording" && recorder.state !== "paused") {
+    detachRecorderHandlers(recorder as MediaRecorder);
+    stopMediaStream(input.stream);
+    return new Blob(input.chunks, { type: mimeType });
+  }
+  return new Promise((resolve, reject) => {
+    recorder.ondataavailable = (event: { data?: Blob }) => {
+      if (input.cancelled?.() || !event.data?.size) return;
+      input.chunks.push(event.data);
+    };
+    recorder.onstop = () => {
+      detachRecorderHandlers(recorder as MediaRecorder);
+      stopMediaStream(input.stream);
+      resolve(new Blob(input.chunks, { type: mimeType }));
+    };
+    try {
+      recorder.stop();
+    } catch (error) {
+      detachRecorderHandlers(recorder as MediaRecorder);
+      stopMediaStream(input.stream);
+      reject(error);
+    }
+  });
+}
+
 export function stopRecorderIfActive(recorder: { state: string; stop: () => void } | null | undefined): void {
   if (!recorder) return;
   if (recorder.state === "recording" || recorder.state === "paused") {

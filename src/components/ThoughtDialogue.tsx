@@ -11,20 +11,23 @@ import {
   cancelVoiceCaptureSession,
   createVoiceCaptureSession,
   detachRecorderHandlers,
+  finishVoiceRecording,
   formatRecordingDuration,
   stopMediaStream,
   stopRecorderIfActive,
   type VoiceCaptureSession,
 } from "@/lib/media-session";
-import { abortDialogueRequest, newDialogueIdempotencyKey } from "@/lib/dialogue-client";
+import { abortDialogueRequest, retainDialogueSendKey } from "@/lib/dialogue-client";
 import type { DialogueMessageDto, DialoguePageDto } from "@/types/dialogue";
 
 function MessageBubble({
   message,
   onTransfer,
+  transferring,
 }: {
   message: DialogueMessageDto;
   onTransfer: (id: string) => void;
+  transferring: boolean;
 }) {
   const mine = message.role === "user";
   return (
@@ -44,8 +47,12 @@ function MessageBubble({
             {message.proposal.transferred ? (
               <p className="text-sm text-muted">Перенесено · {message.proposal.versionLabel ?? "сценарий"}</p>
             ) : (
-              <ActionButton variant="secondary" onClick={() => onTransfer(message.id)}>
-                Перенести в сценарий
+              <ActionButton
+                variant="secondary"
+                disabled={transferring}
+                onClick={() => onTransfer(message.id)}
+              >
+                {transferring ? "Переносим…" : "Перенести в сценарий"}
               </ActionButton>
             )}
           </div>
@@ -77,6 +84,8 @@ export function ThoughtDialogue({
   const [stuck, setStuck] = useState(false);
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [voiceError, setVoiceError] = useState(false);
+  const [transferringId, setTransferringId] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const stickBottom = useRef(true);
   const fetchRef = useRef<AbortController | null>(null);
@@ -85,6 +94,9 @@ export function ThoughtDialogue({
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<number | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const textKeyRef = useRef<string | null>(null);
+  const voiceKeyRef = useRef<string | null>(null);
+  const transferLockRef = useRef(false);
 
   const applyPage = useCallback((next: DialoguePageDto, mode: "replace" | "prepend") => {
     setPage((prev) => {
@@ -156,8 +168,11 @@ export function ThoughtDialogue({
     if (sending) return;
     setSending(true);
     setError(null);
+    setVoiceError(false);
+    textKeyRef.current = retainDialogueSendKey(textKeyRef.current);
     try {
-      await postJson(`/api/thoughts/${reelId}/dialogue`, { text, idempotencyKey: newDialogueIdempotencyKey() });
+      await postJson(`/api/thoughts/${reelId}/dialogue`, { text, idempotencyKey: textKeyRef.current });
+      textKeyRef.current = null;
       onDraftChange("");
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
@@ -168,12 +183,18 @@ export function ThoughtDialogue({
   }
 
   async function transfer(messageId: string) {
+    if (transferLockRef.current) return;
+    transferLockRef.current = true;
     setError(null);
+    setTransferringId(messageId);
     try {
       await postJson(`/api/thoughts/${reelId}/dialogue/transfer`, { messageId });
       onTransferred();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка.");
+    } finally {
+      setTransferringId(null);
+      transferLockRef.current = false;
     }
   }
 
@@ -186,16 +207,24 @@ export function ThoughtDialogue({
       if (!adoptGrantedMicrophone(session, stream)) return;
       streamRef.current = stream;
       chunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
-      recorder.ondataavailable = (event) => {
-        if (session.cancelled || !event.data.size) return;
-        chunksRef.current.push(event.data);
-      };
-      recorderRef.current = recorder;
-      recorder.start();
-      setSeconds(0);
-      setRecording(true);
-      timerRef.current = window.setInterval(() => setSeconds((value) => value + 1), 1000);
+      try {
+        const recorder = new MediaRecorder(stream);
+        recorder.ondataavailable = (event) => {
+          if (session.cancelled || !event.data.size) return;
+          chunksRef.current.push(event.data);
+        };
+        recorderRef.current = recorder;
+        recorder.start();
+        setSeconds(0);
+        setRecording(true);
+        setVoiceError(false);
+        timerRef.current = window.setInterval(() => setSeconds((value) => value + 1), 1000);
+      } catch {
+        stopMediaStream(stream);
+        streamRef.current = null;
+        recorderRef.current = null;
+        setError("Не удалось начать запись. Проверьте микрофон.");
+      }
     } catch {
       setError("Нужен доступ к микрофону.");
     }
@@ -215,25 +244,55 @@ export function ThoughtDialogue({
 
   async function sendVoice() {
     const duration = formatRecordingDuration(seconds);
-    const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-    stopMicTracks();
-    if (!blob.size) return;
+    const session = sessionRef.current;
+    const recorder = recorderRef.current;
+    const stream = streamRef.current;
+    if (timerRef.current) window.clearInterval(timerRef.current);
+    timerRef.current = null;
+    setRecording(false);
+    let blob: Blob;
+    try {
+      blob = await finishVoiceRecording({
+        recorder,
+        stream,
+        chunks: chunksRef.current,
+        cancelled: () => session.cancelled,
+      });
+    } catch {
+      stopMediaStream(stream);
+      setError("Не удалось сохранить запись. Запишите голос заново.");
+      setVoiceError(true);
+      recorderRef.current = null;
+      streamRef.current = null;
+      return;
+    }
+    recorderRef.current = null;
+    streamRef.current = null;
+    if (!blob.size) {
+      setError("Запись пуста. Запишите голос заново.");
+      setVoiceError(true);
+      return;
+    }
     setSending(true);
+    setError(null);
+    voiceKeyRef.current = retainDialogueSendKey(voiceKeyRef.current);
     try {
       abortDialogueRequest(fetchRef.current);
       const controller = new AbortController();
       fetchRef.current = controller;
       const form = new FormData();
       form.set("file", blob, "reply.webm");
-      form.set("idempotencyKey", newDialogueIdempotencyKey());
+      form.set("idempotencyKey", voiceKeyRef.current);
       form.set("voiceDurationLabel", duration);
       const res = await fetch(`/api/thoughts/${reelId}/dialogue`, { method: "POST", body: form, signal: controller.signal });
       const data = (await res.json()) as DialoguePageDto & { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Не удалось отправить голос.");
+      voiceKeyRef.current = null;
       applyPage(data, "replace");
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Ошибка.");
+      setVoiceError(true);
     } finally {
       setSending(false);
     }
@@ -278,7 +337,12 @@ export function ThoughtDialogue({
           <EmptyState title="Пока нет переписки" description="Напишите или скажите мысль — Vocal ответит здесь." />
         ) : null}
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} onTransfer={transfer} />
+          <MessageBubble
+            key={message.id}
+            message={message}
+            transferring={transferringId === message.id}
+            onTransfer={transfer}
+          />
         ))}
         {page?.analyzing ? <ProcessingState label="Разбираю вашу мысль…" /> : null}
       </div>
@@ -297,7 +361,14 @@ export function ThoughtDialogue({
           </ActionButton>
         </div>
       ) : null}
-      {error ? <div className="mt-2"><InlineError message={error} /></div> : null}
+      {error ? (
+        <div className="mt-2 space-y-1">
+          <InlineError message={error} />
+          {voiceError ? (
+            <p className="text-sm text-muted">Можно записать голос заново или отправить ту же мысль текстом.</p>
+          ) : null}
+        </div>
+      ) : null}
       <div className="mt-3 space-y-2 border-t border-line pt-3">
         <ActionButton
           variant="secondary"
@@ -322,6 +393,7 @@ export function ThoughtDialogue({
             value={draft}
             onChange={onDraftChange}
             disabled={sending}
+            clearOnSend={false}
             onSend={(text) => void sendText(text)}
             onMic={() => void startMic()}
           />
