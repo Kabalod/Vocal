@@ -1,95 +1,60 @@
 "use client";
 
-import { useEffect, useId, useState, type ReactNode } from "react";
-import { STUDIO_PANELS, type StudioPanelId } from "@/components/reel-studio";
+import type { ReactNode } from "react";
+import { SegmentedTabs } from "@/components/vocal-ui/SegmentedTabs";
+import {
+  STUDIO_MATERIAL_TABS,
+  STUDIO_MOBILE_TABS,
+  type StudioMobileTab,
+} from "@/components/reel-studio";
 
 export function ReelStudioFrame({
   header,
-  left,
-  panels,
+  tab,
+  onTab,
+  takes,
+  script,
+  dialog,
 }: {
   header: ReactNode;
-  left: ReactNode;
-  panels: Record<StudioPanelId, ReactNode>;
+  tab: StudioMobileTab;
+  onTab: (id: StudioMobileTab) => void;
+  takes: ReactNode;
+  script: ReactNode;
+  dialog: ReactNode;
 }) {
-  const [open, setOpen] = useState<StudioPanelId | null>(null);
-  const titleId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(null);
-    }
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = previous;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  const material = tab === "takes" ? "takes" : "script";
 
   return (
     <div className="space-y-6">
       {header}
 
-      <div className="hidden gap-8 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] lg:items-start">
-        <section className="min-w-0 space-y-6" aria-label="Версия автора">
-          {left}
-        </section>
-        <section className="min-w-0 space-y-6" aria-label="Общение с Vocal">
-          {panels.vocal}
-        </section>
+      <div className="shell:hidden">
+        <SegmentedTabs
+          items={STUDIO_MOBILE_TABS}
+          value={tab}
+          onChange={(id) => onTab(id as StudioMobileTab)}
+          aria-label="Разделы мысли"
+        />
       </div>
 
-      <div className="space-y-6 lg:hidden">
-        {left}
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Панели записи">
-          {STUDIO_PANELS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="vocal-btn text-sm"
-              onClick={() => setOpen(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="hidden space-y-8 border-t border-line pt-8 lg:block">
-        <section aria-label="Дубли">{panels.takes}</section>
-        <section aria-label="Контекст">{panels.context}</section>
-        <section aria-label="Сравнение">{panels.compare}</section>
-      </div>
-
-      {open ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/50"
-            aria-label="Закрыть панель"
-            onClick={() => setOpen(null)}
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={titleId}
-            className="absolute inset-y-0 right-0 flex w-[min(24rem,calc(100vw-1.25rem))] max-w-full flex-col bg-bg-elev"
-          >
-            <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-              <p id={titleId} className="font-[family-name:var(--font-display)] text-lg">
-                {STUDIO_PANELS.find((item) => item.id === open)?.label}
-              </p>
-              <button type="button" className="vocal-btn shrink-0" onClick={() => setOpen(null)}>
-                Закрыть
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{panels[open]}</div>
+      <div className="shell:grid shell:grid-cols-[minmax(0,1.27fr)_minmax(0,1fr)] shell:items-start shell:gap-6">
+        <section className={`${tab === "dialog" ? "hidden" : ""} min-w-0 space-y-4 shell:block`} aria-label="Материал">
+          <div className="hidden shell:block">
+            <SegmentedTabs
+              items={STUDIO_MATERIAL_TABS}
+              value={material}
+              onChange={(id) => onTab(id as StudioMobileTab)}
+              aria-label="Дубли или сценарий"
+            />
           </div>
-        </div>
-      ) : null}
+          <div hidden={material !== "takes"}>{takes}</div>
+          <div hidden={material !== "script"}>{script}</div>
+        </section>
+        <section className={`${tab !== "dialog" ? "hidden" : ""} min-w-0 shell:block`} aria-label="Диалог с Vocal">
+          {dialog}
+        </section>
+      </div>
     </div>
   );
 }

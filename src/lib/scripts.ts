@@ -356,6 +356,19 @@ export async function acceptScriptProposal(
   return listScriptBundle(reelId);
 }
 
+export async function createAcceptedScriptFromText(
+  reelId: string,
+  input: { body: string; model?: string | null; inputSnapshotJson?: string | null },
+): Promise<ScriptBundleDto> {
+  await createVersion(reelId, {
+    kind: "accepted_ai",
+    body: input.body,
+    model: input.model,
+    inputSnapshotJson: input.inputSnapshotJson,
+  });
+  return listScriptBundle(reelId);
+}
+
 export async function insertProposalVersion(
   reelId: string,
   input: {

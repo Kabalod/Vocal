@@ -16,7 +16,15 @@ function sourceKey(ref: ScriptSourceRef) {
   return `${ref.type}:${ref.id}`;
 }
 
-export function ScriptEditor({ reelId }: { reelId: string }) {
+export function ScriptEditor({
+  reelId,
+  reloadToken = 0,
+  onHelpWithScript,
+}: {
+  reelId: string;
+  reloadToken?: number;
+  onHelpWithScript?: () => Promise<void> | void;
+}) {
   const [bundle, setBundle] = useState<ScriptBundleDto | null>(null);
   const [body, setBody] = useState("");
   const [recording, setRecording] = useState<RecordingCardDto>(emptyRecording());
@@ -49,7 +57,7 @@ export function ScriptEditor({ reelId }: { reelId: string }) {
 
   useEffect(() => {
     void load().catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."));
-  }, [load]);
+  }, [load, reloadToken]);
 
   function currentSources(): ScriptSourceRef[] {
     return (bundle?.sources ?? [])
@@ -195,11 +203,19 @@ export function ScriptEditor({ reelId }: { reelId: string }) {
             </button>
             <button
               type="button"
-              onClick={() => void generate()}
-              disabled={generating || selected.length === 0}
+              onClick={() => {
+                if (onHelpWithScript) {
+                  void Promise.resolve(onHelpWithScript()).catch((err: unknown) =>
+                    setError(err instanceof Error ? err.message : "Ошибка."),
+                  );
+                  return;
+                }
+                void generate();
+              }}
+              disabled={generating || (onHelpWithScript ? false : selected.length === 0)}
               className="vocal-btn disabled:opacity-50"
             >
-              {generating ? "Собираем…" : "Помочь сформулировать сценарий"}
+              {generating ? "Собираем…" : "Помочь со сценарием"}
             </button>
           </div>
         </div>

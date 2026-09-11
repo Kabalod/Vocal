@@ -28,6 +28,7 @@ model Reel {
   scripts          ScriptVersion[]
   compares         CompareResult[]
   thoughtCreateKeys ThoughtCreateKey[]
+  dialogueThreads   DialogueThread[]
 }
 
 model CreatorProfile {
@@ -227,6 +228,34 @@ model ScriptVersion {
   takes              Take[]
 
   @@index([reelId, createdAt])
+}
+
+model DialogueThread {
+  id        String            @id @default(cuid())
+  scope     String            @default("reel")
+  reelId    String?           @unique
+  reel      Reel?             @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  messages  DialogueMessage[]
+}
+
+model DialogueMessage {
+  id             String         @id @default(cuid())
+  threadId       String
+  thread         DialogueThread @relation(fields: [threadId], references: [id], onDelete: Restrict)
+  role           String
+  kind           String
+  body           String
+  payloadJson    String         @default("{}")
+  sourceType     String?
+  sourceId       String?
+  status         String         @default("done")
+  idempotencyKey String?
+  createdAt      DateTime       @default(now())
+
+  @@unique([threadId, idempotencyKey])
+  @@index([threadId, createdAt])
 }
 
 model CompareResult {

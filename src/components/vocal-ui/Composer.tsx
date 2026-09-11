@@ -7,24 +7,33 @@ export function Composer({
   placeholder = "Напишите ответ…",
   disabled = false,
   error = false,
+  value,
+  onChange,
   onSend,
   onMic,
 }: {
   placeholder?: string;
   disabled?: boolean;
   error?: boolean;
+  value?: string;
+  onChange?: (value: string) => void;
   onSend?: (text: string) => void;
   onMic?: () => void;
 }) {
   const fieldId = useId();
-  const [value, setValue] = useState("");
-  const canSend = value.trim().length > 0 && !disabled;
+  const [inner, setInner] = useState("");
+  const text = value ?? inner;
+  function setText(next: string) {
+    if (value === undefined) setInner(next);
+    onChange?.(next);
+  }
+  const canSend = text.trim().length > 0 && !disabled;
 
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!canSend) return;
-    onSend?.(value.trim());
-    setValue("");
+    onSend?.(text.trim());
+    setText("");
   }
 
   return (
@@ -37,9 +46,9 @@ export function Composer({
         className={`vocal-input min-h-11 max-h-40 resize-none ${error ? "border-bad" : ""}`}
         rows={2}
         placeholder={placeholder}
-        value={value}
+        value={text}
         disabled={disabled}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
             event.preventDefault();
