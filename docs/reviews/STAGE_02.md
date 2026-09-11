@@ -1,110 +1,75 @@
-# Отчёт после этапа для проверки через GitHub
+# Отчёт этапа
 
 ## Идентификация
 
-- Этап: 2 — экран «Мои ролики»
-- Репозиторий: Kabalod/Vocal
-- Ветка: feat/personal-mvp-02-reel-workspace
-- BASE_SHA (до изменений): ba283c9e9e20e634e76994a43183f1d2d3660e60
-- HEAD_SHA (после изменений): `d428d2b43d043d6a0d4ad1aae1630a2a62a930c1`
-- Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-02-reel-workspace
-- Ветка отправлена в GitHub: да, без force push
-- Предыдущий этап принят: да, этап 1 на `ba283c9e9e20e634e76994a43183f1d2d3660e60`
+- Этап: Stage 02 — библиотека компонентов Vocal
+- BASE_SHA: `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f`
+- Коммит(ы) кода: `c3c908f6bce2f52ad91270f06817bba9a94a8394`
+- HEAD_SHA: `c3c908f6bce2f52ad91270f06817bba9a94a8394`
+- Ветка: `feat/vocal-v2-02-ui-kit`
+- Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-02-ui-kit
 
-## Реализовано
+Ветка создана от принятого Stage 01 `7e0d4b7…`, не от docs-коммита «принят» `1612417…`. Stage 03 не начинался.
 
-Без ключа Groq: создать идею (название и заметка), список с поиском/фильтром/сортировкой, открыть карточку, переименовать, править заметку, сменить статус, архивировать и вернуть в «идея». Правки одной карточки не меняют другую. Запоздавший PATCH с старым `expectedUpdatedAt` даёт 409 и не затирает более новую версию. «Сохранено» только после ответа сервера. Старые `/jobs/[id]` и `/history` на месте; GET `/api/jobs` в тесте отвечает 200.
+## Что реализовано
 
-Статусы: идея, в работе, готов к записи, завершён, архив. Анализ Job не ставит «завершён». Старые значения `draft`/`active` читаются как идея / в работе.
+- Каталог `/dev/ui`: не в глобальной навигации; в production `isDevUiEnabled()` → `notFound()`.
+- Общий API: `ActionButton`, `IconButton`, `StatusBadge`, `SegmentedTabs`, `FilterControl`.
+- `Composer`, `EmptyState`, `ProcessingState`, `InlineError`.
+- `VocalModal` (dialog/sheet + Tab-trap), `ProgressBar`, `DiscreteSlider`.
+- Одно SVG-семейство (`stroke 1.6`); Lucide не ставился.
+- На каталоге: default/hover/focus/disabled/loading/error и блок ширины 390px. Champagne у primary/mic/прогресса; сегменты и пузырь «Вы» без champagne-заливки.
 
-Дубли, плеер и сценарий не изображены как готовые разделы.
+## Что намеренно не реализовано
 
-## Файлы
+- Продуктовые страницы, MediaRecorder, Prisma/API, Storybook, shadcn.
+- Перенос существующих экранов на kit.
+- Stage 03 «Мысли».
 
-| Путь | Изменение и причина |
-|---|---|
-| src/types/reel.ts | Новые статусы, лимиты, hasScript/takeCount |
-| src/lib/reels.ts | listReels с фильтром; STALE через updateMany по id+updatedAt |
-| src/lib/serialize.ts | normalizeReelStatus, DTO без путей |
-| src/app/api/reels/route.ts | GET список, POST создание |
-| src/app/api/reels/[id]/route.ts | GET/PATCH, 400/404/409 |
-| src/components/ReelCard.tsx | Карточка списка |
-| src/components/ReelList.tsx | Поиск, фильтры; после создания — load текущего фильтра |
-| src/components/ReelWorkspace.tsx | Черновик отдельно; выход ждёт flush; cleanup не dispose |
-| src/lib/reel-editor-session.ts | Очередь, 409 стоп, flush, Strict Mode без игнора ответа |
-| src/lib/generation-guard.ts | Актуальный запрос списка |
-| tests/reels-editor-session.test.ts | Задержанные ответы, сеть, 409, фильтр |
-| src/app/reels/page.tsx | Экран списка |
-| src/app/reels/[id]/page.tsx | Рабочая карточка |
-| src/app/page.tsx, layout.tsx | Навигация, главная |
-| tests/reels-workspace.test.ts | API без Groq |
-| scripts/backfill-reels.ts | Новые карточки со статусом idea |
-| docs/IMPLEMENTATION_STATUS.md | этап 1 принят, этап 2 на ревью |
-| docs/reviews/STAGE_02.md | этот отчёт |
+## Изменённые файлы
 
-## Данные и миграции
+- `src/components/vocal-ui/*`, `src/app/dev/ui/page.tsx`
+- `src/components/shell-nav.ts` (заголовок каталога)
+- `tests/vocal-ui-kit.test.ts`, `package.json`
 
-- Требуемые команды: нет новой Prisma-миграции
-- Как сохранены старые данные: схема Job/Take не менялась
-- Резервная копия: не делалась (нет migrate)
-- Восстановление / повтор переноса: не применимо
+## Миграции и данные
+
+- Новая миграция: нет
+- Проверка существующей SQLite: не требовалась
+- Проверка чистой SQLite: не требовалась
+- Backfill: нет
+- Возможность отката: git revert коммита кода
 
 ## Проверки
 
-| Команда или ручной сценарий | Выполнено? | Результат | Ограничения |
-|---|---|---|---|
-| npm run test:reels | да | 14/14 | без браузера; Strict Mode эффектов, 409+очередь, leave, POST+фильтр |
-| npm run lint | да | ok | next lint deprecated |
-| npm run typecheck | да | исходные ошибки | не этап 2 |
-| npm run build | да | падает на score-analyz.ts:93 | исходная |
-| браузер /reels | нет | — | компьютер пользователя |
-| STT / Groq | нет | не вызывались | |
+| Проверка | Результат | Ограничения |
+|---|---|---|
+| `npm run test:reels` | 44/44 | mock Groq; +каталог UI |
+| `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01, не трогалось |
+| `npm run typecheck` | exit 0 | `scripts` в exclude; `analyze.ts` с `@ts-nocheck` |
+| `npm run build` | успех | `/dev/ui` в production prerender как `notFound` |
+| Browser 390×844 | каталог; `scrollWidth=390`; nav только `/reels` `/profile`; dialog фокус на «Закрыть»; Escape закрывает | живой Groq нет |
+| Browser 1280×800 | каталог без горизонтального скролла; sidebar как в Stage 01 | — |
 
-- Исходные ошибки проекта: TS1501 `scripts/score-analyz.ts:93`; strict в `src/lib/analyze.ts`
-- Новые ошибки этапа: нет (TS подписки редактора исправлен в этом коммите)
-- Платные вызовы: нет
-- Нужен компьютер пользователя: визуальная проверка списка и карточки, перезагрузка страницы
+## AI и внешние сервисы
 
-## ИИ
+- Какие AI-вызовы добавлены или изменены: нет
+- Проверено mock: да
+- Проверено live: нет
+- Что не проверено: живой Groq, запись медиа
 
-- Какие действия вызывают модель: по-прежнему только пайплайн Job. Список, создание, PATCH — нет.
-- Проверено без ключа: API-тесты workspace
-- Версии входов: AnalysisResult без изменений
-- Повтор / ошибка: технический retry Job не создаёт Take; повтор PATCH с тем же expectedUpdatedAt после успеха даёт 409
+## Совместимость с будущим обучением
 
-## Осталось
+Этап не трогал данные, завершение, диалог-модель и AI.
 
-- Невыполненные условия готовности: внешнее ревью; ручная перезагрузка в браузере не гонялась
-- Известные проблемы: typecheck/build красные из‑за этапа 0
-- Отклонения: статусы сменились со строк draft/active на набор из ТЗ без SQL-миграции (маппинг при чтении)
+- Какие исторические данные затронуты: нет
+- Может ли что-либо перезаписаться/удалиться при завершении, retry или возврате в работу: нет
+- Сохраняются ли source metadata, порядок, итоговые ссылки и snapshots: да
+- Не создана ли новая рубрика в обход `playbook.ts`/`framework.ts`: нет
+- Можно ли позднее добавить read-only learning job без изменения смысла текущих моделей: да
 
-## Запрос ревьюеру
+## Подтверждения
 
-Проверь BASE_SHA..HEAD_SHA, API/UI, отсутствие скрытого ИИ, совместимость /jobs и /history.
-Не считай этап принятым только на основании этого отчёта.
-
-## После замечаний
-
-- Замечание: автосохранение затирало черновик ответом PATCH / load() при 409.
-- Исправление: `ReelEditorSession` — серверные данные отдельно; ответ не пишет в поле, если черновик новее; 409 оставляет текст и кнопку повтора. Очередь drain, не seq на каждый fetch.
-- Замечание: expectedUpdatedAt читался отдельно от update.
-- Исправление: `updateMany` с `id` + `updatedAt` в WHERE; конкурентный тест двух PATCH с одной версией.
-- Замечание: сеть оставляла «Сохраняется…»; таймер при уходе.
-- Исправление: try/catch, ошибка и повтор; beforeunload; таймер сбрасывается, затем requestSave.
-- Замечание: старый поиск/фильтр мог перезаписать новый список.
-- Исправление: `GenerationGuard` для load и после создания.
-- Новый commit SHA: `1940b3553323b5025566e58dd8c7e823f1aa188e`
-- Повторная проверка: `npm run test:reels` 10/10; lint ок; typecheck без новых ошибок кроме исходных analyze/score-analyz. Браузер не гонялся.
-
-## После второго ревью
-
-- Замечание: cleanup `dispose()` при том же `useMemo` сессии; Strict Mode игнорировал ответ сохранения.
-- Исправление: cleanup только снимает подписку и таймер; ответ PATCH применяется. Тест `runReactStrictModeEffects` + `mountReelWorkspaceEffects`.
-- Замечание: после 409 drain сразу слал накопившийся черновик.
-- Исправление: конфликт сбрасывает очередь; `requestSave` молчит до «Повторить». Тест правки во время 409.
-- Замечание: Next Link не ждал сохранение; cleanup убивал сессию.
-- Исправление: «Мои ролики» вызывает `leaveReelEditor`/`flush`; сеть — остаёмся с ошибкой. Тест задержанного ответа и offline.
-- Замечание: `onCreate` вызывал старый `load()` с фильтром на момент POST.
-- Исправление: `loadRef.current` после создания. Тест: задержанный POST → смена фильтра → завершение POST.
-- Новый commit SHA: `d428d2b43d043d6a0d4ad1aae1630a2a62a930c1`
-- Повторная проверка: `npm run test:reels` 14/14; lint; браузер не гонялся. Этап 3 не начинался.
+- Force push не использовался.
+- Следующий этап не начинался.
+- Этап не объявляется принятым до внешнего ревью.
