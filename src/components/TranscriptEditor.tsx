@@ -83,7 +83,7 @@ export function TranscriptEditor({ takeId }: { takeId: string }) {
                 type="button"
                 onClick={() => void select(row.id).catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."))}
                 className={`rounded-full px-3 py-1 text-sm ${
-                  row.id === bundle.selectedId ? "bg-accent text-[#1a140c]" : "border border-line"
+                  row.id === bundle.selectedId ? "bg-accent text-on-accent" : "border border-line"
                 }`}
               >
                 {kindLabel(row)}
@@ -109,7 +109,7 @@ export function TranscriptEditor({ takeId }: { takeId: string }) {
         type="button"
         onClick={() => void save()}
         disabled={saving || !draft.trim()}
-        className="rounded-full bg-accent px-4 py-2 text-sm text-[#1a140c] disabled:opacity-50"
+        className="rounded-full bg-accent px-4 py-2 text-sm text-on-accent disabled:opacity-50"
       >
         {saving ? "Сохраняем…" : "Сохранить правку"}
       </button>

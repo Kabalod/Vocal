@@ -143,7 +143,7 @@ export function ReelContextForm({ reelId }: { reelId: string }) {
         type="button"
         onClick={() => void save()}
         disabled={saving}
-        className="rounded-full bg-accent px-4 py-2 text-sm text-[#1a140c] disabled:opacity-50"
+        className="rounded-full bg-accent px-4 py-2 text-sm text-on-accent disabled:opacity-50"
       >
         {saving ? "Сохраняем…" : "Сохранить контекст"}
       </button>

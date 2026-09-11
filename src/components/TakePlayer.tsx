@@ -40,7 +40,7 @@ export function TakePlayer({ take, seekTo }: { take: TakeDto | null; seekTo: num
       <div className="space-y-3">
         <p className="text-sm text-bad">{hint}</p>
         {take.downloadUrl ? (
-          <a href={take.downloadUrl} className="inline-block rounded-full bg-accent px-4 py-2 text-sm text-[#1a140c]">
+          <a href={take.downloadUrl} className="inline-block rounded-full bg-accent px-4 py-2 text-sm text-on-accent">
             Скачать исходник
           </a>
         ) : null}

@@ -3,8 +3,8 @@
 export function ShellLoading({ label = "Загрузка…" }: { label?: string }) {
   return (
     <div className="space-y-4" role="status" aria-live="polite">
-      <div className="h-24 animate-pulse rounded-[24px] bg-surface" />
-      <div className="h-12 animate-pulse rounded-[16px] bg-surface" />
+      <div className="h-24 animate-pulse rounded-panel bg-surface" />
+      <div className="h-12 animate-pulse rounded-control bg-surface" />
       <p className="text-sm text-muted">{label}</p>
     </div>
   );

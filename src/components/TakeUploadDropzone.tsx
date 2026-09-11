@@ -50,14 +50,14 @@ export function TakeUploadDropzone({
         <button
           type="button"
           onClick={() => setKind("video")}
-          className={`rounded-full px-3 py-1 text-sm ${kind === "video" ? "bg-accent text-[#1a140c]" : "bg-bg text-muted"}`}
+          className={`rounded-full px-3 py-1 text-sm ${kind === "video" ? "bg-accent text-on-accent" : "bg-bg text-muted"}`}
         >
           Видео
         </button>
         <button
           type="button"
           onClick={() => setKind("audio")}
-          className={`rounded-full px-3 py-1 text-sm ${kind === "audio" ? "bg-accent text-[#1a140c]" : "bg-bg text-muted"}`}
+          className={`rounded-full px-3 py-1 text-sm ${kind === "audio" ? "bg-accent text-on-accent" : "bg-bg text-muted"}`}
         >
           Аудио
         </button>

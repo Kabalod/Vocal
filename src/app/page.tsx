@@ -16,7 +16,7 @@ export default function HomePage() {
         </p>
         <Link
           href="/reels"
-          className="inline-flex rounded-full bg-accent px-4 py-2 text-sm text-[#1a140c]"
+          className="inline-flex rounded-full bg-accent px-4 py-2 text-sm text-on-accent"
         >
           Мои ролики
         </Link>

@@ -52,7 +52,7 @@ export function ReviewPanel({ takeId }: { takeId: string }) {
           type="button"
           onClick={() => void runReview()}
           disabled={running}
-          className="rounded-full bg-accent px-4 py-2 text-sm text-[#1a140c] disabled:opacity-50"
+          className="rounded-full bg-accent px-4 py-2 text-sm text-on-accent disabled:opacity-50"
         >
           {running ? "Разбираем…" : "Разобрать выбранный текст"}
         </button>

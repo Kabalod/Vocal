@@ -30,7 +30,7 @@ function FilterChip({
       onClick={() => onSelect(id)}
       aria-pressed={selected}
       className={`rounded-full px-3 py-1.5 text-sm ${
-        selected ? "bg-accent text-[#1a140c]" : "bg-bg-elev text-muted hover:text-text"
+        selected ? "bg-accent text-on-accent" : "bg-bg-elev text-muted hover:text-text"
       }`}
     >
       {label}
@@ -175,7 +175,7 @@ export function ReelList() {
               onClick={() => setSort(item.id)}
               aria-pressed={sort === item.id}
               className={`rounded-full px-3 py-1.5 text-sm ${
-                sort === item.id ? "bg-accent text-[#1a140c]" : "bg-bg-elev text-muted hover:text-text"
+                sort === item.id ? "bg-accent text-on-accent" : "bg-bg-elev text-muted hover:text-text"
               }`}
             >
               {item.label}

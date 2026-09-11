@@ -70,7 +70,7 @@ export default function HistoryPage() {
             type="button"
             onClick={() => setFilter(f.id)}
             className={`rounded-full px-3 py-1.5 text-sm ${
-              filter === f.id ? "bg-accent text-[#1a140c]" : "bg-bg-elev text-muted"
+              filter === f.id ? "bg-accent text-on-accent" : "bg-bg-elev text-muted"
             }`}
           >
             {f.label}

@@ -88,7 +88,7 @@ export function QuestionList({ reelId, takeId }: { reelId: string; takeId: strin
           type="button"
           onClick={() => void continueAi()}
           disabled={running}
-          className="rounded-full bg-accent px-4 py-2 text-sm text-[#1a140c] disabled:opacity-50"
+          className="rounded-full bg-accent px-4 py-2 text-sm text-on-accent disabled:opacity-50"
         >
           {running ? "Спрашиваем…" : "Продолжить с ИИ"}
         </button>
@@ -129,7 +129,7 @@ export function QuestionList({ reelId, takeId }: { reelId: string; takeId: strin
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  className="rounded-full bg-accent px-3 py-1 text-sm text-[#1a140c]"
+                  className="rounded-full bg-accent px-3 py-1 text-sm text-on-accent"
                   onClick={() => void saveAnswer(question.id).catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."))}
                 >
                   Сохранить ответ

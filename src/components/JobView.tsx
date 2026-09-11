@@ -98,7 +98,7 @@ export function JobView({ id }: { id: string }) {
           type="button"
           onClick={() => void retry()}
           disabled={retrying}
-          className="rounded-full bg-accent px-5 py-2 text-sm font-medium text-[#1a140c] disabled:opacity-60"
+          className="rounded-full bg-accent px-5 py-2 text-sm font-medium text-on-accent disabled:opacity-60"
         >
           {retrying ? "Запускаем…" : "Повторить"}
         </button>
