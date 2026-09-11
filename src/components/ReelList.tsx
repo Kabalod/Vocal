@@ -12,6 +12,12 @@ import { StatusBadge } from "@/components/vocal-ui/StatusBadge";
 import { GenerationGuard } from "@/lib/generation-guard";
 import { formatDate } from "@/lib/format";
 import {
+  pickThoughtPreviewFragment,
+  resetThoughtListQuery,
+  thoughtUserStatus,
+  type ThoughtPreviewSource,
+} from "@/lib/thought-preview";
+import {
   REEL_LIST_PAGE,
   REEL_STATUS_GROUP_LABELS,
   reelStatusGroup,
@@ -19,6 +25,7 @@ import {
   type ReelListItemDto,
   type ReelListResult,
 } from "@/types/reel";
+import type { ScriptBundleDto } from "@/types/script";
 
 const SORTS: Array<{ id: "updated" | "created" | "title"; label: string }> = [
   { id: "updated", label: "По обновлению" },
@@ -27,9 +34,7 @@ const SORTS: Array<{ id: "updated" | "created" | "title"; label: string }> = [
 ];
 
 function badgeStatus(group: ReturnType<typeof reelStatusGroup>): "open" | "in_progress" | "completed" {
-  if (group === "completed") return "completed";
-  if (group === "in_progress") return "in_progress";
-  return "open";
+  return thoughtUserStatus(group);
 }
 
 function NewThoughtButton({ className = "", disabled = false }: { className?: string; disabled?: boolean }) {
@@ -61,6 +66,7 @@ export function ReelList() {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ReelDto | null>(null);
+  const [previewFragment, setPreviewFragment] = useState<{ text: string; source: ThoughtPreviewSource } | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
@@ -146,6 +152,7 @@ export function ReelList() {
   useEffect(() => {
     if (!selectedId) {
       setDetail(null);
+      setPreviewFragment(null);
       setDetailError(null);
       setDetailLoading(false);
       return;
@@ -159,14 +166,31 @@ export function ReelList() {
     setDetailError(null);
     void (async () => {
       try {
-        const res = await fetch(`/api/reels/${selectedId}`, { cache: "no-store" });
-        const data = (await res.json()) as { reel?: ReelDto; error?: string };
+        const [reelRes, scriptRes] = await Promise.all([
+          fetch(`/api/reels/${selectedId}`, { cache: "no-store" }),
+          fetch(`/api/reels/${selectedId}/scripts`, { cache: "no-store" }),
+        ]);
+        const data = (await reelRes.json()) as { reel?: ReelDto; error?: string };
         if (!req.isCurrent()) return;
-        if (!res.ok || !data.reel) throw new Error(data.error ?? "Не удалось открыть превью.");
+        if (!reelRes.ok || !data.reel) throw new Error(data.error ?? "Не удалось открыть превью.");
+        let bundle: ScriptBundleDto | null = null;
+        if (scriptRes.ok) {
+          bundle = (await scriptRes.json()) as ScriptBundleDto;
+        }
+        if (!req.isCurrent()) return;
         setDetail(data.reel);
+        setPreviewFragment(
+          pickThoughtPreviewFragment({
+            initialNote: data.reel.initialNote,
+            finalScriptId: bundle?.finalScriptId ?? null,
+            selectedScriptId: bundle?.selectedScriptId ?? null,
+            versions: bundle?.versions ?? [],
+          }),
+        );
       } catch (err) {
         if (!req.isCurrent()) return;
         setDetail(null);
+        setPreviewFragment(null);
         setDetailError(err instanceof Error ? err.message : "Ошибка.");
       } finally {
         if (req.isCurrent()) setDetailLoading(false);
@@ -187,6 +211,20 @@ export function ReelList() {
       : null;
 
   const previewGroup = detail ? reelStatusGroup(detail.status) : null;
+
+  function resetSearchAndFilters() {
+    const next = resetThoughtListQuery();
+    setQ(next.q);
+    setDebouncedQ(next.q);
+    setStatus(next.status);
+    setLoading(true);
+  }
+
+  const resetAction = (
+    <ActionButton variant="secondary" onClick={resetSearchAndFilters}>
+      Сбросить поиск и фильтры
+    </ActionButton>
+  );
 
   return (
     <div className="space-y-6">
@@ -269,10 +307,18 @@ export function ReelList() {
         />
       ) : null}
       {!loading && emptyKind === "search" ? (
-        <EmptyState title="Ничего не найдено" description="Попробуйте другое название или сбросьте поиск." />
+        <EmptyState
+          title="Ничего не найдено"
+          description="Попробуйте другое название или сбросьте поиск и фильтры."
+          action={resetAction}
+        />
       ) : null}
       {!loading && emptyKind === "filter" ? (
-        <EmptyState title="Нет мыслей в этом статусе" description="Смените фильтр или откройте список «Все»." />
+        <EmptyState
+          title="Нет мыслей в этом статусе"
+          description="Смените фильтр или откройте список «Все»."
+          action={resetAction}
+        />
       ) : null}
 
       {!loading && reels.length > 0 ? (
@@ -303,10 +349,12 @@ export function ReelList() {
                   <p className="font-[family-name:var(--font-display)] text-2xl leading-snug">{detail.title}</p>
                   <StatusBadge status={badgeStatus(previewGroup)} label={REEL_STATUS_GROUP_LABELS[previewGroup]} />
                   <p className="text-sm text-muted">Обновлено {formatDate(detail.updatedAt)}</p>
-                  {detail.initialNote ? (
-                    <p className="line-clamp-6 text-sm text-text/85">{detail.initialNote}</p>
+                  {previewFragment?.source === "script" ? (
+                    <p className="line-clamp-6 text-sm text-text/85">{previewFragment.text}</p>
+                  ) : previewFragment?.source === "note" ? (
+                    <p className="line-clamp-6 text-sm text-text/85">{previewFragment.text}</p>
                   ) : (
-                    <p className="text-sm text-muted">Нет заметки.</p>
+                    <p className="text-sm text-muted">Нет сценария и заметки.</p>
                   )}
                   <p className="text-sm text-muted">
                     дублей: {detail.takeCount}

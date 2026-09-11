@@ -1,8 +1,15 @@
 import { useRouter } from "next/navigation";
-import { ReelStatusIcon } from "@/components/ReelStatusIcon";
 import { SHELL_DESKTOP_MIN_PX } from "@/components/shell-layout";
+import { IconStatusDone, IconStatusOpen, IconStatusProgress } from "@/components/vocal-ui/icons";
+import { thoughtUserStatus } from "@/lib/thought-preview";
 import { formatDate } from "@/lib/format";
 import { REEL_STATUS_GROUP_LABELS, type ReelListItemDto } from "@/types/reel";
+
+const GROUP_ICONS = {
+  open: IconStatusOpen,
+  in_progress: IconStatusProgress,
+  completed: IconStatusDone,
+} as const;
 
 export function ReelCard({
   reel,
@@ -15,6 +22,8 @@ export function ReelCard({
 }) {
   const router = useRouter();
   const groupLabel = REEL_STATUS_GROUP_LABELS[reel.statusGroup];
+  const userStatus = thoughtUserStatus(reel.statusGroup);
+  const Icon = GROUP_ICONS[userStatus];
 
   function openThought() {
     if (typeof window !== "undefined" && window.matchMedia(`(min-width: ${SHELL_DESKTOP_MIN_PX}px)`).matches) {
@@ -39,7 +48,7 @@ export function ReelCard({
         <p className="shrink-0 text-sm text-muted">{formatDate(reel.updatedAt)}</p>
       </div>
       <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted">
-        <ReelStatusIcon status={reel.status} />
+        <Icon className="h-4 w-4" />
         <span>
           {groupLabel} · дублей: {reel.takeCount}
           {reel.hasScript ? " · есть сценарий" : ""}

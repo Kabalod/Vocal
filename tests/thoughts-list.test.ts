@@ -111,4 +111,31 @@ test("thought list groups statuses, paginates, and keeps compact DTO", async (t)
   const ids = [...firstPage.reels, ...secondPage.reels].map((row: { id: string }) => row.id);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(secondPage.totalCount, 5);
+
+  const withScript = await prisma.reel.create({
+    data: {
+      title: "Со сценарием",
+      initialNote: "заметка не должна утечь как сценарий",
+      status: "idea",
+    },
+  });
+  await prisma.scriptVersion.create({
+    data: {
+      reelId: withScript.id,
+      kind: "manual",
+      body: "полный текст готового сценария который нельзя отдавать в списке",
+    },
+  });
+  await prisma.reel.update({
+    where: { id: withScript.id },
+    data: { selectedScriptId: (await prisma.scriptVersion.findFirst({ where: { reelId: withScript.id } }))!.id },
+  });
+  const listed = await (await listGet(new Request("http://vocal.local/api/reels?status=all&q=Со сценарием"))).json();
+  assert.equal(listed.reels.length, 1);
+  const item = listed.reels[0] as Record<string, unknown>;
+  assert.equal(item.hasScript, true);
+  assert.equal("body" in item, false);
+  assert.equal("versions" in item, false);
+  assert.equal("scripts" in item, false);
+  assert.equal(JSON.stringify(item).includes("полный текст готового сценария"), false);
 });
