@@ -1,13 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { ThoughtMediaProcessing } from "@/components/ThoughtMediaProcessing";
+import { ThoughtVideoUpload } from "@/components/ThoughtVideoUpload";
+import { ThoughtVoiceRecorder } from "@/components/ThoughtVoiceRecorder";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
+import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
 import { InlineError } from "@/components/vocal-ui/InlineError";
 import { SegmentedTabs } from "@/components/vocal-ui/SegmentedTabs";
-import { VocalModal } from "@/components/vocal-ui/VocalModal";
+import { uploadThoughtMedia } from "@/lib/thought-media-upload";
 import {
   clearThoughtDraft,
+  newThoughtIdempotencyKey,
   readThoughtDraft,
   writeThoughtDraft,
   type ThoughtDraft,
@@ -36,12 +41,27 @@ export function NewThoughtSheet({
   const [saved, setSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [voiceDirty, setVoiceDirty] = useState(false);
+  const [voiceKey, setVoiceKey] = useState(0);
+  const [mediaKey, setMediaKey] = useState("");
+  const [reelId, setReelId] = useState<string | null>(null);
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const pendingMethod = useRef<MethodId | null>(null);
+  const leaveAfterConfirm = useRef<"close" | "switch" | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setMethod("text");
     setError(null);
     setSubmitting(false);
+    setVoiceDirty(false);
+    setVoiceKey((value) => value + 1);
+    setMediaKey(newThoughtIdempotencyKey());
+    setReelId(null);
+    setUploadPercent(null);
+    setProcessing(false);
     setDraft(readThoughtDraft());
     setSaved(true);
   }, [open]);
@@ -54,6 +74,15 @@ export function NewThoughtSheet({
     });
     setSaved(true);
   }
+
+  const openThought = useCallback(
+    (id: string) => {
+      clearThoughtDraft();
+      onClose();
+      router.push(`/reels/${id}`);
+    },
+    [onClose, router],
+  );
 
   async function continueWithVocal() {
     if (submitting || !draft.body.trim()) return;
@@ -72,9 +101,7 @@ export function NewThoughtSheet({
       });
       const data = (await res.json()) as { reel?: { id: string }; error?: string };
       if (!res.ok || !data.reel) throw new Error(data.error ?? "Не удалось создать мысль.");
-      clearThoughtDraft();
-      onClose();
-      router.push(`/reels/${data.reel.id}`);
+      openThought(data.reel.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка.");
     } finally {
@@ -82,14 +109,72 @@ export function NewThoughtSheet({
     }
   }
 
+  async function sendMedia(file: File, inputType: "audio" | "video") {
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
+    setProcessing(true);
+    setUploadPercent(0);
+    try {
+      const result = await uploadThoughtMedia(
+        { file, inputType, idempotencyKey: mediaKey },
+        (percent) => setUploadPercent(percent),
+      );
+      setReelId(result.reelId);
+      setUploadPercent(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось загрузить файл.");
+      setProcessing(false);
+      setUploadPercent(null);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function requestLeave(kind: "close" | "switch", next?: MethodId) {
+    if (voiceDirty || processing) {
+      leaveAfterConfirm.current = kind;
+      pendingMethod.current = next ?? null;
+      setLeaveOpen(true);
+      return;
+    }
+    if (kind === "switch" && next) {
+      setMethod(next);
+      setError(null);
+      return;
+    }
+    onClose();
+  }
+
+  function confirmLeave() {
+    const kind = leaveAfterConfirm.current;
+    setLeaveOpen(false);
+    setVoiceDirty(false);
+    setVoiceKey((value) => value + 1);
+    setProcessing(false);
+    setReelId(null);
+    setUploadPercent(null);
+    if (kind === "switch" && pendingMethod.current) {
+      setMethod(pendingMethod.current);
+      pendingMethod.current = null;
+      return;
+    }
+    onClose();
+  }
+
   const canContinue = Boolean(draft.body.trim()) && saved && !submitting;
 
   return (
-    <VocalModal open={open} title="Новая мысль" onClose={onClose} placement="sheet">
+    <VocalModal open={open} title="Новая мысль" onClose={() => requestLeave("close")} placement="sheet">
       <div className="space-y-4">
-        <SegmentedTabs items={METHODS} value={method} onChange={(id) => setMethod(id as MethodId)} aria-label="Способ создания" />
+        <SegmentedTabs
+          items={METHODS}
+          value={method}
+          onChange={(id) => requestLeave("switch", id as MethodId)}
+          aria-label="Способ создания"
+        />
 
-        {method === "text" ? (
+        {method === "text" && !processing ? (
           <div className="grid gap-4 shell:grid-cols-[minmax(0,1fr)_minmax(11rem,14rem)] shell:items-start">
             <div className="space-y-3">
               <label className="block space-y-1" htmlFor={titleId}>
@@ -136,13 +221,35 @@ export function NewThoughtSheet({
           </div>
         ) : null}
 
-        {method === "voice" ? (
-          <p className="text-sm text-muted">Запись голоса появится на следующем этапе. Микрофон сейчас не включается.</p>
+        {method === "voice" && !processing ? (
+          <ThoughtVoiceRecorder
+            key={voiceKey}
+            disabled={submitting}
+            onDirtyChange={setVoiceDirty}
+            onReadyFile={(file) => void sendMedia(file, "audio")}
+          />
         ) : null}
-        {method === "video" ? (
-          <p className="text-sm text-muted">Загрузка видео появится на следующем этапе.</p>
+
+        {method === "video" && !processing ? (
+          <ThoughtVideoUpload disabled={submitting} error={error} onFile={(file) => void sendMedia(file, "video")} />
         ) : null}
+
+        {processing ? (
+          <ThoughtMediaProcessing reelId={reelId} uploadPercent={uploadPercent} onReady={openThought} />
+        ) : null}
+
+        {method !== "text" && error && !processing ? <InlineError message={error} /> : null}
       </div>
+
+      <VocalModal open={leaveOpen} title="Удалить эту запись?" initialFocus="safe" onClose={() => setLeaveOpen(false)}>
+        <p className="text-sm text-muted">Несохранённый фрагмент пропадёт. Исходник на сервере не создаётся, пока загрузка не закончилась.</p>
+        <ConfirmActions
+          cancelLabel="Вернуться к записи"
+          confirmLabel="Удалить запись"
+          onCancel={() => setLeaveOpen(false)}
+          onConfirm={confirmLeave}
+        />
+      </VocalModal>
     </VocalModal>
   );
 }

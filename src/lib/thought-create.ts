@@ -4,7 +4,8 @@ import { getReel, ReelError } from "@/lib/reels";
 import { REEL_NOTE_MAX, REEL_TITLE_MAX, TAKE_TEXT_MAX, type ReelDto } from "@/types/reel";
 import { SCRIPT_BODY_MAX, emptyRecording } from "@/types/script";
 
-const DEFAULT_TITLE = "Новая мысль";
+export const DEFAULT_THOUGHT_TITLE = "Новая мысль";
+const DEFAULT_TITLE = DEFAULT_THOUGHT_TITLE;
 
 function isUniqueConflict(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";

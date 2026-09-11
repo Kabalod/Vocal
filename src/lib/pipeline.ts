@@ -26,9 +26,11 @@ export type PipelineDeps = {
   extractAudio?: typeof extractAudio;
   probeDuration?: typeof probeDuration;
   now?: () => Date;
+  suggestTitle?: import("@/types/review").CompleteJsonFn;
 };
 
 export function enqueueJob(jobId: string) {
+  if (process.env.VOCAL_SKIP_JOB_ENQUEUE === "1") return;
   if (!queue.includes(jobId)) {
     queue.push(jobId);
   }
@@ -185,6 +187,11 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
       const stt = await transcribe(audioPath);
       transcript = stt.text;
       segments = stt.segments;
+      if (!transcript.trim()) {
+        throw Object.assign(new Error("В записи не удалось распознать речь."), {
+          code: "EMPTY_TRANSCRIPT",
+        });
+      }
 
       if (job.takeId) {
         original = await saveOriginalIfAbsent(job.takeId, {
@@ -203,6 +210,11 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
         transcript = selected.text;
         if (selected.segments.length > 0) segments = selected.segments;
       }
+    }
+
+    if (job.takeId && transcript.trim()) {
+      const { applyThoughtMediaFromTranscript } = await import("@/lib/thought-media");
+      await applyThoughtMediaFromTranscript(job.takeId, transcript, deps.suggestTitle);
     }
 
     stage = "analyze";
