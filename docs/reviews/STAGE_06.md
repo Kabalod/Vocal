@@ -6,7 +6,8 @@
 - BASE_SHA: `a38989733bc701b74a9690cc81518c6ce277b836`
 - Коммит(ы) кода: `94d8d2487564ed85eeee418494dbd60162fec62c`
 - Коммит исправления: `506753d4873121686ce625427f093171d9bc9b7f`
-- HEAD_SHA: `506753d4873121686ce625427f093171d9bc9b7f`
+- Коммит исправления (finalizing): `8590b541920b10d69875028a67a51ac00858ebb4`
+- HEAD_SHA: `8590b541920b10d69875028a67a51ac00858ebb4`
 - Ветка: `feat/vocal-v2-06-studio-dialogue`
 - Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-06-studio-dialogue
 
@@ -50,7 +51,7 @@ Stage 05 принят на SHA `a38989733bc701b74a9690cc81518c6ce277b836` (ко�
 
 | Проверка | Результат | Ограничения |
 |---|---|---|
-| `npm run test:reels` | 65/65 | mock complete; legacy Q&A; idempotent send; parallel transfer; STT fail без AI; recorder onstop; send key |
+| `npm run test:reels` | 66/66 | mock complete; legacy Q&A; idempotent send; parallel transfer; STT fail без AI; recorder onstop; delayed onstop lock; send key |
 | `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01 |
 | `npm run typecheck` | exit 0 | `scripts` в exclude |
 | `npm run build` | успех | маршруты `/api/thoughts/[id]/dialogue*` |
@@ -86,3 +87,8 @@ Stage 05 принят на SHA `a38989733bc701b74a9690cc81518c6ce277b836` (ко�
 - Исправление: Blob в `onstop`; STT/пустая расшифровка — ошибка без AI; `claimKey` + транзакция; кнопка переноса блокируется; ключ отправки живёт до успеха.
 - Новый commit SHA: `506753d4873121686ce625427f093171d9bc9b7f`
 - Повторная проверка: `test:reels` 65/65; lint; typecheck; build. Живой mic/STT не гонялись. Stage 07 не начинался.
+
+- Замечание: после «Отправить голос» Composer открывался до `onstop`, можно было отправить текст или начать новую запись.
+- Исправление: состояние `finalizing` до `await finishVoiceRecording`; Composer и новая запись закрыты; refs чистятся только если это тот же recorder/stream.
+- Новый commit SHA: `8590b541920b10d69875028a67a51ac00858ebb4`
+- Повторная проверка: `test:reels` 66/66; lint; typecheck; build. Stage 07 не начинался.
