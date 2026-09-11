@@ -60,7 +60,7 @@ export function UiKitCatalog() {
           <ActionButton variant="primary" disabled disabledReason="Сначала введите название">
             Продолжить
           </ActionButton>
-          <IconButton label="Микрофон">
+          <IconButton variant="microphone" label="Микрофон">
             <IconMic />
           </IconButton>
           <IconButton label="Отправить">

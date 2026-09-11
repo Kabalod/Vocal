@@ -48,7 +48,7 @@ export function Composer({
         }}
       />
       <div className="flex items-center justify-end gap-2">
-        <IconButton label="Записать голос" disabled={disabled} onClick={onMic}>
+        <IconButton variant="microphone" label="Записать голос" disabled={disabled} onClick={onMic}>
           <IconMic />
         </IconButton>
         <ActionButton type="submit" variant="primary" disabled={!canSend} disabledReason={!canSend ? "Введите текст" : undefined}>
