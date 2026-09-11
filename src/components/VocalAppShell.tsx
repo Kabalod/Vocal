@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useLayoutEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   SHELL_DESKTOP_MEDIA,
   readStoredShellCollapsed,
   subscribeShellCollapsed,
   writeStoredShellCollapsed,
 } from "@/components/shell-layout";
+import { getSheetFocusableElements, trapSheetTab } from "@/components/shell-sheet";
 import { isShellNavActive, SHELL_NAV, shellBack, shellHeaderTitle } from "@/components/shell-nav";
 
 function IconRecordings() {
@@ -74,9 +75,15 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
   const [collapsed, setCollapsed] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const sheetPanelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const back = shellBack(pathname);
   const title = shellHeaderTitle(pathname);
+
+  function closeSheet() {
+    setSheetOpen(false);
+  }
 
   useLayoutEffect(() => {
     setCollapsed(readStoredShellCollapsed());
@@ -101,15 +108,26 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!sheetOpen) return;
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setSheetOpen(false);
-    }
+    const panel = sheetPanelRef.current;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKey);
+    const first = panel ? getSheetFocusableElements(panel)[0] : null;
+    (first ?? panel)?.focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeSheet();
+        return;
+      }
+      if (panel) trapSheetTab(event, panel, document.activeElement);
+    }
+
+    document.addEventListener("keydown", onKeyDown);
     return () => {
+      document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKey);
+      menuButtonRef.current?.focus();
     };
   }, [sheetOpen]);
 
@@ -151,6 +169,7 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex min-h-11 items-center gap-3 border-b border-line px-4 py-3 shell:px-6">
           <button
+            ref={menuButtonRef}
             type="button"
             className="vocal-btn shell:!hidden"
             onClick={() => setSheetOpen(true)}
@@ -178,24 +197,21 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
 
       {sheetOpen ? (
         <div className="fixed inset-0 z-50 shell:!hidden">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/50"
-            aria-label="Закрыть меню"
-            onClick={() => setSheetOpen(false)}
-          />
+          <div className="absolute inset-0 bg-black/50" aria-hidden="true" onClick={closeSheet} />
           <div
+            ref={sheetPanelRef}
             id="vocal-mobile-sheet"
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
+            tabIndex={-1}
             className="relative flex h-full w-[min(18rem,calc(100vw-1.5rem))] max-w-full flex-col rounded-r-[var(--vocal-radius-modal)] bg-bg-elev"
           >
             <div className="flex items-center justify-between gap-3 px-4 py-4">
               <p id={titleId} className="font-[family-name:var(--font-display)] text-xl">
                 Vocal
               </p>
-              <button type="button" className="vocal-btn shrink-0" onClick={() => setSheetOpen(false)}>
+              <button type="button" className="vocal-btn shrink-0" onClick={closeSheet}>
                 Закрыть
               </button>
             </div>
@@ -204,13 +220,13 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
                 href={RECORDINGS_NAV.href}
                 label={RECORDINGS_NAV.label}
                 collapsed={false}
-                onNavigate={() => setSheetOpen(false)}
+                onNavigate={closeSheet}
               />
               <NavItem
                 href={PROFILE_NAV.href}
                 label={PROFILE_NAV.label}
                 collapsed={false}
-                onNavigate={() => setSheetOpen(false)}
+                onNavigate={closeSheet}
               />
             </nav>
             <p className="px-4 py-3 text-sm text-muted">Дубли, сценарий и вопросы — внутри записи.</p>
