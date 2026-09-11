@@ -151,3 +151,61 @@ test("text thought create is one transaction, idempotent, and keeps draft on err
   assert.ok(draft.idempotencyKey);
   assert.notEqual(newThoughtIdempotencyKey(), newThoughtIdempotencyKey());
 });
+
+test("concurrent thought create with the same key returns one thought", async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vocal-thought-race-"));
+  const url = fileUrl(path.join(dir, "test.db"));
+  process.env.DATABASE_URL = url;
+  delete process.env.VOCAL_FAIL_THOUGHT_CREATE;
+  await resetPrismaClient();
+  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* windows lock */
+    }
+  });
+  migrateDeploy(url);
+
+  const { POST } = await import("../src/app/api/thoughts/route");
+  const key = "idem-thought-race-1";
+  const body = "одновременный текст мысли";
+  const before = {
+    reels: await prisma.reel.count(),
+    takes: await prisma.take.count(),
+    transcripts: await prisma.transcriptRevision.count(),
+    scripts: await prisma.scriptVersion.count(),
+    keys: await prisma.thoughtCreateKey.count(),
+  };
+
+  const [first, second] = await Promise.all([
+    POST(
+      new Request("http://vocal.local/api/thoughts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "Гонка А", body, idempotencyKey: key }),
+      }),
+    ),
+    POST(
+      new Request("http://vocal.local/api/thoughts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "Гонка Б", body: "другой текст", idempotencyKey: key }),
+      }),
+    ),
+  ]);
+
+  assert.ok([200, 201].includes(first.status), `first status ${first.status}`);
+  assert.ok([200, 201].includes(second.status), `second status ${second.status}`);
+  const firstBody = await first.json();
+  const secondBody = await second.json();
+  assert.equal(firstBody.reel.id, secondBody.reel.id);
+  assert.equal(await prisma.reel.count(), before.reels + 1);
+  assert.equal(await prisma.take.count(), before.takes + 1);
+  assert.equal(await prisma.transcriptRevision.count(), before.transcripts + 1);
+  assert.equal(await prisma.scriptVersion.count(), before.scripts + 1);
+  assert.equal(await prisma.thoughtCreateKey.count(), before.keys + 1);
+});

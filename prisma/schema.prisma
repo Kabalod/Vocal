@@ -27,6 +27,7 @@ model Reel {
   aiCalls          AiCall[]
   scripts          ScriptVersion[]
   compares         CompareResult[]
+  thoughtCreateKeys ThoughtCreateKey[]
 }
 
 model CreatorProfile {
@@ -55,6 +56,13 @@ model ReelContextSnapshot {
   selectedKeysJson   String
   assembledJson      String
   createdAt          DateTime @default(now())
+}
+
+model ThoughtCreateKey {
+  key       String   @id
+  reelId    String   @unique
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
 }
 
 model Take {
