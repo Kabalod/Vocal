@@ -1,35 +1,35 @@
-# Vocal Design System v1
+# Vocal Design System v2
 
-Источник этапа DESIGN_01: `vocal_complete_plan_10_15/DESIGN_SYSTEM.md`.
+Источник: `vocal_cursor_plan_2026-09-10/source_specs/UI_SPEC.md`, этап Stage 01.
 
 ## Направление
 
-Dark editorial workspace для одного автора. Интерфейс должен ощущаться как спокойная студия, где человек развивает мысль и записывает ролики, а не как корпоративная админка.
+Тёмная editorial-студия. Один champagne-акцент, без неона, нижнего dock и отдельного tablet-layout.
 
-## Цвета
+## Токены
 
 ```css
---vocal-bg: #11100f;
---vocal-surface: #191816;
---vocal-surface-raised: #211f1c;
---vocal-text: #f4efe7;
---vocal-muted: #a9a098;
---vocal-accent: #e4a85b;
---vocal-danger: #d87979;
---vocal-success: #91b896;
---vocal-line: rgba(255, 255, 255, 0.10);
+--vocal-bg: #070707;
+--vocal-surface: #151410;
+--vocal-field: #201d18;
+--vocal-text: #f3efe7;
+--vocal-muted: #b8b0a3;
+--vocal-accent: #d4a574;
+--vocal-on-accent: #241a10;
+--vocal-danger: #f0a39a;
+--vocal-success: #9cc5a0;
+--vocal-line: #34312b;
+--vocal-input-border: #81796c;
+--vocal-focus: #f0cd9d;
+--vocal-radius-control: 10px;
+--vocal-radius-panel: 16px;
+--vocal-radius-modal: 20px;
 ```
 
-Существующие классы `bg-bg`, `bg-bg-elev`, `text-muted`, `border-line` остаются алиасами этих токенов.
+Алиасы: `--bg`, `--bg-elev`, `--line`, `--text`, `--muted`, `--accent`, `--on-accent`, `--focus`, `--good`, `--bad`. Текст на champagne — `text-on-accent`, не сырой hex.
 
-## Правила
+## Shell
 
-- Один главный акцентный цвет — тёплый янтарный.
-- Не использовать неон, случайные градиенты, сильные тени и glassmorphism.
-- Радиусы: 16px для небольших элементов, 20–24px для рабочих панелей.
-- Границы тонкие и малоконтрастные.
-- На экране один главный CTA.
-- Вторичные действия — outline-кнопки или меню.
-- Не превращать каждый текстовый блок в отдельную карточку.
-- На desktop: sidebar + рабочая область; на mobile: Sheet/Drawer — со следующего дизайн-этапа.
-- Каждый экран обязан иметь loading, empty, error и disabled-состояния.
+- Два макета: `< 1200px` Sheet; `≥ 1200px` sidebar 200 px / 64 px.
+- Состояние сворачивания в `localStorage` (`vocal-shell-collapsed`).
+- Глобальная навигация: «Записи» и «Профиль». Нет нижнего dock.

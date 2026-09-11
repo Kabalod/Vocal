@@ -1,106 +1,75 @@
-# Отчёт после этапа для проверки через GitHub
+# Отчёт этапа
 
 ## Идентификация
 
-- Этап: 1 — карточки роликов и дубли в базе
-- Репозиторий: Kabalod/Vocal
-- Ветка: feat/personal-mvp-01-reels-and-takes
-- BASE_SHA (до изменений): 89c52c52160f4ac2ce8155f6ece178bc259c7092
-- HEAD_SHA (после изменений): `3659cd15edf207c458a7fd3d70bb746108881cfc` (коммит реализации этапа 1); итоговый HEAD — вершина ветки после исправления ревью
-- Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-01-reels-and-takes
-- Ветка отправлена в GitHub: да (после `git push -u origin HEAD`, без force)
-- Предыдущий этап принят: да, этап 0 на `89c52c52160f4ac2ce8155f6ece178bc259c7092`
+- Этап: Stage 01 — визуальная основа и shell
+- BASE_SHA: `da1396f138e1be2b549a623a859ee8084cded420`
+- Коммит(ы) кода: `968d3cf6a7e7fa3aa40d5ce7deebd07662066e83`
+- HEAD_SHA: вершина этой ветки после документационного коммита; код не меняется
+- Ветка: `feat/vocal-v2-01-foundation-shell`
+- Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-01-foundation-shell
 
-## Реализовано
+DESIGN_05 принят на SHA `da1396f138e1be2b549a623a859ee8084cded420`. Это BASE Stage 01. Поздний docs-only коммит со статусом «принят» на ветке DESIGN_05 базой не становится. DESIGN_06 не начинался.
 
-- Карточка Reel и дубль Take в SQLite; Job опционально связан с Take (несколько Job на один Take позже).
-- Старые загрузки перенесены: по одной карточке и Take №1 на каждую Job, без склейки идей.
-- Повтор backfill не создаёт дубликаты.
-- Текстовый дубль без видео и без Job.
-- Явный выбор финального дубля с проверкой принадлежности карточке.
-- Архивация меняет статус, не удаляет takes/jobs/медиа.
-- Ключ идемпотентности отличает повтор запроса от новой загрузки того же файла.
-- Новая загрузка видео создаёт Reel + Take и связывает Job (без вызова модели). Повтор Job по-прежнему тот же Job.
+## Что реализовано
 
-Экран «Мои ролики» не делался (этап 2).
+- Токены UI_SPEC в `globals.css`: фон `#070707`, поверхность, field, champagne `#d4a574`, текст на accent, muted, line, input-border, danger, success, focus, радиусы 10/16/20, CTA-shadow, breakpoint `shell` = 1200px (`75rem`).
+- Дублирующий hex `#1a140c` заменён на `text-on-accent`.
+- `VocalAppShell`: два макета; desktop sidebar 200/64; «Записи» сверху, «Профиль» и сворачивание снизу; persist `localStorage` (`vocal-shell-collapsed`); mobile Sheet без dock; `shell:!hidden` у кнопки «Меню», чтобы `.vocal-btn` не перебивал `hidden`.
+- Маршруты `/reels`, `/profile`, `/`, `/history`, `/settings`, `/jobs/[id]` сохранены; продуктовые экраны не перестраивались.
 
-## Файлы
+## Что намеренно не реализовано
 
-| Путь | Изменение и причина |
-|---|---|
-| prisma/schema.prisma | Reel, Take, Job.takeId |
-| prisma/migrations/20260907120000_init | baseline схемы db push |
-| prisma/migrations/20260907121000_reels_and_takes | таблицы Reel/Take и колонка Job.takeId |
-| prisma/migrations/migration_lock.toml | sqlite |
-| scripts/migrate-existing-sqlite.ts | baseline --applied для старых БД |
-| scripts/backfill-reels.ts | перенос Job → Reel+Take |
-| scripts/db-counts.ts | сверка counts на копии |
-| src/types/reel.ts | DTO и статусы, отдельно от JobStatus |
-| src/lib/reels.ts | создание/обновление/архив/дубли |
-| src/lib/serialize.ts | Reel/Take DTO без путей к медиа; JobDto без изменений |
-| src/app/api/uploads/route.ts | новая загрузка сразу получает карточку и дубль |
-| tests/reels-migration.test.ts | временная БД |
-| package.json | migrate, backfill, test:reels |
-| README.md | migrate deploy; существующая БД |
-| docs/IMPLEMENTATION_STATUS.md | этап 0 принят, этап 1 на ревью |
-| docs/reviews/STAGE_01.md | этот отчёт |
+- Переименование «Записи» → «Мысли», студия, сценарии, профиль, UI-kit `/dev/ui`, Stage 02+.
+- API, Prisma, AI, бизнес-статусы.
+- Нижний dock и отдельный tablet-layout.
+- Новый веб-шрифт.
 
-## Данные и миграции
+## Изменённые файлы
 
-- Требуемые команды для новой БД: `npx prisma migrate deploy`, затем seed.
-- Для БД после db push: `npm run db:migrate:existing`, затем `npm run db:backfill-reels`.
-- Как сохранены старые данные: Job/AnalysisResult не удалялись; INSERT в new_Job копирует прежние колонки; payload не менялся.
-- Где находится локальная резервная копия (без содержимого): `%USERPROFILE%\Vocal-backups\stage01-2026-09-07-171257`
-- Проверялось ли восстановление: да, копия совпала с живой БД до миграции (2/2/22).
-- Проверялся ли повтор миграционного переноса: миграция на копии, затем на рабочей; backfill дважды на копии и на рабочей (второй проход created=0).
+- `src/app/globals.css`, `src/components/VocalAppShell.tsx`, `src/components/shell-layout.ts`, `src/components/shell-status.tsx`
+- `text-on-accent` в существующих кнопках/чипах (без смены разметки экранов)
+- `tests/shell-layout.test.ts`, `package.json`
+- `docs/design/DESIGN_SYSTEM.md`, этот отчёт
+
+## Миграции и данные
+
+- Новая миграция: нет
+- Проверка существующей SQLite: не требовалась
+- Проверка чистой SQLite: не требовалась
+- Backfill: нет
+- Возможность отката: git revert коммита кода
 
 ## Проверки
 
-| Команда или ручной сценарий | Выполнено? | Результат | Ограничения |
-|---|---|---|---|
-| бэкап + restore counts | да | совпало | не git |
-| migrate+backfill на копии | да | 2 reel / 2 take, payload те же | временный файл |
-| migrate+backfill на рабочей БД | да | то же | localhost |
-| npm run test:reels | да | pass | временная БД, без Groq |
-| npm run lint | да | ok | next lint deprecated |
-| npm run typecheck | да | исходные ошибки | не этап 1 |
-| npm run build | да | падает на score-analyz.ts:93 | исходная |
-| UI «Мои ролики» | нет | этап 2 | |
-| STT / Groq | нет | не вызывались | |
+| Проверка | Результат | Ограничения |
+|---|---|---|
+| `npm run test:reels` | 38/38 | mock Groq; +тесты shell layout |
+| `npm run lint` | exit 0 | — |
+| `npm run typecheck` | exit 0 | `scripts` в exclude; `analyze.ts` с `@ts-nocheck` |
+| `npm run build` | успех | Next 15.5.23 |
+| Browser 390×844 | sidebar `display:none`; кнопка «Меню»; Sheet «Записи»/«Профиль»; `scrollWidth=390` | клик Sheet→Профиль через overlay Next Devtools нестабилен; переход URL работает |
+| Browser 1280×800 | sidebar 200 / 64; persist; меню скрыто; main ~1065 при 200px sidebar | живой Groq не вызывался |
 
-- Исходные ошибки проекта: TS1501 `scripts/score-analyz.ts:93`; strict-ошибки `src/lib/analyze.ts`.
-- Новые ошибки этапа: нет (после правки импортов в тесте без `.ts`).
-- Платные вызовы использовались: нет
-- Какие проверки требуют компьютера пользователя: экран списка роликов (этап 2), живая загрузка файла
+## AI и внешние сервисы
 
-## ИИ
+- Какие AI-вызовы добавлены или изменены: нет
+- Проверено mock: да (существующие тесты)
+- Проверено live: нет
+- Что не проверено: живой Groq, реальная запись медиа
 
-- Какие действия реально вызывают модель: по-прежнему STT и LLM у Job; создание Reel/Take/архив/backfill — нет.
-- Какие действия проверены без ключа: миграция, backfill, test:reels, lint, typecheck, build.
-- Какие версии входов сохраняются: AnalysisResult.payload как был; Job id те же.
-- Что происходит при ошибке или повторе: retry Job не создаёт Take; повтор backfill пустой; одинаковый idempotencyKey возвращает тот же Take.
+## Совместимость с будущим обучением
 
-## Осталось
+Этап не трогал данные, завершение, диалог, профиль-модель и AI.
 
-- Невыполненные условия готовности: внешнее ревью этапа 1.
-- Известные проблемы: typecheck/build красные из‑за исходных ошибок; нет UI карточек.
-- Отклонения: затронут `uploads/route.ts` (не было в списке файлов этапа), чтобы новые Job не оставались без Take. Тесты на `node:test` + tsx, без новой зависимости test-раннера.
+- Какие исторические данные затронуты: нет
+- Может ли что-либо перезаписаться/удалиться при завершении, retry или возврате в работу: нет
+- Сохраняются ли source metadata, порядок, итоговые ссылки и snapshots: да, без изменений
+- Не создана ли новая рубрика в обход `playbook.ts`/`framework.ts`: нет
+- Можно ли позднее добавить read-only learning job без изменения смысла текущих моделей: да
 
-## Запрос ревьюеру
+## Подтверждения
 
-Проверь BASE_SHA..HEAD_SHA: схему, baseline, транзакции backfill, уникальность номеров, сохранность Job/AnalysisResult/медиа.
-Не считай этап принятым только на основании этого отчёта.
-
-## После замечаний
-
-- Замечание: повтор запроса с jobId отклонялся JOB_HAS_TAKE до поиска по ключу.
-- Исправление: сначала idempotencyKey; уже привязанная к этому Take Job возвращается. Тест: два запроса с jobId+ключом — один Take.
-- Замечание: гонка могла перепривязать Job через connect вне атомарного условия.
-- Исправление: `updateMany` только при `takeId = null`; при count ≠ 1 транзакция откатывает дубль. Тест: одна Job, две карточки.
-- Замечание: baseline по отсутствию `_prisma_migrations` для любой SQLite.
-- Исправление: сверка старой схемы; пустая БД — `migrate deploy`; иное — стоп без resolve.
-- Замечание: нет теста переноса заполненной старой БД; payloadHashes только длина.
-- Исправление: сценарий db-push SQL → данные → baseline+migrate → backfill×2, точный payload, sha256, `PRAGMA foreign_key_check`. В `db-counts.ts` — sha256.
-- SQL уже применённых миграций не менялся.
-- Новый commit SHA: вершина ветки после push
-- Повторная проверка: `npm run test:reels` 4/4; lint ок; typecheck/build — только исходные ошибки
+- Force push не использовался.
+- Следующий этап не начинался.
+- Этап не объявляется принятым до внешнего ревью.

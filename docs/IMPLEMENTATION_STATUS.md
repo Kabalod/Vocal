@@ -1,9 +1,8 @@
 # Статус личного MVP
 
 Репозиторий: `Kabalod/Vocal`.  
-План: [cursor-plan/README.md](cursor-plan/README.md).  
-Следующая последовательность (дизайн, затем профиль 10–15): локальная папка `vocal_complete_plan_10_15/`.  
-Принятый DESIGN_04 / база DESIGN_05: `729d1e586a65712b21433c106d13ec77fd99795c`.
+План: локальная папка `vocal_cursor_plan_2026-09-10` (не в git). Старый `vocal_complete_plan_10_15` закрыт после DESIGN_05.  
+Принятый DESIGN_05 / база Stage 01: `da1396f138e1be2b549a623a859ee8084cded420`.
 
 Легенда статуса: `не начат` · `в работе` · `на ревью` · `принят` · `есть замечания`.
 
@@ -23,7 +22,8 @@
 | D02 | Shell и навигация | принят | `feat/personal-mvp-design-02-shell` | `c1976b6853b56720aabbc7b0e1e453d4bf7b1f36` | `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b` | lint; typecheck; build; test:reels 30/30 | принято внешним ревью; код `3fa3cc6` |
 | D03 | Экран «Записи» | принят | `feat/personal-mvp-design-03-recordings` | `9cfb5b92f0b2f3ec4081f314b82467aebd56b61b` | `7f32e9db6ef12562651a1801c904e959117f840d` | lint; typecheck; build; test:reels 31/31 | принято внешним ревью; код `2cd5bc1` |
 | D04 | Рабочая область записи | принят | `feat/personal-mvp-design-04-reel-workspace` | `7f32e9db6ef12562651a1801c904e959117f840d` | `729d1e586a65712b21433c106d13ec77fd99795c` | lint; typecheck; build; test:reels 32/32 | принято внешним ревью; код `505024d` |
-| D05 | Сценарий и версии | на ревью | `feat/personal-mvp-design-05-script-versions` | `729d1e586a65712b21433c106d13ec77fd99795c` | `620c6927170c8248963a0eef29f9677611224a1b` | lint; typecheck; build; test:reels 35/35 | замечания закрыты в `620c692`; код этапа `df861de` |
+| D05 | Сценарий и версии | принят | `feat/personal-mvp-design-05-script-versions` | `729d1e586a65712b21433c106d13ec77fd99795c` | `da1396f138e1be2b549a623a859ee8084cded420` | lint; typecheck; build; test:reels 35/35 | принято внешним ревью; код `df861de` + fix `620c692`; docs `da1396f` — база Stage 01 |
+| S01 | Визуальная основа и shell | на ревью | `feat/vocal-v2-01-foundation-shell` | `da1396f138e1be2b549a623a859ee8084cded420` | `968d3cf6a7e7fa3aa40d5ce7deebd07662066e83` | lint; typecheck; build; test:reels 38/38 | код `968d3cf`; Stage 02 не начат |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
@@ -55,6 +55,8 @@
 | Принятый DESIGN_04 / база DESIGN_05 | `729d1e586a65712b21433c106d13ec77fd99795c` |
 | Коммит кода DESIGN_05 | `df861de26c7c44be262bc1170b7408478cd1826d` |
 | Исправление ревью DESIGN_05 | `620c6927170c8248963a0eef29f9677611224a1b` |
+| Принятый DESIGN_05 / база Stage 01 | `da1396f138e1be2b549a623a859ee8084cded420` |
+| Коммит кода Stage 01 | `968d3cf6a7e7fa3aa40d5ce7deebd07662066e83` |
 
 ## Этап 9 — проверки
 
