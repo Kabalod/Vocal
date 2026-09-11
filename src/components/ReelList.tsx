@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { NewThoughtSheet } from "@/components/NewThoughtSheet";
 import { ReelCard } from "@/components/ReelCard";
 import { RECORDING_FILTERS, isRecordingFilterId, type RecordingFilterId } from "@/components/reel-filters";
 import { ShellError, ShellLoading } from "@/components/shell-status";
@@ -37,15 +38,17 @@ function badgeStatus(group: ReturnType<typeof reelStatusGroup>): "open" | "in_pr
   return thoughtUserStatus(group);
 }
 
-function NewThoughtButton({ className = "", disabled = false }: { className?: string; disabled?: boolean }) {
+function NewThoughtButton({
+  className = "",
+  disabled = false,
+  onClick,
+}: {
+  className?: string;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
   return (
-    <ActionButton
-      variant="primary"
-      className={className}
-      disabled={disabled}
-      title="Способы создания мысли появятся на следующем этапе"
-      onClick={() => undefined}
-    >
+    <ActionButton variant="primary" className={className} disabled={disabled} onClick={onClick}>
       Новая мысль
     </ActionButton>
   );
@@ -69,6 +72,7 @@ export function ReelList() {
   const [previewFragment, setPreviewFragment] = useState<{ text: string; source: ThoughtPreviewSource } | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQ(q.trim()), 250);
@@ -234,7 +238,7 @@ export function ReelList() {
           <p className="mt-2 text-muted">Поиск и фильтры не вызывают ИИ.</p>
         </div>
         <div className={hasThoughts ? "" : "invisible"} aria-hidden={!hasThoughts}>
-          <NewThoughtButton disabled={!hasThoughts} />
+          <NewThoughtButton disabled={!hasThoughts} onClick={() => setCreateOpen(true)} />
         </div>
       </div>
 
@@ -303,7 +307,7 @@ export function ReelList() {
         <EmptyState
           title="Пока нет мыслей"
           description="Когда появятся мысли, они будут здесь. Поиск и фильтры не вызывают ИИ."
-          action={<NewThoughtButton />}
+          action={<NewThoughtButton onClick={() => setCreateOpen(true)} />}
         />
       ) : null}
       {!loading && emptyKind === "search" ? (
@@ -369,6 +373,7 @@ export function ReelList() {
           </aside>
         </div>
       ) : null}
+      <NewThoughtSheet open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   );
 }
