@@ -5,7 +5,8 @@
 - Этап: Stage 02 — библиотека компонентов Vocal
 - BASE_SHA: `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f`
 - Коммит(ы) кода: `c3c908f6bce2f52ad91270f06817bba9a94a8394`
-- HEAD_SHA: `c3c908f6bce2f52ad91270f06817bba9a94a8394`
+- Коммит исправления: `d1b9e6fe297ccb9a76e5a54f5874d37ab76e5fe4`
+- HEAD_SHA: `d1b9e6fe297ccb9a76e5a54f5874d37ab76e5fe4`
 - Ветка: `feat/vocal-v2-02-ui-kit`
 - Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-02-ui-kit
 
@@ -18,7 +19,7 @@
 - `Composer`, `EmptyState`, `ProcessingState`, `InlineError`.
 - `VocalModal` (dialog/sheet + Tab-trap), `ProgressBar`, `DiscreteSlider`.
 - Одно SVG-семейство (`stroke 1.6`); Lucide не ставился.
-- На каталоге: default/hover/focus/disabled/loading/error и блок ширины 390px. Champagne у primary/mic/прогресса; сегменты и пузырь «Вы» без champagne-заливки.
+- На каталоге: default/hover/focus/disabled/loading/error и блок ширины 390px. Champagne у primary, микрофона (`IconButton variant="microphone"`) и прогресса; сегменты и пузырь «Вы» без champagne-заливки. Вкладки — roving tabindex, стрелки/Home/End.
 
 ## Что намеренно не реализовано
 
@@ -44,12 +45,12 @@
 
 | Проверка | Результат | Ограничения |
 |---|---|---|
-| `npm run test:reels` | 44/44 | mock Groq; +каталог UI |
+| `npm run test:reels` | 47/47 | mock Groq; поведенческие тесты Tab-клавиатуры |
 | `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01, не трогалось |
 | `npm run typecheck` | exit 0 | `scripts` в exclude; `analyze.ts` с `@ts-nocheck` |
 | `npm run build` | успех | `/dev/ui` в production prerender как `notFound` |
-| Browser 390×844 | каталог; `scrollWidth=390`; nav только `/reels` `/profile`; dialog фокус на «Закрыть»; Escape закрывает | живой Groq нет |
-| Browser 1280×800 | каталог без горизонтального скролла; sidebar как в Stage 01 | — |
+| Browser 390×844 | mic `rgb(212, 165, 116)` / `rgb(36, 26, 16)`; только выбранный сегмент `tabIndex=0`; стрелки/Home/End | send остаётся `neutral` |
+| Browser 1280×800 | тот же champagne у микрофона | — |
 
 ## AI и внешние сервисы
 
@@ -73,3 +74,10 @@
 - Force push не использовался.
 - Следующий этап не начинался.
 - Этап не объявляется принятым до внешнего ревью.
+
+## После замечаний
+
+- Замечание: микрофон был нейтральным; tablist не имел roving tabindex и стрелок.
+- Исправление: `IconButton variant="microphone"` в Composer и каталоге; `nextTabIndex` + `tabIndex={selected ? 0 : -1}`.
+- Новый commit SHA: `d1b9e6fe297ccb9a76e5a54f5874d37ab76e5fe4`
+- Повторная проверка: `test:reels` 47/47; lint; typecheck; build; браузер 390 и 1280. Stage 03 не начинался.
