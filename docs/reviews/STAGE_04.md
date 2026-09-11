@@ -1,84 +1,78 @@
-# Отчёт после этапа для проверки через GitHub
+# Отчёт этапа
 
 ## Идентификация
 
-- Этап: 4 — версии расшифровки и надёжная обработка
-- Репозиторий: Kabalod/Vocal
-- Ветка: feat/personal-mvp-04-transcripts-and-jobs
-- BASE_SHA (до изменений): 1d8f26c1cb3d137f133fc8f35b0dfd7eac8302be
-- HEAD_SHA (после изменений): `0aa040498b51dc889466ad55375a14e13121c6ab`
-- Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-04-transcripts-and-jobs
-- Ветка отправлена в GitHub: да, без force push (если push прошёл)
-- Предыдущий этап принят: да, этап 3 на `1d8f26c1cb3d137f133fc8f35b0dfd7eac8302be`
+- Этап: Stage 04 — создание мысли текстом
+- BASE_SHA: `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7`
+- Коммит(ы) кода: `ffde3d1ec9cc54224d72669c3ec1ece07be39c9b`
+- HEAD_SHA: (заполняется коммитом документации)
+- Ветка: `feat/vocal-v2-04-text-creation`
+- Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-04-text-creation
 
-## Реализовано
+Stage 03 принят на SHA `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7` (код исправления `29ff92b5e4f87a8c61ea7ad5a8c3a805de969a1f`). Это BASE Stage 04. Ветка создана от этой вершины. Stage 05 не начинался.
 
-Успешное распознавание сразу сохраняется как исходная версия расшифровки дубля, даже если последующий LLM-разбор падает. Повтор такой задачи не вызывает STT снова. Правка текста создаёт новую версию; исходник и его сегменты не переписываются. Таймкоды в UI помечены как относящиеся к исходнику. Два захвата одной задачи не идут параллельно: активный lease отклоняет второй claim/retry. Перезапуск поднимает queued и зависшие converting/transcribing/analyzing без живого lease; задачи в `error` сами не стартуют. Исчерпание попыток даёт 409, новый Take не создаётся. Старый анализ при retry не стирается на экране Job.
+## Что реализовано
 
-## Файлы
+- «Новая мысль» открывает Sheet (`VocalModal` `placement="sheet"`) с вкладками Текст / Голос / Видео.
+- Текстовый путь: название и свободное поле мысли, без отдельной кнопки «выбрать текст». Пустое название на сервере становится «Новая мысль».
+- Черновик пишется в `localStorage` (`vocal-thought-draft-v1`) сразу при вводе, без кнопки «Сохранить». После успешного создания ключ очищается; при ошибке текст остаётся.
+- `POST /api/thoughts` `{ title, body, idempotencyKey }` одной транзакцией создаёт `Reel` (`idea`), Take №1 (`inputType: text`), исходную `TranscriptRevision` (`original` / `manual`) и `ScriptVersion` v1 (`kind: manual`) с тем же текстом после trim. Выставляются `selectedTranscriptId`, `scriptVersionId` дубля и `selectedScriptId` мысли. Финальный сценарий и финальный дубль не назначаются.
+- Успех: 201 и переход в существующую студию `/reels/:id`. Повтор того же `idempotencyKey`: 200, тот же reel, второй Take №1 не создаётся. Кнопка disabled / «Создаём мысль…» на время запроса.
+- Длинный текст: `initialNote` копируется только если тело ≤ лимита заметки; иначе заметка пустая, источник истины — дубль и сценарий, без молчаливого обрезания.
 
-| Путь | Изменение и причина |
-|---|---|
-| prisma/schema.prisma | TranscriptRevision, selectedTranscriptId, stage/attempts/lease у Job |
-| prisma/migrations/20260907124000_transcripts_and_jobs | ADD TABLE/COLUMN без reset |
-| src/lib/transcripts.ts | исходник, правки, импорт из payload, выбор версии |
-| src/lib/jobs.ts | атомарный claim, heartbeat, recover без SQL-сравнения дат SQLite |
-| src/lib/pipeline.ts | convert/STT/analyze; STT в БД до LLM; inject deps для тестов |
-| src/instrumentation.ts | recoverUnfinishedJobs при старте Node |
-| src/app/api/jobs/[id]/retry/route.ts | повтор сбойного этапа; busy/exhausted; без нового Take |
-| src/app/api/takes/[id]/transcript/route.ts | список, правка, выбор версии |
-| src/components/TranscriptEditor.tsx | правки и исходник в карточке ролика |
-| src/components/ReelTakes.tsx | редактор расшифровки |
-| src/components/JobView.tsx | retry не обнуляет старый analysis |
-| tests/pipeline-recovery.test.ts | mock STT/LLM, lease, exhausted, импорт payload |
-| docs/IMPLEMENTATION_STATUS.md | этап 3 принят; этап 4 на ревью |
-| docs/PERSONAL_MVP.md | состояние после этапа 4 |
+## Что намеренно не реализовано
 
-## Данные и миграции
+- Запись голоса и upload видео: только поясняющий текст; микрофон не запрашивается.
+- `ScriptDraft`; AI на этом шаге; перестройка студии и единого диалога.
+- Stage 05 (голос).
+- Компактный DTO списка версий сценария для desktop-превью (замечание к Stage 03 / follow-up Stage 07): полный bundle через существующий `GET /api/reels/:id/scripts` для одной выбранной мысли на MVP допустим.
 
-- Требуемые команды: `npx prisma migrate deploy` (уже применено локально)
-- Как сохранены старые данные: только ADD COLUMN/TABLE; payload AnalysisResult не менялся
-- Где находится локальная резервная копия (без её содержимого): `%USERPROFILE%\Vocal-backups\stage04-2026-09-07-192344`
-- Проверялось ли восстановление: копия backup совпала по SHA256 с исходным файлом до миграции
-- Проверялся ли повтор миграционного переноса: хеши payload AnalysisResult live vs backup-копии совпали (2 записи)
+## Изменённые файлы
+
+- `src/components/NewThoughtSheet.tsx`, `src/components/ReelList.tsx`
+- `src/lib/thought-create.ts`, `src/lib/thought-draft.ts`
+- `src/app/api/thoughts/route.ts`
+- `tests/thought-text-create.test.ts`, `package.json`
+
+## Миграции и данные
+
+- Новая миграция: нет
+- Проверка существующей SQLite: создание пишет новые Reel/Take/Transcript/Script; существующие мысли не менялись схемой
+- Проверка чистой SQLite: `thought-text-create` на временной БД (`migrate deploy`)
+- Backfill: нет
+- Возможность отката: git revert коммита кода
+- Искусственный сбой `VOCAL_FAIL_THOUGHT_CREATE=after-reel` откатывает транзакцию: строк Reel/Take/Script/Transcript не остаётся
 
 ## Проверки
 
-| Команда или ручной сценарий | Выполнено? | Результат | Ограничения |
-|---|---|---|---|
-| `npm run test:reels` | да | 20/20 | временные SQLite, mock провайдер |
-| `npm run lint` | да | exit 0 | — |
-| `npm run typecheck` | да | исходные ошибки analyze.ts и score-analyz.ts | новые ошибки этапа закрыты |
-| `npm run build` | нет | — | не запускался |
-| Браузер / редактор расшифровки | нет | — | только код и автотесты API |
+| Проверка | Результат | Ограничения |
+|---|---|---|
+| `npm run test:reels` | 53/53 | mock Groq; пустое тело 400; rollback; idempotency; reload reel/takes/scripts/transcript; untitled → «Новая мысль» |
+| `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01, не трогалось |
+| `npm run typecheck` | exit 0 | `scripts` в exclude; `analyze.ts` с `@ts-nocheck` |
+| `npm run build` | успех | перед сборкой остановлен `next dev`; в маршрутах есть `/api/thoughts` |
+| Browser 390×844 | Sheet «Новая мысль»; вкладка Голос без mic/capture; `scrollWidth=390`; карточка «Stage04 текст», дублей 1, превью исходного текста | smoke на :3002 |
+| Browser 1280×800 | Sheet Текст / Голос / Видео, aside «Дальше — с Vocal»; создание → студия с текстом v1 «Это исходная мысль для проверки создания.» | React-controlled fill через native value setter |
 
-- Исходные ошибки проекта: `src/lib/analyze.ts` (strict Zod), `scripts/score-analyz.ts` TS1501
-- Новые ошибки этапа: нет после правок leaseUntil/prefer-const
-- Платные вызовы использовались: нет
-- Какие проверки требуют компьютера пользователя: живой Groq, плеер, ручная правка в UI, restart dev-сервера с зависшей задачей
+## AI и внешние сервисы
 
-## ИИ
+- Какие AI-вызовы добавлены или изменены: нет
+- Проверено mock: да
+- Проверено live: нет
+- Что не проверено: живой Groq, запись медиа
 
-- Какие действия реально вызывают модель: STT (`transcribeAudio`) и LLM (`analyzeSpeech`) в `processJob`, если нет исходной расшифровки / при анализе
-- Какие действия проверены без ключа: claim/retry/версии/импорт payload; пайплайн с mock
-- Какие версии входов сохраняются: original (stt / manual / payload_import) и edit (manual); сегменты только у original
-- Что происходит при ошибке или повторе: STT уже в БД → retry со стадии analyze; STT не был → retry снова convert/STT; lease живой → 409; attempts >= max → 409; старый AnalysisResult не удаляется
+## Совместимость с будущим обучением
 
-## Осталось
+Создание пишет исходный текст пользователя в дубль, original transcript и manual script v1. Retry с тем же ключом не создаёт второй дубль. Модель не вызывается.
 
-- Невыполненные условия готовности: нет по автотестам; ручной restart/UI не гонялись
-- Известные проблемы: сравнение DateTime в SQLite where ненадёжно — claim/recover проверяют lease в JS + optimistic `updateMany` по attempts/leaseOwner
-- Отклонения от плана и причины: Redis нет, как и требовалось; heartbeat обновляет lease на смене стадии, отдельный таймер не крутится; массовый backfill только ленивый при чтении/пайплайне, не отдельный скрипт; этап 5 не начинался
+- Какие исторические данные затронуты: только новые объекты успешного создания
+- Может ли что-либо перезаписаться/удалиться при завершении, retry или возврате в работу: retry того же ключа возвращает уже созданную мысль
+- Сохраняются ли source metadata, порядок, итоговые ссылки и snapshots: sources JSON ссылается на исходную расшифровку; порядок дубля №1
+- Не создана ли новая рубрика в обход `playbook.ts`/`framework.ts`: нет
+- Можно ли позднее добавить read-only learning job без изменения смысла текущих моделей: да
 
-## Запрос ревьюеру
+## Подтверждения
 
-Проверь изменения BASE_SHA..HEAD_SHA и соответствие инструкции этапа.
-Укажи блокирующие ошибки отдельно от необязательных улучшений.
-Не считай этап принятым только на основании этого отчёта.
-
-## После замечаний
-
-- Замечание:
-- Исправление:
-- Новый commit SHA:
-- Повторная проверка:
+- Force push не использовался.
+- Следующий этап не начинался.
+- Этап не объявляется принятым до внешнего ревью.
