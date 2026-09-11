@@ -5,7 +5,7 @@
 - Этап: Stage 04 — создание мысли текстом
 - BASE_SHA: `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7`
 - Коммит(ы) кода: `ffde3d1ec9cc54224d72669c3ec1ece07be39c9b`
-- HEAD_SHA: (заполняется коммитом документации)
+- HEAD_SHA: `ffde3d1ec9cc54224d72669c3ec1ece07be39c9b`
 - Ветка: `feat/vocal-v2-04-text-creation`
 - Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-04-text-creation
 

@@ -29,7 +29,7 @@
 | S01 | Визуальная основа и shell | принят | `feat/vocal-v2-01-foundation-shell` | `da1396f138e1be2b549a623a859ee8084cded420` | `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f` | lint; typecheck; test:reels 41/41 | принято внешним ревью; код `968d3cf`; focus-trap `a1a2853`; база Stage 02 — `7e0d4b7` |
 | S02 | Библиотека компонентов Vocal | принят | `feat/vocal-v2-02-ui-kit` | `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f` | `aadc2a8b309ad246286977e559553240dfb7d149` | lint; typecheck; build; test:reels 47/47 | принято внешним ревью; код `c3c908f`; focus-fix `d1b9e6f`; docs `aadc2a8` — база Stage 03 |
 | S03 | Экран «Мысли» | принят | `feat/vocal-v2-03-thoughts` | `aadc2a8b309ad246286977e559553240dfb7d149` | `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7` | lint; typecheck; build; test:reels 52/52 | принято внешним ревью; код `54c4221`; review-fix `29ff92b`; docs `cc3e296` — база Stage 04 |
-| S04 | Создание мысли текстом | на ревью | `feat/vocal-v2-04-text-creation` | `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7` | `ffde3d1ec9cc54224d72669c3ec1ece07be39c9b` | lint; typecheck; build; test:reels 53/53 | код `ffde3d1`; Stage 05 не начат |
+| S04 | Создание мысли текстом | на ревью | `feat/vocal-v2-04-text-creation` | `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7` | `afce97c1fbe96ca6eedf43013065519e81dd8ac6` | lint; typecheck; build; test:reels 53/53 | код `ffde3d1`; docs `afce97c`; Stage 05 не начат |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
@@ -72,6 +72,7 @@
 | Исправление ревью Stage 03 | `29ff92b5e4f87a8c61ea7ad5a8c3a805de969a1f` |
 | Принятый Stage 03 / база Stage 04 | `cc3e2961fe1aa0d0b8fb7826dfd92313a09203e7` |
 | Коммит кода Stage 04 | `ffde3d1ec9cc54224d72669c3ec1ece07be39c9b` |
+| Документация Stage 04 | `afce97c1fbe96ca6eedf43013065519e81dd8ac6` |
 
 ## Этап 9 — проверки
 
