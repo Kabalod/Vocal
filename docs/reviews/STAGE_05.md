@@ -5,7 +5,8 @@
 - Этап: Stage 05 — голос, видео и обработка материалов
 - BASE_SHA: `facb78d03942506b9e9e79fa768fca097ae18b61`
 - Коммит(ы) кода: `f887ef08b8a9792d5356eec6acb5509c02007388`
-- HEAD_SHA: `f887ef08b8a9792d5356eec6acb5509c02007388`
+- Коммит исправления: `2af98a2cdd855db4357d62c7bb8082cbdf2c0af1`
+- HEAD_SHA: `2af98a2cdd855db4357d62c7bb8082cbdf2c0af1`
 - Ветка: `feat/vocal-v2-05-media-processing`
 - Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-05-media-processing
 
@@ -18,7 +19,7 @@ Stage 04 принят на SHA `facb78d03942506b9e9e79fa768fca097ae18b61` (ис�
 - `POST /api/thoughts/media` переиспользует `saveUploadedTake`, `Job`, `ThoughtCreateKey`, ffmpeg/STT/analyze pipeline и `/api/jobs/:id/retry`.
 - Состояния: прогресс загрузки, «Файл сохранён», «Расшифровываем», «Анализируем». После STT без подтверждения создаются сценарий v1 из распознанного текста и название (AI + fallback по первой фразе). Затем переход в существующую студию `/reels/:id`.
 - Пустая расшифровка не пишется как original (retry STT возможен); файл дубля остаётся. Сбой STT/анализа не удаляет исходник.
-- Cleanup: stop tracks, revoke object URL, сброс recorder при размонтировании / смене способа / закрытии sheet.
+- Cleanup: сессия записи помечается отменённой; после `getUserMedia` поздний stream останавливается без MediaRecorder; `stop()` только в `recording`/`paused`; onstop не создаёт preview после отмены; AudioContext, tracks, таймер и RAF закрываются; Object URL не создаётся после размонтирования. Загрузка отдаёт `abort()`; polling — `AbortController`. После `reelId` закрытие не обещает удаление.
 
 ## Что намеренно не реализовано
 
@@ -30,7 +31,7 @@ Stage 04 принят на SHA `facb78d03942506b9e9e79fa768fca097ae18b61` (ис�
 ## Изменённые файлы
 
 - `src/components/NewThoughtSheet.tsx`, `ThoughtVoiceRecorder.tsx`, `ThoughtVideoUpload.tsx`, `ThoughtMediaProcessing.tsx`
-- `src/lib/thought-media.ts`, `thought-title.ts`, `thought-media-upload.ts`, `media-session.ts`, `pipeline.ts`, `thought-create.ts`
+- `src/lib/thought-media.ts`, `thought-title.ts`, `thought-media-upload.ts`, `thought-leave.ts`, `media-session.ts`, `pipeline.ts`, `thought-create.ts`
 - `src/app/api/thoughts/media/route.ts`, `src/app/api/thoughts/[id]/processing/route.ts`
 - `tests/thought-media-create.test.ts`, `tests/thought-media-cleanup.test.ts`, `package.json`
 
@@ -46,11 +47,11 @@ Stage 04 принят на SHA `facb78d03942506b9e9e79fa768fca097ae18b61` (ис�
 
 | Проверка | Результат | Ограничения |
 |---|---|---|
-| `npm run test:reels` | 56/56 | mock STT/AI; формат/размер без строк; idempotency + гонка; пустой STT не пишет transcript; retry создаёт v1; cleanup helpers |
+| `npm run test:reels` | 59/59 | mock STT/AI; формат/размер без строк; idempotency + гонка; пустой STT не пишет transcript; retry создаёт v1; late mic; inactive stop; upload abort; leave kinds |
 | `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01 |
 | `npm run typecheck` | exit 0 | `scripts` в exclude |
-| `npm run build` | успех | маршруты `/api/thoughts/media` и `/api/thoughts/[id]/processing` |
-| Browser 390×844 | Sheet, Голос idle «Готовы к записи», `scrollWidth=390`, микрофон не стартовал | live запись не проверялась |
+| `npm run build` | успех | маршруты `/api/thoughts/media` и `/api/thoughts/[id]/processing`; перед сборкой остановлен `next dev` |
+| Browser 390×844 | Sheet, Голос idle; запись с разрешённым микрофоном; закрытие во время записи — «Удалить эту запись?» про локальный фрагмент | late-permission после закрытия покрыт тестом; XHR abort — mock |
 | Browser 1280×800 | вкладка Видео: «Выбрать файл», текст про отсутствие камеры | живой upload/STT не проверялись |
 
 ## AI и внешние сервисы
@@ -58,7 +59,7 @@ Stage 04 принят на SHA `facb78d03942506b9e9e79fa768fca097ae18b61` (ис�
 - Какие AI-вызовы добавлены или изменены: `thought_title` через `AiCall` после STT; существующие STT и Job-анализ без нового pipeline
 - Проверено mock: да
 - Проверено live: нет
-- Что не проверено: живой Groq STT, живое название, живой анализ, настоящая запись с микрофона
+- Что не проверено: живой Groq STT, живое название, живой анализ. Микрофон: smoke записи и discard при закрытии Sheet; отмена уже идущего XHR — только mock.
 
 ## Совместимость с будущим обучением
 
@@ -75,3 +76,10 @@ Stage 04 принят на SHA `facb78d03942506b9e9e79fa768fca097ae18b61` (ис�
 - Force push не использовался.
 - Следующий этап не начинался.
 - Этап не объявляется принятым до внешнего ревью.
+
+## После замечаний
+
+- Замечание: `getUserMedia` после закрытия Sheet всё равно создавал MediaRecorder; cleanup вызывал `stop()` на inactive recorder (`InvalidStateError`) и мог создать Object URL из `onstop` после `releaseAll()`; `uploadThoughtMedia` не отдавал `abort()`, а после `reelId` UI обещал удаление, которого нет.
+- Исправление: сессия записи + `adoptGrantedMicrophone`; `stopRecorderIfActive` / отсоединённые handlers / `previewUrlIfSessionActive`; upload `{ promise, abort }` и `ThoughtUploadAbortedError`; `thoughtLeaveKind` разделяет discard-local / abort-upload / saved-continue; polling через `AbortController`.
+- Новый commit SHA: `2af98a2cdd855db4357d62c7bb8082cbdf2c0af1`
+- Повторная проверка: `test:reels` 59/59; lint; typecheck; build. Smoke микрофона: запись стартовала, закрытие Sheet спросило про локальный фрагмент, не про серверное удаление. Stage 06 не начинался.
