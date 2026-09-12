@@ -1,6 +1,50 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { ScriptDraftComposer } from "../src/components/ScriptDraftComposer";
 import { DraftSaveError, ScriptDraftSaveSession } from "../src/lib/script-draft-save";
+
+function composerMarkup(session: ScriptDraftSaveSession, handlers: { onFinalize?: () => void; onBackToReady?: () => void }) {
+  const snap = session.getSnapshot();
+  return renderToStaticMarkup(
+    createElement(ScriptDraftComposer, {
+      draftBody: snap.body,
+      saving: snap.saving,
+      finalizing: snap.finalizing,
+      status: snap.status,
+      expectedUpdatedAt: snap.expectedUpdatedAt,
+      helping: false,
+      onBodyChange: (body) => session.setBody(body),
+      onFinalize: handlers.onFinalize ?? (() => undefined),
+      onBackToReady: handlers.onBackToReady ?? (() => undefined),
+      onDelete: () => undefined,
+    }),
+  );
+}
+
+test("ScriptEditor binds composer to session snapshot, not a late finally", () => {
+  const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/components/ScriptEditor.tsx"), "utf8");
+  assert.match(source, /useSyncExternalStore/);
+  assert.match(source, /ScriptDraftComposer/);
+  assert.match(source, /snap\.saving/);
+  assert.match(source, /snap\.finalizing/);
+  assert.equal(source.includes(".finally(() => syncSession())"), false);
+});
+
+function draftButtons(html: string) {
+  const buttons = [...html.matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)];
+  const attrs = (label: RegExp) => buttons.find((item) => label.test(item[2] ?? ""))?.[1] ?? "";
+  const disabled = (label: RegExp) => /\sdisabled(?:=""|=true)?(?:\s|>|$)/.test(attrs(label));
+  return {
+    finalizeDisabled: disabled(/Завершить версию|Завершаем/),
+    backDisabled: disabled(/К готовым версиям/),
+    savingLabel: html.includes("Сохраняем…"),
+  };
+}
 
 test("failed leave or finalize unlocks buttons so the same text can be retried", async () => {
   let fail = true;
@@ -78,9 +122,10 @@ test("overlapping saves wait in one queue and still clear saving", async () => {
   session.body = "b";
   const one = session.save();
   const two = session.save();
-  await Promise.resolve();
   assert.equal(session.saving, true);
   assert.equal(session.buttonsDisabled, true);
+  await Promise.resolve();
+  await Promise.resolve();
   assert.equal(started, 1);
   release();
   await Promise.all([one, two]);
@@ -103,4 +148,97 @@ test("stale patch keeps local body and unlocks buttons", async () => {
   assert.equal(session.expectedSaveToken, 9);
   assert.equal(session.saving, false);
   assert.equal(session.buttonsDisabled, false);
+});
+
+test("ScriptDraftComposer disables during in-flight PATCH and finalize, then unlocks for retry", async () => {
+  let release!: (error?: Error) => void;
+  let hang = new Promise<void>((resolve, reject) => {
+    release = (error) => (error ? reject(error) : resolve());
+  });
+  let failNext = true;
+  let patches = 0;
+  const session = new ScriptDraftSaveSession({
+    patch: async (input) => {
+      patches += 1;
+      await hang;
+      if (failNext) throw new Error("500");
+      return {
+        draft: { body: input.body, updatedAt: "t1", saveToken: input.expectedSaveToken + 1 },
+      };
+    },
+  });
+  session.hydrate({ body: "старый", updatedAt: "t0", saveToken: 1 }, false);
+  session.enterDraft();
+  session.setBody("правка без автосохранения");
+
+  let html = composerMarkup(session, {});
+  session.subscribe(() => {
+    html = composerMarkup(session, {
+      onFinalize: () => {
+        void session.finalize(async () => undefined);
+      },
+      onBackToReady: () => {
+        void session.backToReady();
+      },
+    });
+  });
+
+  const firstLeave = session.backToReady();
+  let buttons = draftButtons(html);
+  assert.equal(session.getSnapshot().saving, true);
+  assert.equal(buttons.backDisabled, true);
+  assert.equal(buttons.finalizeDisabled, true);
+  assert.equal(buttons.savingLabel, true);
+
+  release(new Error("500"));
+  await firstLeave;
+  html = composerMarkup(session, {});
+  buttons = draftButtons(html);
+  assert.equal(session.mode, "draft");
+  assert.equal(session.body, "правка без автосохранения");
+  assert.equal(buttons.backDisabled, false);
+  assert.equal(buttons.finalizeDisabled, false);
+  assert.equal(session.getSnapshot().buttonsDisabled, false);
+
+  failNext = false;
+  hang = new Promise<void>((resolve, reject) => {
+    release = (error) => (error ? reject(error) : resolve());
+  });
+  const retry = session.backToReady();
+  assert.equal(draftButtons(composerMarkup(session, {})).backDisabled, true);
+  release();
+  await retry;
+  assert.equal(session.mode, "ready");
+  assert.equal(patches, 2);
+
+  hang = new Promise<void>((resolve, reject) => {
+    release = (error) => (error ? reject(error) : resolve());
+  });
+  const finalizeSession = new ScriptDraftSaveSession({
+    patch: async (input) => {
+      await hang;
+      return {
+        draft: { body: input.body, updatedAt: "t2", saveToken: input.expectedSaveToken + 1 },
+      };
+    },
+  });
+  finalizeSession.hydrate({ body: "черновик", updatedAt: "t0", saveToken: 1 }, false);
+  finalizeSession.enterDraft();
+  finalizeSession.setBody("текст для завершения");
+  let submits = 0;
+  const firstFinalize = finalizeSession.finalize(async () => {
+    submits += 1;
+  });
+  const during = composerMarkup(finalizeSession, {});
+  assert.equal(finalizeSession.getSnapshot().finalizing, true);
+  assert.equal(draftButtons(during).finalizeDisabled, true);
+  assert.equal(draftButtons(during).backDisabled, true);
+  await finalizeSession.finalize(async () => {
+    submits += 1;
+  });
+  assert.equal(submits, 0);
+  release();
+  await firstFinalize;
+  assert.equal(submits, 1);
+  assert.equal(finalizeSession.finalizing, false);
 });

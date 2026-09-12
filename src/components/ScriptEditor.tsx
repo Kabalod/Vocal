@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ScriptDraftComposer } from "@/components/ScriptDraftComposer";
 import { ScriptVersionTimeline } from "@/components/ScriptVersionTimeline";
 import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
 import { GenerationGuard } from "@/lib/generation-guard";
@@ -21,6 +22,28 @@ function downloadText(filename: string, text: string) {
   URL.revokeObjectURL(url);
 }
 
+function createDraftSession(reelIdRef: { current: string }) {
+  return new ScriptDraftSaveSession({
+    patch: async (input) => {
+      const res = await fetch(`/api/reels/${reelIdRef.current}/scripts/draft`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const data = await res.json();
+      if (res.status === 409) throw new DraftSaveError(data.error ?? "STALE", "STALE");
+      if (!res.ok) throw new Error(data.error ?? "Не удалось сохранить черновик.");
+      return data as { draft: { body: string; updatedAt: string; saveToken: number } };
+    },
+    onStale: async () => {
+      const fresh = await fetch(`/api/reels/${reelIdRef.current}/scripts`, { cache: "no-store" });
+      const workspaceJson = (await fresh.json()) as ScriptWorkspaceDto;
+      if (!workspaceJson.draft) return null;
+      return { updatedAt: workspaceJson.draft.updatedAt, saveToken: workspaceJson.draft.saveToken };
+    },
+  });
+}
+
 export function ScriptEditor({
   reelId,
   reloadToken = 0,
@@ -33,70 +56,25 @@ export function ScriptEditor({
   const [workspace, setWorkspace] = useState<ScriptWorkspaceDto | null>(null);
   const [viewing, setViewing] = useState<ScriptVersionDto | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
-  const [mode, setMode] = useState<"ready" | "draft">("ready");
-  const [draftBody, setDraftBody] = useState("");
-  const [expectedUpdatedAt, setExpectedUpdatedAt] = useState<string | null>(null);
-  const [expectedSaveToken, setExpectedSaveToken] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [finalizing, setFinalizing] = useState(false);
   const [helping, setHelping] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const guardRef = useRef(new GenerationGuard());
   const skipAutosave = useRef(false);
   const reelIdRef = useRef(reelId);
   reelIdRef.current = reelId;
   const sessionRef = useRef<ScriptDraftSaveSession | null>(null);
-
-  function session() {
-    if (!sessionRef.current) {
-      sessionRef.current = new ScriptDraftSaveSession({
-        patch: async (input) => {
-          const res = await fetch(`/api/reels/${reelIdRef.current}/scripts/draft`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(input),
-          });
-          const data = await res.json();
-          if (res.status === 409) throw new DraftSaveError(data.error ?? "STALE", "STALE");
-          if (!res.ok) throw new Error(data.error ?? "Не удалось сохранить черновик.");
-          return data as { draft: { body: string; updatedAt: string; saveToken: number } };
-        },
-        onStale: async () => {
-          const fresh = await fetch(`/api/reels/${reelIdRef.current}/scripts`, { cache: "no-store" });
-          const workspaceJson = (await fresh.json()) as ScriptWorkspaceDto;
-          if (!workspaceJson.draft) return null;
-          return { updatedAt: workspaceJson.draft.updatedAt, saveToken: workspaceJson.draft.saveToken };
-        },
-      });
-    }
-    return sessionRef.current;
-  }
-
-  function syncSession() {
-    const current = session();
-    setSaving(current.saving);
-    setFinalizing(current.finalizing);
-    setError(current.error);
-    setStatus(current.status);
-    setMode(current.mode);
-    setExpectedUpdatedAt(current.expectedUpdatedAt);
-    setExpectedSaveToken(current.expectedSaveToken);
-    setDraftBody(current.body);
-  }
+  if (!sessionRef.current) sessionRef.current = createDraftSession(reelIdRef);
+  const session = sessionRef.current;
+  const snap = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
 
   const applyWorkspace = useCallback((next: ScriptWorkspaceDto, keepDraftText: boolean) => {
     setWorkspace(next);
     const nextViewId = next.viewing?.id ?? next.headId ?? next.versions.find((row) => isHeadKind(row.kind))?.id ?? null;
     setViewingId((current) => current ?? nextViewId);
     if (next.viewing) setViewing(next.viewing);
-    const current = session();
-    current.hydrate(next.draft, keepDraftText);
-    if (next.draft) {
-      if (!keepDraftText) skipAutosave.current = true;
-    }
-    syncSession();
-  }, []);
+    session.hydrate(next.draft, keepDraftText);
+    if (next.draft && !keepDraftText) skipAutosave.current = true;
+  }, [session]);
 
   const load = useCallback(
     async (view?: string | null) => {
@@ -113,13 +91,10 @@ export function ScriptEditor({
   useEffect(() => {
     void load()
       .then((next) => {
-        if (reloadToken > 0 && next.draft) {
-          session().mode = "draft";
-          setMode("draft");
-        }
+        if (reloadToken > 0 && next.draft) session.enterDraft();
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."));
-  }, [load, reloadToken]);
+      .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."));
+  }, [load, reloadToken, session]);
 
   useEffect(() => {
     if (!viewingId) return;
@@ -134,28 +109,25 @@ export function ScriptEditor({
       })
       .catch((err: unknown) => {
         if (!token.isCurrent()) return;
-        setError(err instanceof Error ? err.message : "Ошибка.");
+        setLoadError(err instanceof Error ? err.message : "Ошибка.");
       });
   }, [reelId, viewing, viewingId]);
 
   useEffect(() => {
-    if (mode !== "draft" || !expectedUpdatedAt || expectedSaveToken == null || !workspace?.draft) return;
+    if (snap.mode !== "draft" || snap.expectedSaveToken == null || !workspace?.draft) return;
     if (skipAutosave.current) {
       skipAutosave.current = false;
       return;
     }
-    if (draftBody === workspace.draft.body) return;
+    if (snap.body === workspace.draft.body) return;
     const timer = window.setTimeout(() => {
-      const current = session();
-      current.body = draftBody;
-      void current.save().finally(() => syncSession());
+      void session.save();
     }, 600);
     return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- автосохранение только по тексту и метке
-  }, [draftBody, expectedUpdatedAt, expectedSaveToken, mode, workspace?.draft?.id]);
+  }, [session, snap.body, snap.expectedSaveToken, snap.mode, workspace?.draft]);
 
   async function openDraft() {
-    setError(null);
+    setLoadError(null);
     const res = await fetch(`/api/reels/${reelId}/scripts/draft`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -164,14 +136,11 @@ export function ScriptEditor({
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Не удалось открыть черновик.");
     applyWorkspace(data as ScriptWorkspaceDto, false);
-    session().mode = "draft";
-    setMode("draft");
+    session.enterDraft();
   }
 
   async function finalize() {
-    const current = session();
-    current.body = draftBody;
-    await current.finalize(async (input) => {
+    await session.finalize(async (input) => {
       const res = await fetch(`/api/reels/${reelId}/scripts/draft/finalize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -183,14 +152,6 @@ export function ScriptEditor({
       setViewingId((data as ScriptWorkspaceDto).headId);
       setViewing((data as ScriptWorkspaceDto).viewing);
     });
-    syncSession();
-  }
-
-  async function backToReady() {
-    const current = session();
-    current.body = draftBody;
-    await current.backToReady();
-    syncSession();
   }
 
   async function removeDraft() {
@@ -199,8 +160,9 @@ export function ScriptEditor({
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Не удалось удалить черновик.");
     applyWorkspace(data as ScriptWorkspaceDto, false);
-    setMode("ready");
-    setStatus("Черновик удалён.");
+    session.mode = "ready";
+    session.status = "Черновик удалён.";
+    session.emit();
   }
 
   const ready = workspace ? readyVersions(workspace) : [];
@@ -208,15 +170,16 @@ export function ScriptEditor({
   const baseNumber = workspace?.draft?.baseVersionId
     ? ready.find((row) => row.id === workspace.draft?.baseVersionId)?.number
     : null;
+  const error = loadError ?? snap.error;
 
   return (
     <section className="space-y-4">
       <div>
         <h2 className="font-[family-name:var(--font-display)] text-2xl">
-          {mode === "draft" ? "Черновик новой версии" : "Сценарий"}
+          {snap.mode === "draft" ? "Черновик новой версии" : "Сценарий"}
         </h2>
         <p className="text-sm text-muted">
-          {mode === "draft"
+          {snap.mode === "draft"
             ? baseNumber
               ? `На основе версии ${baseNumber}`
               : "Новый черновик без номера"
@@ -224,7 +187,7 @@ export function ScriptEditor({
         </p>
       </div>
       {error ? <ShellError message={error} /> : null}
-      {status ? <p className="text-sm text-muted">{status}</p> : null}
+      {snap.status && !snap.saving ? <p className="text-sm text-muted">{snap.status}</p> : null}
       {workspace ? (
         <ScriptVersionTimeline
           versions={ready}
@@ -233,19 +196,19 @@ export function ScriptEditor({
           finalScriptId={workspace.finalScriptId}
           onView={(id) => {
             setViewingId(id);
-            if (mode === "ready") setViewing(null);
+            if (snap.mode === "ready") setViewing(null);
           }}
         />
       ) : (
         <ShellLoading label="Загрузка версий…" />
       )}
-      {mode === "ready" ? (
+      {snap.mode === "ready" ? (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               className="vocal-btn"
-              onClick={() => void openDraft().catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."))}
+              onClick={() => void openDraft().catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))}
             >
               {workspace?.draft ? "Продолжить черновик" : "Создать новую версию"}
             </button>
@@ -257,7 +220,7 @@ export function ScriptEditor({
                 if (!onHelpWithScript) return;
                 setHelping(true);
                 void Promise.resolve(onHelpWithScript())
-                  .catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."))
+                  .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))
                   .finally(() => setHelping(false));
               }}
             >
@@ -286,59 +249,28 @@ export function ScriptEditor({
           ) : null}
         </div>
       ) : (
-        <div className="space-y-4">
-          <p className="text-sm text-muted">{saving ? "Сохраняем…" : expectedUpdatedAt ? "Сохранено" : ""}</p>
-          <textarea
-            value={draftBody}
-            onChange={(event) => {
-              session().body = event.target.value;
-              setDraftBody(event.target.value);
-              setStatus(null);
-            }}
-            rows={16}
-            placeholder="Текст новой версии"
-            className="vocal-input min-h-[22rem] resize-y font-[family-name:var(--font-display)] text-lg leading-relaxed"
-          />
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="vocal-btn vocal-btn-primary disabled:opacity-50"
-              disabled={finalizing || saving || !draftBody.trim()}
-              onClick={() => void finalize()}
-            >
-              {finalizing ? "Завершаем…" : "Завершить версию"}
-            </button>
-            <button
-              type="button"
-              className="vocal-btn disabled:opacity-50"
-              disabled={finalizing || saving}
-              onClick={() => void backToReady()}
-            >
-              К готовым версиям
-            </button>
-            <button
-              type="button"
-              className="vocal-btn text-sm"
-              onClick={() => void removeDraft().catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."))}
-            >
-              Удалить черновик
-            </button>
-            <button
-              type="button"
-              className="vocal-btn text-sm"
-              disabled={helping}
-              onClick={() => {
-                if (!onHelpWithScript) return;
-                setHelping(true);
-                void Promise.resolve(onHelpWithScript())
-                  .catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."))
-                  .finally(() => setHelping(false));
-              }}
-            >
-              {helping ? "Просим…" : "Помочь со сценарием"}
-            </button>
-          </div>
-        </div>
+        <ScriptDraftComposer
+          draftBody={snap.body}
+          saving={snap.saving}
+          finalizing={snap.finalizing}
+          status={snap.status}
+          expectedUpdatedAt={snap.expectedUpdatedAt}
+          helping={helping}
+          onBodyChange={(body) => session.setBody(body)}
+          onFinalize={() => void finalize()}
+          onBackToReady={() => void session.backToReady()}
+          onDelete={() => void removeDraft().catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))}
+          onHelp={
+            onHelpWithScript
+              ? () => {
+                  setHelping(true);
+                  void Promise.resolve(onHelpWithScript())
+                    .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))
+                    .finally(() => setHelping(false));
+                }
+              : undefined
+          }
+        />
       )}
     </section>
   );
