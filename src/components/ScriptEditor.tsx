@@ -43,6 +43,15 @@ export function ScriptEditor({
   const [helping, setHelping] = useState(false);
   const guardRef = useRef(new GenerationGuard());
   const skipAutosave = useRef(false);
+  const draftBodyRef = useRef("");
+  const expectedUpdatedAtRef = useRef<string | null>(null);
+  const expectedSaveTokenRef = useRef<number | null>(null);
+  const savedBodyRef = useRef<string | null>(null);
+
+  draftBodyRef.current = draftBody;
+  expectedUpdatedAtRef.current = expectedUpdatedAt;
+  expectedSaveTokenRef.current = expectedSaveToken;
+  savedBodyRef.current = workspace?.draft?.body ?? null;
 
   const applyWorkspace = useCallback((next: ScriptWorkspaceDto, keepDraftText: boolean) => {
     setWorkspace(next);
@@ -118,13 +127,27 @@ export function ScriptEditor({
       setError("Черновик уже изменился в другом окне. Текст здесь не потерян.");
       setStatus(null);
       setSaving(false);
-      return;
+      throw new Error("Черновик уже изменился в другом окне. Текст здесь не потерян.");
     }
     if (!res.ok) throw new Error(data.error ?? "Не удалось сохранить черновик.");
     applyWorkspace(data as ScriptWorkspaceDto, true);
     setError(null);
     setStatus("Сохранено");
     setSaving(false);
+    return data as ScriptWorkspaceDto;
+  }
+
+  async function persistDraft() {
+    const body = draftBodyRef.current;
+    const expected = expectedUpdatedAtRef.current;
+    const token = expectedSaveTokenRef.current;
+    if (!expected || token == null) return null;
+    if (savedBodyRef.current === body) {
+      return { updatedAt: expected, saveToken: token };
+    }
+    const next = await saveDraft(body, expected, token);
+    if (!next.draft) return null;
+    return { updatedAt: next.draft.updatedAt, saveToken: next.draft.saveToken };
   }
 
   useEffect(() => {
@@ -158,14 +181,18 @@ export function ScriptEditor({
   }
 
   async function finalize() {
-    if (!expectedUpdatedAt || !draftBody.trim()) return;
+    const body = draftBodyRef.current;
     setFinalizing(true);
     setError(null);
     try {
+      const persisted = await persistDraft();
+      const expected = persisted?.updatedAt ?? expectedUpdatedAtRef.current;
+      const token = persisted?.saveToken ?? expectedSaveTokenRef.current;
+      if (!expected || token == null || !body.trim()) return;
       const res = await fetch(`/api/reels/${reelId}/scripts/draft/finalize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expectedUpdatedAt, expectedSaveToken }),
+        body: JSON.stringify({ body, expectedUpdatedAt: expected, expectedSaveToken: token }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Не удалось завершить версию.");
@@ -178,6 +205,16 @@ export function ScriptEditor({
       setError(err instanceof Error ? err.message : "Ошибка.");
     } finally {
       setFinalizing(false);
+    }
+  }
+
+  async function backToReady() {
+    setError(null);
+    try {
+      await persistDraft();
+      setMode("ready");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка.");
     }
   }
 
@@ -295,7 +332,12 @@ export function ScriptEditor({
             >
               {finalizing ? "Завершаем…" : "Завершить версию"}
             </button>
-            <button type="button" className="vocal-btn" onClick={() => setMode("ready")}>
+            <button
+              type="button"
+              className="vocal-btn disabled:opacity-50"
+              disabled={finalizing || saving}
+              onClick={() => void backToReady()}
+            >
               К готовым версиям
             </button>
             <button

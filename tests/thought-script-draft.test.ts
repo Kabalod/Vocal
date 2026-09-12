@@ -157,3 +157,83 @@ test("script draft autosave does not create a ready version until finalize", asy
   assert.equal(removed.draft, null);
   assert.equal(removed.readyCount, withDraft.readyCount);
 });
+
+test("draft finalize keeps latest body, rejects stale token, and transfer bumps saveToken", async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vocal-script-draft-stale-"));
+  const url = fileUrl(path.join(dir, "test.db"));
+  process.env.DATABASE_URL = url;
+  await resetPrismaClient();
+  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* windows */
+    }
+  });
+  migrateDeploy(url);
+
+  const { createReel, createTake } = await import("../src/lib/reels");
+  const { ensureOriginalFromText } = await import("../src/lib/transcripts");
+  const { saveManualScript, ScriptError } = await import("../src/lib/scripts");
+  const { finalizeScriptDraft, listScriptWorkspace, openScriptDraft, patchScriptDraft, replaceScriptDraft } =
+    await import("../src/lib/scripts");
+
+  const reel = await createReel({ title: "Немедленное завершение" });
+  const take = await createTake(reel.id, { inputType: "text", bodyText: "Исходный текст." });
+  await ensureOriginalFromText(take.id, take.bodyText);
+  await saveManualScript(reel.id, { body: "Готовая версия.", expectedHeadId: null });
+
+  const opened = await openScriptDraft(reel.id);
+  assert.ok(opened.draft);
+  const beforeImmediate = opened.readyCount;
+  const immediate = await finalizeScriptDraft(reel.id, {
+    body: "Правка без ожидания автосохранения.",
+    expectedUpdatedAt: opened.draft!.updatedAt,
+    expectedSaveToken: opened.draft!.saveToken,
+  });
+  assert.equal(immediate.readyCount, beforeImmediate + 1);
+  assert.equal(immediate.viewing?.body, "Правка без ожидания автосохранения.");
+  assert.equal(immediate.draft, null);
+
+  const second = await openScriptDraft(reel.id);
+  const patched = await patchScriptDraft(reel.id, {
+    body: "Свежая редакция другого окна.",
+    expectedUpdatedAt: second.draft!.updatedAt,
+    expectedSaveToken: second.draft!.saveToken,
+  });
+  await assert.rejects(
+    () =>
+      finalizeScriptDraft(reel.id, {
+        body: "устаревшее завершение",
+        expectedUpdatedAt: second.draft!.updatedAt,
+        expectedSaveToken: second.draft!.saveToken,
+      }),
+    (error: unknown) => error instanceof ScriptError && error.status === 409 && error.code === "STALE",
+  );
+  const afterStaleFinalize = await listScriptWorkspace(reel.id);
+  assert.equal(afterStaleFinalize.readyCount, immediate.readyCount);
+  assert.equal(afterStaleFinalize.draft?.body, "Свежая редакция другого окна.");
+
+  const beforeTransfer = afterStaleFinalize.draft!;
+  const transferred = await replaceScriptDraft(reel.id, {
+    body: "Перенесённое предложение Vocal.",
+    sourceKind: "vocal",
+  });
+  assert.equal(transferred.saveToken, beforeTransfer.saveToken + 1);
+  assert.equal(transferred.body, "Перенесённое предложение Vocal.");
+  await assert.rejects(
+    () =>
+      patchScriptDraft(reel.id, {
+        body: "старый автосейв после переноса",
+        expectedUpdatedAt: beforeTransfer.updatedAt,
+        expectedSaveToken: beforeTransfer.saveToken,
+      }),
+    (error: unknown) => error instanceof ScriptError && error.status === 409 && error.code === "STALE",
+  );
+  const afterOldPatch = await listScriptWorkspace(reel.id);
+  assert.equal(afterOldPatch.draft?.body, "Перенесённое предложение Vocal.");
+  assert.equal(afterOldPatch.readyCount, immediate.readyCount);
+});

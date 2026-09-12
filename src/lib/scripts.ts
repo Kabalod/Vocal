@@ -350,6 +350,7 @@ export async function replaceScriptDraft(
           baseVersionId: input.baseVersionId ?? existing.baseVersionId,
           sourceKind: input.sourceKind ?? existing.sourceKind,
           sourcesJson: JSON.stringify(sources.length ? sources : parseSources(existing.sourcesJson)),
+          saveToken: existing.saveToken + 1,
         },
       })
     : await db.scriptDraft.create({
@@ -386,7 +387,10 @@ function resolveDraftToken(
   input: { expectedUpdatedAt: string; expectedSaveToken?: number },
 ): number {
   if (typeof input.expectedSaveToken === "number" && Number.isFinite(input.expectedSaveToken)) {
-    return input.expectedSaveToken;
+    if (input.expectedSaveToken !== draft.saveToken) {
+      throw new ScriptError("Черновик уже изменился. Обновите и повторите.", "STALE", 409);
+    }
+    return draft.saveToken;
   }
   if (draft.updatedAt.toISOString() === input.expectedUpdatedAt) return draft.saveToken;
   throw new ScriptError("Черновик уже изменился. Обновите и повторите.", "STALE", 409);
@@ -421,19 +425,26 @@ export async function patchScriptDraft(
 
 export async function finalizeScriptDraft(
   reelId: string,
-  input: { expectedUpdatedAt: string; expectedSaveToken?: number },
+  input: { expectedUpdatedAt: string; expectedSaveToken?: number; body?: string },
 ): Promise<ScriptWorkspaceDto> {
   await assertReel(reelId);
   await prisma.$transaction(async (tx) => {
     const draft = await tx.scriptDraft.findUnique({ where: { reelId } });
     if (!draft) throw new ScriptError("Черновик не найден.", "DRAFT_NOT_FOUND", 404);
+    if (
+      typeof input.expectedSaveToken === "number" &&
+      Number.isFinite(input.expectedSaveToken) &&
+      input.expectedSaveToken !== draft.saveToken
+    ) {
+      throw new ScriptError("Черновик уже изменился. Обновите и повторите.", "STALE", 409);
+    }
     resolveDraftToken(draft, input);
     const kind: ScriptKind = draft.sourceKind === "vocal" ? "accepted_ai" : "manual";
     await createVersion(
       reelId,
       {
         kind,
-        body: draft.body,
+        body: typeof input.body === "string" ? input.body : draft.body,
         sources: parseSources(draft.sourcesJson),
         parentId: draft.baseVersionId,
       },
