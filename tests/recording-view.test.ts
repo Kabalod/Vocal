@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   ABORT_TAKE_UPLOAD_LEAVE_TEXT,
   applyLateTakeUploadResult,
+  settleStudioTakeUpload,
   recordingNeedsDiscardConfirm,
   recordingTimerShouldRun,
   studioJobPhase,
@@ -38,6 +39,33 @@ test("late upload result after leave is ignored and copy does not promise the se
   assert.equal(studioJobPhase({ status: "transcribing" }), "stt");
   assert.equal(studioJobPhase({ status: "error", stage: "stt" }), "error");
   assert.equal(studioJobPhase({ status: "done" }), "done");
+});
+
+test("unfinished studio video upload abort ignores a late success callback", async () => {
+  const controller = new AbortController();
+  let uploaded = 0;
+  let release: ((res: Response) => void) | undefined;
+  const request = new Promise<Response>((resolve) => {
+    release = resolve;
+  });
+  const settled = settleStudioTakeUpload({
+    request,
+    signal: controller.signal,
+    mounted: () => false,
+    onSuccess: () => {
+      uploaded += 1;
+    },
+  });
+  controller.abort();
+  assert.equal(controller.signal.aborted, true);
+  release?.(
+    new Response(JSON.stringify({ job: { id: "late-job" } }), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+  assert.equal(await settled, "ignored");
+  assert.equal(uploaded, 0);
 });
 
 test("go to record stays blocked without a ready script or while a draft is open", () => {

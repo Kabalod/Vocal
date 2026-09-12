@@ -1,6 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  ABORT_TAKE_UPLOAD_LEAVE_TEXT,
+  settleStudioTakeUpload,
+} from "@/lib/recording-session";
 import type { TakeInputType } from "@/types/reel";
 
 export function TakeUploadDropzone({
@@ -24,34 +28,55 @@ export function TakeUploadDropzone({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+  const onUploadedRef = useRef(onUploaded);
+  onUploadedRef.current = onUploaded;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      uploadAbortRef.current?.abort();
+    };
+  }, []);
 
   async function onFile(file: File | null) {
     if (!file || busy || disabled) return;
     setBusy(true);
     setError(null);
     const key = crypto.randomUUID();
+    const controller = new AbortController();
+    uploadAbortRef.current = controller;
+    const form = new FormData();
+    form.set("file", file);
+    form.set("reelId", reelId);
+    form.set("inputType", videoOnly ? "video" : kind);
+    form.set("authorNote", note);
+    form.set("idempotencyKey", key);
+    if (scriptVersionId) form.set("scriptVersionId", scriptVersionId);
+    if (process) form.set("process", "1");
     try {
-      const form = new FormData();
-      form.set("file", file);
-      form.set("reelId", reelId);
-      form.set("inputType", videoOnly ? "video" : kind);
-      form.set("authorNote", note);
-      form.set("idempotencyKey", key);
-      if (scriptVersionId) form.set("scriptVersionId", scriptVersionId);
-      if (process) form.set("process", "1");
-      const res = await fetch("/api/uploads", {
-        method: "POST",
-        headers: { "Idempotency-Key": key },
-        body: form,
+      const outcome = await settleStudioTakeUpload({
+        request: fetch("/api/uploads", {
+          method: "POST",
+          headers: { "Idempotency-Key": key },
+          body: form,
+          signal: controller.signal,
+        }),
+        signal: controller.signal,
+        mounted: () => mountedRef.current,
+        onSuccess: (jobId) => {
+          setNote("");
+          onUploadedRef.current({ jobId });
+        },
       });
-      const data = (await res.json()) as { error?: string; job?: { id?: string } };
-      if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить файл.");
-      setNote("");
-      onUploaded({ jobId: typeof data.job?.id === "string" ? data.job.id : null });
+      if (outcome === "ignored") return;
     } catch (err) {
+      if (!mountedRef.current || controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : "Ошибка загрузки.");
     } finally {
-      setBusy(false);
+      if (mountedRef.current) setBusy(false);
     }
   }
 
@@ -102,7 +127,12 @@ export function TakeUploadDropzone({
         }}
       />
       {disabled && disabledReason ? <p className="text-sm text-muted">{disabledReason}</p> : null}
-      {busy ? <p className="text-sm text-muted">Загрузка…</p> : null}
+      {busy ? (
+        <div className="space-y-1">
+          <p className="text-sm text-muted">Загрузка…</p>
+          <p className="text-xs text-muted">{ABORT_TAKE_UPLOAD_LEAVE_TEXT}</p>
+        </div>
+      ) : null}
       {error ? <p className="text-sm text-bad">{error}</p> : null}
     </div>
   );

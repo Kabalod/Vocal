@@ -16,6 +16,31 @@ export function applyLateTakeUploadResult(input: { mounted: boolean; aborted: bo
   return "apply";
 }
 
+export async function settleStudioTakeUpload(input: {
+  request: Promise<Response>;
+  signal: AbortSignal;
+  mounted: () => boolean;
+  onSuccess: (jobId: string | null) => void;
+}): Promise<"applied" | "ignored" | "failed"> {
+  try {
+    const res = await input.request;
+    const data = (await res.json()) as { error?: string; job?: { id?: string } };
+    if (applyLateTakeUploadResult({ mounted: input.mounted(), aborted: input.signal.aborted }) === "ignore") {
+      return "ignored";
+    }
+    if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить файл.");
+    input.onSuccess(typeof data.job?.id === "string" ? data.job.id : null);
+    return "applied";
+  } catch (error) {
+    const aborted =
+      input.signal.aborted || (error instanceof DOMException && error.name === "AbortError");
+    if (applyLateTakeUploadResult({ mounted: input.mounted(), aborted }) === "ignore") {
+      return "ignored";
+    }
+    throw error;
+  }
+}
+
 export function takeListOmitsMediaUrl(take: { mediaUrl: string | null; downloadUrl: string | null }): boolean {
   return take.mediaUrl == null && take.downloadUrl == null;
 }
