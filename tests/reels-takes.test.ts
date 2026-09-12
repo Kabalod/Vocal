@@ -484,9 +484,33 @@ test("voice upload stores scriptVersionId and does not auto-select final take", 
   form.set("idempotencyKey", "voice-1");
   const first = await upload(new Request("http://vocal.local/api/uploads", { method: "POST", body: form }));
   assert.equal(first.status, 201);
-  const takeA = (await first.json()).take;
+  const firstBody = await first.json();
+  const takeA = firstBody.take;
   assert.equal(takeA.scriptVersionId, scriptId);
   assert.equal(takeA.number, 2);
+  assert.ok(firstBody.job?.id);
+
+  const noScript = new FormData();
+  noScript.set("file", new File([bytes], "clip.mp4", { type: "video/mp4" }));
+  noScript.set("reelId", reel.id);
+  noScript.set("inputType", "video");
+  noScript.set("process", "1");
+  const blocked = await upload(new Request("http://vocal.local/api/uploads", { method: "POST", body: noScript }));
+  assert.equal(blocked.status, 400);
+
+  const videoForm = new FormData();
+  videoForm.set("file", new File([bytes], "clip.mp4", { type: "video/mp4" }));
+  videoForm.set("reelId", reel.id);
+  videoForm.set("inputType", "video");
+  videoForm.set("scriptVersionId", scriptId);
+  videoForm.set("process", "1");
+  videoForm.set("idempotencyKey", "video-1");
+  const video = await upload(new Request("http://vocal.local/api/uploads", { method: "POST", body: videoForm }));
+  assert.equal(video.status, 201);
+  const videoBody = await video.json();
+  assert.equal(videoBody.take.scriptVersionId, scriptId);
+  assert.equal(videoBody.take.inputType, "video");
+  assert.ok(videoBody.job?.id);
 
   const form2 = new FormData();
   form2.set("file", new File([bytes], "voice-2.webm", { type: "audio/webm" }));
@@ -496,7 +520,7 @@ test("voice upload stores scriptVersionId and does not auto-select final take", 
   form2.set("idempotencyKey", "voice-2");
   const second = await upload(new Request("http://vocal.local/api/uploads", { method: "POST", body: form2 }));
   const takeB = (await second.json()).take;
-  assert.equal(takeB.number, 3);
+  assert.equal(takeB.number, 4);
   assert.notEqual(takeA.id, takeB.id);
 
   const listed = await (
@@ -505,6 +529,7 @@ test("voice upload stores scriptVersionId and does not auto-select final take", 
     })
   ).json();
   assert.equal(listed.reel.selectedTakeId, null);
-  assert.equal(listed.reel.takeCount, 3);
+  assert.equal(listed.reel.takeCount, 4);
   assert.equal(await prisma.job.count({ where: { takeId: takeA.id } }), 1);
+  assert.equal(await prisma.job.count({ where: { takeId: videoBody.take.id } }), 1);
 });

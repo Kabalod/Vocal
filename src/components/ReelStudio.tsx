@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RecordingView } from "@/components/RecordingView";
+import { StudioJobWatch } from "@/components/StudioJobWatch";
 import { ReelContextForm } from "@/components/ReelContextForm";
 import { ReelStudioFrame } from "@/components/ReelStudioFrame";
 import { ReelTakes } from "@/components/ReelTakes";
@@ -27,6 +28,16 @@ export function ReelStudio({ reelId }: { reelId: string }) {
   const [thoughtTitle, setThoughtTitle] = useState("Мысль");
   const [recording, setRecording] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState(false);
+  const [watchJobId, setWatchJobId] = useState<string | null>(null);
+
+  const refreshStudioAfterJob = useCallback((status: "done" | "error") => {
+    setTakesTick((value) => value + 1);
+    if (status === "done") {
+      setScriptTick((value) => value + 1);
+      setDialogTick((value) => value + 1);
+      setWatchJobId(null);
+    }
+  }, []);
 
   function applyWorkspace(data: ScriptWorkspaceDto) {
     setHasReadyScript(Boolean(data.selectedScriptId));
@@ -91,6 +102,8 @@ export function ReelStudio({ reelId }: { reelId: string }) {
       reloadToken={takesTick}
       canRecord={hasReadyScript}
       recordBlockedReason="Сначала нужна готовая версия сценария"
+      recordScriptId={selectedScriptId}
+      onTakeJobStarted={setWatchJobId}
       onStartVoiceRecord={requestRecording}
     >
       {({ media }) => (
@@ -107,10 +120,15 @@ export function ReelStudio({ reelId }: { reelId: string }) {
                 scriptVersionId={selectedScriptId}
                 scriptNumber={scriptNumber}
                 onClose={() => setRecording(false)}
-                onSaved={() => setTakesTick((value) => value + 1)}
+                onSaved={(info) => {
+                  setTakesTick((value) => value + 1);
+                  if (info.jobId) setWatchJobId(info.jobId);
+                  setRecording(false);
+                }}
               />
             ) : (
               <div className="space-y-8">
+                {watchJobId ? <StudioJobWatch jobId={watchJobId} onSettled={refreshStudioAfterJob} /> : null}
                 {media}
                 <ReelContextForm reelId={reelId} />
                 <TakeComparison reelId={reelId} />

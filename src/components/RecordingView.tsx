@@ -18,6 +18,8 @@ import {
   type VoiceCaptureSession,
 } from "@/lib/media-session";
 import {
+  ABORT_TAKE_UPLOAD_LEAVE_TEXT,
+  applyLateTakeUploadResult,
   recordingNeedsDiscardConfirm,
   type RecordingPhase,
 } from "@/lib/recording-session";
@@ -35,7 +37,7 @@ export function RecordingView({
   scriptVersionId: string;
   scriptNumber: number | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (info: { jobId: string | null }) => void;
 }) {
   const [phase, setPhase] = useState<RecordingPhase>("idle");
   const [scriptBody, setScriptBody] = useState("");
@@ -52,6 +54,8 @@ export function RecordingView({
   const rafRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const blobRef = useRef<Blob | null>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
 
   function clearTimers() {
     if (timerRef.current) window.clearInterval(timerRef.current);
@@ -72,6 +76,7 @@ export function RecordingView({
   }
 
   function releaseAll() {
+    uploadAbortRef.current?.abort();
     cancelVoiceCaptureSession(sessionRef.current);
     releaseHardware();
     revokePreviewUrl(previewUrlRef.current);
@@ -81,7 +86,9 @@ export function RecordingView({
   }
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       releaseAll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- unmount cleanup only
@@ -211,21 +218,29 @@ export function RecordingView({
     form.set("scriptVersionId", scriptVersionId);
     form.set("process", "1");
     form.set("idempotencyKey", key);
+    const controller = new AbortController();
+    uploadAbortRef.current = controller;
     try {
       const res = await fetch("/api/uploads", {
         method: "POST",
         headers: { "Idempotency-Key": key },
         body: form,
+        signal: controller.signal,
       });
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json()) as { error?: string; job?: { id?: string } };
+      if (applyLateTakeUploadResult({ mounted: mountedRef.current, aborted: controller.signal.aborted }) === "ignore") {
+        return;
+      }
       if (!res.ok) throw new Error(data.error ?? "Не удалось сохранить дубль.");
       releaseHardware();
       revokePreviewUrl(previewUrlRef.current);
       previewUrlRef.current = null;
       blobRef.current = null;
       setPhase("saved");
-      onSaved();
+      onSaved({ jobId: typeof data.job?.id === "string" ? data.job.id : null });
     } catch (err) {
+      const aborted = controller.signal.aborted || (err instanceof DOMException && err.name === "AbortError");
+      if (applyLateTakeUploadResult({ mounted: mountedRef.current, aborted }) === "ignore") return;
       setPhase("preview");
       setError(err instanceof Error ? err.message : "Не удалось сохранить дубль.");
     }
@@ -306,7 +321,7 @@ export function RecordingView({
               >
                 Сохранить дубль
               </ActionButton>
-              <ActionButton variant="secondary" disabled={phase === "saving"} onClick={requestLeave}>
+              <ActionButton variant="secondary" onClick={requestLeave}>
                 Отменить
               </ActionButton>
             </div>
@@ -315,7 +330,7 @@ export function RecordingView({
 
         {phase === "saved" ? (
           <div className="space-y-3">
-            <p className="text-sm text-text">Дубль сохранён. Расшифровка может ещё идти.</p>
+            <p className="text-sm text-text">Дубль сохранён. Следим за расшифровкой в списке дублей.</p>
             <ActionButton variant="primary" onClick={onClose}>
               К списку дублей
             </ActionButton>
@@ -327,12 +342,14 @@ export function RecordingView({
 
       <VocalModal
         open={confirmOpen}
-        title="Отменить эту запись?"
+        title={phase === "saving" ? "Прервать загрузку?" : "Отменить эту запись?"}
         initialFocus="safe"
         onClose={() => setConfirmOpen(false)}
       >
         <p className="text-sm text-muted">
-          Длительность {formatRecordingDuration(seconds)}. Исчезнет только этот фрагмент. Уже сохранённые дубли останутся.
+          {phase === "saving"
+            ? ABORT_TAKE_UPLOAD_LEAVE_TEXT
+            : `Длительность ${formatRecordingDuration(seconds)}. Исчезнет только этот фрагмент. Уже сохранённые дубли останутся.`}
         </p>
         <ConfirmActions
           cancelLabel="Вернуться к записи"

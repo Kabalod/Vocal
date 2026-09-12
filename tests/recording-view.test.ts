@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  ABORT_TAKE_UPLOAD_LEAVE_TEXT,
+  applyLateTakeUploadResult,
   recordingNeedsDiscardConfirm,
   recordingTimerShouldRun,
+  studioJobPhase,
   studioRecordGate,
   takeListOmitsMediaUrl,
 } from "../src/lib/recording-session";
@@ -24,6 +27,17 @@ test("recording idle does not run the timer and cancel of a fragment needs confi
   assert.equal(recordingNeedsDiscardConfirm("idle"), false);
   assert.equal(recordingNeedsDiscardConfirm("recording"), true);
   assert.equal(recordingNeedsDiscardConfirm("preview"), true);
+  assert.equal(recordingNeedsDiscardConfirm("saving"), true);
+});
+
+test("late upload result after leave is ignored and copy does not promise the server rolled back", () => {
+  assert.equal(applyLateTakeUploadResult({ mounted: false, aborted: false }), "ignore");
+  assert.equal(applyLateTakeUploadResult({ mounted: true, aborted: true }), "ignore");
+  assert.equal(applyLateTakeUploadResult({ mounted: true, aborted: false }), "apply");
+  assert.match(ABORT_TAKE_UPLOAD_LEAVE_TEXT, /мог успеть/);
+  assert.equal(studioJobPhase({ status: "transcribing" }), "stt");
+  assert.equal(studioJobPhase({ status: "error", stage: "stt" }), "error");
+  assert.equal(studioJobPhase({ status: "done" }), "done");
 });
 
 test("go to record stays blocked without a ready script or while a draft is open", () => {

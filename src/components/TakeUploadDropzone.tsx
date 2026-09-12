@@ -9,12 +9,16 @@ export function TakeUploadDropzone({
   scriptVersionId,
   videoOnly = false,
   process = false,
+  disabled = false,
+  disabledReason,
 }: {
   reelId: string;
-  onUploaded: () => void;
+  onUploaded: (info: { jobId: string | null }) => void;
   scriptVersionId?: string;
   videoOnly?: boolean;
   process?: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
   const [kind, setKind] = useState<Exclude<TakeInputType, "text">>("video");
   const [note, setNote] = useState("");
@@ -22,7 +26,7 @@ export function TakeUploadDropzone({
   const [error, setError] = useState<string | null>(null);
 
   async function onFile(file: File | null) {
-    if (!file || busy) return;
+    if (!file || busy || disabled) return;
     setBusy(true);
     setError(null);
     const key = crypto.randomUUID();
@@ -40,10 +44,10 @@ export function TakeUploadDropzone({
         headers: { "Idempotency-Key": key },
         body: form,
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string; job?: { id?: string } };
       if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить файл.");
       setNote("");
-      onUploaded();
+      onUploaded({ jobId: typeof data.job?.id === "string" ? data.job.id : null });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка загрузки.");
     } finally {
@@ -90,13 +94,14 @@ export function TakeUploadDropzone({
             ? "audio/*,.mp3,.wav,.m4a,.aac,.ogg,.webm"
             : "video/*,.mp4,.webm,.mov,.mkv"
         }
-        disabled={busy}
+        disabled={busy || disabled}
         onChange={(event) => {
           const file = event.target.files?.[0] ?? null;
           event.target.value = "";
           void onFile(file);
         }}
       />
+      {disabled && disabledReason ? <p className="text-sm text-muted">{disabledReason}</p> : null}
       {busy ? <p className="text-sm text-muted">Загрузка…</p> : null}
       {error ? <p className="text-sm text-bad">{error}</p> : null}
     </div>

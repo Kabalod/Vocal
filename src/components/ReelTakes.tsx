@@ -22,6 +22,8 @@ export function ReelTakes({
   onStartVoiceRecord,
   canRecord = false,
   recordBlockedReason,
+  recordScriptId,
+  onTakeJobStarted,
   reloadToken = 0,
 }: {
   reelId: string;
@@ -29,6 +31,8 @@ export function ReelTakes({
   onStartVoiceRecord?: () => void;
   canRecord?: boolean;
   recordBlockedReason?: string;
+  recordScriptId?: string | null;
+  onTakeJobStarted?: (jobId: string) => void;
   reloadToken?: number;
 }) {
   const [reel, setReel] = useState<ReelDto | null>(null);
@@ -229,7 +233,18 @@ export function ReelTakes({
         >
           Записать голос
         </ActionButton>
-        <TakeUploadDropzone reelId={reelId} videoOnly onUploaded={() => void load()} />
+        <TakeUploadDropzone
+          reelId={reelId}
+          videoOnly
+          process
+          scriptVersionId={recordScriptId ?? undefined}
+          disabled={!canRecord}
+          disabledReason={recordBlockedReason}
+          onUploaded={(info) => {
+            void load();
+            if (info.jobId) onTakeJobStarted?.(info.jobId);
+          }}
+        />
       </div>
       {reel.takes.length === 0 ? (
         <form onSubmit={addText} className="space-y-3 p-1">

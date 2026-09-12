@@ -26,6 +26,12 @@ export async function POST(request: Request) {
     if (reelId) {
       const inputTypeRaw = String(form.get("inputType") ?? "video");
       const inputType = isTakeInputType(inputTypeRaw) ? inputTypeRaw : "video";
+      const scriptVersionId =
+        typeof form.get("scriptVersionId") === "string" ? String(form.get("scriptVersionId")).trim() : "";
+      const shouldProcess = String(form.get("process") ?? "") === "1";
+      if (shouldProcess && !scriptVersionId) {
+        throw new ReelError("Нужна готовая версия сценария.", "SCRIPT_REQUIRED");
+      }
       const take = await saveUploadedTake({
         reelId,
         file,
@@ -34,16 +40,15 @@ export async function POST(request: Request) {
         idempotencyKey:
           request.headers.get("idempotency-key")?.trim() ||
           (typeof form.get("idempotencyKey") === "string" ? String(form.get("idempotencyKey")).trim() : undefined),
-        scriptVersionId:
-          typeof form.get("scriptVersionId") === "string" ? String(form.get("scriptVersionId")).trim() : undefined,
+        scriptVersionId: scriptVersionId || undefined,
       });
-      const shouldProcess = String(form.get("process") ?? "") === "1";
+      let job = null;
       if (shouldProcess && take.mediaStatus === "ready" && take.hasFile) {
         const { ensureJobForTake } = await import("@/lib/thought-media");
-        const job = await ensureJobForTake(take.id, file.name);
+        job = await ensureJobForTake(take.id, file.name);
         enqueueJob(job.id);
       }
-      return NextResponse.json({ take }, { status: 201 });
+      return NextResponse.json({ take, job }, { status: 201 });
     }
 
     await ensureCriteria();
