@@ -11,7 +11,8 @@
 Принятый Stage 06 / база Stage 07: `d4680eb9b48ac96cdea708f6b975afe033015ba5`.  
 Принятый Stage 07 / база Stage 08: `d7900049033a6b07cc329c0b5389d70ca11ef717`.  
 Принятый Stage 08 / база Stage 09: `95590acb324ccc99f8f38c6ef435cecacdc53fcb`.  
-Принятый Stage 09 / база Stage 10: `7032d7fc7083dd921504c16cf9ca2d843a3e1aff`.
+Принятый Stage 09 / база Stage 10: `7032d7fc7083dd921504c16cf9ca2d843a3e1aff`.  
+Принятый Stage 10 / база Stage 11: `b2bf6bf42a4648abeb3d94d652a876e0bb557f77`. Документационный коммит о принятии поверх этой SHA не является новой базой.
 
 Легенда статуса: `не начат` · `в работе` · `на ревью` · `принят` · `есть замечания`.
 
@@ -41,7 +42,8 @@
 | S07 | Сценарии и версии | принят | `feat/vocal-v2-07-script-drafts` | `d4680eb9b48ac96cdea708f6b975afe033015ba5` | `d7900049033a6b07cc329c0b5389d70ca11ef717` | lint; typecheck; build; test:reels 69/69 | принято стартом Stage 08; код `bf7554c`; review-fix `6d6794e` + `cf23429` + `aa800de`; docs HEAD `d790004` — база Stage 08 |
 | S08 | Дубли и запись | принят | `feat/vocal-v2-08-takes-recording` | `d7900049033a6b07cc329c0b5389d70ca11ef717` | `95590acb324ccc99f8f38c6ef435cecacdc53fcb` | lint; typecheck; build; test:reels 85/85 | принято стартом Stage 09; код `bb4b067`; review-fix `aeaa195` + `6d9e7c4`; docs HEAD `95590ac` — база Stage 09 |
 | S09 | Итоговый выбор и завершение | принят | `feat/vocal-v2-09-completion` | `95590acb324ccc99f8f38c6ef435cecacdc53fcb` | `7032d7fc7083dd921504c16cf9ca2d843a3e1aff` | lint; typecheck; build; test:reels 89/89 | принято стартом Stage 10; код `7b53395`; review-fix `35bf599`; docs HEAD `7032d7f` — база Stage 10; docs-принятие `5c9b317` не база |
-| S10 | Разговорная анкета и портрет | на ревью | `feat/vocal-v2-10-profile-dialogue` | `7032d7fc7083dd921504c16cf9ca2d843a3e1aff` | | lint; typecheck; build; test:reels 92/92 | код `d6255e2`; review-fix `476d2bb`; Stage 10 не принят; Stage 11 не начат |
+| S10 | Разговорная анкета и портрет | принят | `feat/vocal-v2-10-profile-dialogue` | `7032d7fc7083dd921504c16cf9ca2d843a3e1aff` | `b2bf6bf42a4648abeb3d94d652a876e0bb557f77` | lint; typecheck; build; test:reels 92/92 | принято стартом Stage 11; код `d6255e2`; review-fix `476d2bb`; docs HEAD `b2bf6bf` — база Stage 11 |
+| S11 | Интеграция и выпуск MVP | на ревью | `feat/vocal-v2-11-release` | `b2bf6bf42a4648abeb3d94d652a876e0bb557f77` | | lint; typecheck; build; test:reels 94/94 | код `69e4682`; Stage 11 не принят; MVP не объявлен выпущенным |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
@@ -112,6 +114,8 @@
 | Принятый Stage 09 / база Stage 10 | `7032d7fc7083dd921504c16cf9ca2d843a3e1aff` |
 | Коммит кода Stage 10 | `d6255e2bc763dff0ef4a9ea69ff2f0f20f78ee78` |
 | Исправление ревью Stage 10 (параллельный портрет) | `476d2bb2cf2c1467a158b128dc19a0a0484213b3` |
+| Принятый Stage 10 / база Stage 11 | `b2bf6bf42a4648abeb3d94d652a876e0bb557f77` |
+| Коммит кода Stage 11 | `69e468283ade66a30a36843e9fb6776b1d16a281` |
 
 ## Этап 9 — проверки
 
