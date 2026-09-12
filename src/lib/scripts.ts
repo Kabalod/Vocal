@@ -583,10 +583,7 @@ export async function restoreScript(
 }
 
 export async function setFinalScript(reelId: string, scriptId: string | null): Promise<ScriptBundleDto> {
-  const reel = await assertReel(reelId);
-  if (reel.status === "completed") {
-    throw new ScriptError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN");
-  }
+  await assertReel(reelId);
   if (scriptId) {
     const row = await prisma.scriptVersion.findFirst({ where: { id: scriptId, reelId } });
     if (!row) throw new ScriptError("Версия сценария не найдена.", "SCRIPT_NOT_FOUND", 404);
@@ -597,10 +594,25 @@ export async function setFinalScript(reelId: string, scriptId: string | null): P
       );
     }
   }
-  await prisma.reel.update({
-    where: { id: reelId },
-    data: { finalScriptId: scriptId },
+  const updated = await prisma.$transaction(async (tx) => {
+    const reel = await tx.reel.findUnique({ where: { id: reelId } });
+    if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+    if (reel.status === "completed") {
+      throw new ScriptError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
+    }
+    return tx.reel.updateMany({
+      where: { id: reelId, status: { not: "completed" } },
+      data: { finalScriptId: scriptId },
+    });
   });
+  if (updated.count !== 1) {
+    const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+    if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+    if (reel.status === "completed") {
+      throw new ScriptError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
+    }
+    throw new ScriptError("Карточка уже изменилась. Обновите данные и повторите.", "STALE", 409);
+  }
   return listScriptBundle(reelId);
 }
 

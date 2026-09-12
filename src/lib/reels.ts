@@ -222,15 +222,16 @@ export async function updateReel(id: string, input: UpdateReelInput): Promise<Re
 
   const nextFinalTake = input.finalTakeId !== undefined ? input.finalTakeId : current.finalTakeId;
   const nextFinalScript = current.finalScriptId;
-  const nextStatus = input.status !== undefined ? input.status : normalizeReelStatus(current.status);
+  const currentStatus = normalizeReelStatus(current.status);
+  const nextStatus = input.status !== undefined ? input.status : currentStatus;
+  const becomingCompleted = input.status === "completed" && currentStatus !== "completed";
+  const changingFinalTake = input.finalTakeId !== undefined;
 
-  if (current.status === "completed" && nextStatus === "completed") {
-    if (input.finalTakeId !== undefined && input.finalTakeId !== current.finalTakeId) {
-      throw new ReelError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN");
-    }
+  if (currentStatus === "completed" && nextStatus === "completed" && changingFinalTake) {
+    throw new ReelError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
   }
 
-  if (nextStatus === "completed" && normalizeReelStatus(current.status) !== "completed") {
+  if (becomingCompleted) {
     const gate = thoughtCompletionGate({
       finalTakeId: nextFinalTake,
       finalScriptId: nextFinalScript,
@@ -296,11 +297,59 @@ export async function updateReel(id: string, input: UpdateReelInput): Promise<Re
     }
     where.updatedAt = expected;
   }
+  if (changingFinalTake && nextStatus === "completed" && !becomingCompleted) {
+    throw new ReelError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
+  }
+  if (changingFinalTake && currentStatus !== "completed") {
+    where.status = { not: "completed" };
+  }
+  if (becomingCompleted) {
+    where.status = { not: "completed" };
+    where.finalScriptId = { not: null };
+    if (input.finalTakeId === undefined) where.finalTakeId = { not: null };
+  }
 
-  const updated = await prisma.reel.updateMany({ where, data });
+  const updated = await prisma.$transaction(async (tx) => {
+    if (becomingCompleted || changingFinalTake) {
+      const fresh = await tx.reel.findUnique({ where: { id } });
+      if (!fresh) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+      const freshStatus = normalizeReelStatus(fresh.status);
+      const takeId = input.finalTakeId !== undefined ? input.finalTakeId : fresh.finalTakeId;
+      const scriptId = fresh.finalScriptId;
+      if (changingFinalTake && freshStatus === "completed" && nextStatus === "completed") {
+        throw new ReelError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
+      }
+      if (becomingCompleted) {
+        const gate = thoughtCompletionGate({
+          finalTakeId: takeId,
+          finalScriptId: scriptId,
+          status: "idea",
+        });
+        if (!gate.canComplete) {
+          throw new ReelError(gate.blockedReason || "Нельзя завершить мысль без обоих итогов.", "COMPLETE_INCOMPLETE");
+        }
+        if (takeId) await assertFinalTakeBelongs(id, takeId);
+        if (scriptId) await assertFinalScriptReady(id, scriptId);
+      }
+    }
+    return tx.reel.updateMany({ where, data });
+  });
   if (updated.count !== 1) {
     const exists = await prisma.reel.findUnique({ where: { id } });
     if (!exists) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+    if (changingFinalTake && normalizeReelStatus(exists.status) === "completed") {
+      throw new ReelError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
+    }
+    if (becomingCompleted) {
+      const gate = thoughtCompletionGate({
+        finalTakeId: exists.finalTakeId,
+        finalScriptId: exists.finalScriptId,
+        status: "idea",
+      });
+      if (!gate.canComplete) {
+        throw new ReelError(gate.blockedReason || "Нельзя завершить мысль без обоих итогов.", "COMPLETE_INCOMPLETE");
+      }
+    }
     throw new ReelError("Карточка уже изменилась. Обновите данные и повторите.", "STALE", 409);
   }
 

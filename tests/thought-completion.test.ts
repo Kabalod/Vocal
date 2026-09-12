@@ -191,3 +191,108 @@ test("final take migrates from selectedTakeId and completion keeps history", asy
   };
   assert.deepEqual(after, before);
 });
+
+function isRaceReject(err: unknown): boolean {
+  if (!err || typeof err !== "object" || !("code" in err)) return false;
+  const code = (err as { code: string }).code;
+  return code === "NEED_REOPEN" || code === "COMPLETE_INCOMPLETE" || code === "STALE";
+}
+
+async function assertCompletedHasBothFinals(
+  prisma: PrismaClient,
+  reelId: string,
+): Promise<{ status: string; finalTakeId: string | null; finalScriptId: string | null }> {
+  const row = await prisma.reel.findUnique({
+    where: { id: reelId },
+    select: { status: true, finalTakeId: true, finalScriptId: true },
+  });
+  assert.ok(row);
+  if (row.status === "completed") {
+    assert.ok(row.finalTakeId, "completed without finalTakeId");
+    assert.ok(row.finalScriptId, "completed without finalScriptId");
+  }
+  return row;
+}
+
+test("concurrent final changes cannot complete a thought without both finals", async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vocal-complete-race-"));
+  const url = fileUrl(path.join(dir, "test.db"));
+  process.env.DATABASE_URL = url;
+  await resetPrismaClient();
+  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* windows */
+    }
+  });
+  migrateDeploy(url);
+
+  const { createReel, createTake, updateReel } = await import("../src/lib/reels");
+  const { saveManualScript, setFinalScript } = await import("../src/lib/scripts");
+
+  async function seed() {
+    const reel = await createReel({ title: "Гонка итогов" });
+    const takeA = await createTake(reel.id, { inputType: "text", bodyText: "дубль A" });
+    const takeB = await createTake(reel.id, { inputType: "text", bodyText: "дубль B" });
+    const first = await saveManualScript(reel.id, {
+      body: "Сценарий A",
+      sources: [],
+      expectedHeadId: null,
+    });
+    const second = await saveManualScript(reel.id, {
+      body: "Сценарий B",
+      sources: [],
+      expectedHeadId: first.headId,
+    });
+    assert.ok(first.headId);
+    assert.ok(second.headId);
+    await updateReel(reel.id, { finalTakeId: takeA.id });
+    await setFinalScript(reel.id, first.headId);
+    return { reelId: reel.id, takeA: takeA.id, takeB: takeB.id, scriptA: first.headId, scriptB: second.headId };
+  }
+
+  async function race(
+    left: () => Promise<unknown>,
+    right: () => Promise<unknown>,
+    reelId: string,
+  ) {
+    const settled = await Promise.allSettled([left(), right()]);
+    const row = await assertCompletedHasBothFinals(prisma, reelId);
+    for (const item of settled) {
+      if (item.status === "rejected") assert.equal(isRaceReject(item.reason), true, String(item.reason));
+    }
+    return { settled, row };
+  }
+
+  const clearScript = await seed();
+  await race(
+    () => setFinalScript(clearScript.reelId, null),
+    () => updateReel(clearScript.reelId, { status: "completed" }),
+    clearScript.reelId,
+  );
+
+  const clearTake = await seed();
+  await race(
+    () => updateReel(clearTake.reelId, { finalTakeId: null }),
+    () => updateReel(clearTake.reelId, { status: "completed" }),
+    clearTake.reelId,
+  );
+
+  const changeTake = await seed();
+  await race(
+    () => updateReel(changeTake.reelId, { finalTakeId: changeTake.takeB }),
+    () => updateReel(changeTake.reelId, { status: "completed" }),
+    changeTake.reelId,
+  );
+
+  const changeScript = await seed();
+  await race(
+    () => setFinalScript(changeScript.reelId, changeScript.scriptB),
+    () => updateReel(changeScript.reelId, { status: "completed" }),
+    changeScript.reelId,
+  );
+});
