@@ -311,3 +311,97 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
   });
   assert.equal(deterministic.publicForScript[0]?.text, "старый смысл");
 });
+
+test("parallel profile answers rematch onto the latest portrait", async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-race-"));
+  const url = fileUrl(path.join(dir, "test.db"));
+  process.env.DATABASE_URL = url;
+  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  await resetPrismaClient();
+  resetAiInflightForTests();
+  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+    resetAiInflightForTests();
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* windows lock */
+    }
+  });
+  migrateDeploy(url);
+
+  const { startProfileDialogue, sendProfileMessage, getProfileWorkspace } = await import(
+    "../src/lib/profile-dialogue"
+  );
+  await startProfileDialogue();
+
+  let releaseFirst!: () => void;
+  const holdFirst = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let enteredFirst!: () => void;
+  const firstInModel = new Promise<void>((resolve) => {
+    enteredFirst = resolve;
+  });
+
+  const whyText = "Пишу, чтобы оставить свои слова.";
+  const boundText = "не хочу говорить о теме работы";
+
+  const first = sendProfileMessage({ text: whyText, idempotencyKey: "race-why" }, async () => {
+    enteredFirst();
+    await holdFirst;
+    return {
+      text: JSON.stringify({
+        reply: "Записал цель.",
+        coveredKeys: ["whyRecord"],
+        missingKeys: [],
+        patch: { whyRecord: { text: "оставить свои слова", usage: "understanding" } },
+        complete: false,
+      }),
+      usage: { promptTokens: 3, completionTokens: 2 },
+    };
+  });
+  const second = sendProfileMessage({ text: boundText, idempotencyKey: "race-bound" }, async () => {
+    await firstInModel;
+    return {
+      text: JSON.stringify({
+        reply: "Записал границу.",
+        coveredKeys: ["boundaries"],
+        missingKeys: [],
+        patch: { boundaries: { text: "не хочу говорить о теме работы", usage: "understanding" } },
+        complete: false,
+      }),
+      usage: { promptTokens: 3, completionTokens: 2 },
+    };
+  });
+
+  await second;
+  releaseFirst();
+  await first;
+
+  const workspace = await getProfileWorkspace();
+  assert.equal(workspace.profile.fields.find((field) => field.id === "whyRecord")?.text, "оставить свои слова");
+  assert.equal(
+    workspace.profile.fields.find((field) => field.id === "boundaries")?.text,
+    "не хочу говорить о теме работы",
+  );
+  assert.ok(workspace.portrait?.coveredKeys.includes("whyRecord"));
+  assert.ok(workspace.portrait?.coveredKeys.includes("boundaries"));
+
+  const users = await prisma.dialogueMessage.findMany({ where: { role: "user" } });
+  assert.equal(users.filter((row) => row.body === whyText).length, 1);
+  assert.equal(users.filter((row) => row.body === boundText).length, 1);
+  assert.equal(await prisma.aiCall.count({ where: { kind: "profile_dialogue" } }), 2);
+
+  const calls = await prisma.aiCall.findMany({ where: { kind: "profile_dialogue" } });
+  for (const call of calls) {
+    const snapshot = JSON.parse(call.inputSnapshotJson) as { text?: string };
+    const text = snapshot.text ?? "";
+    assert.ok(text);
+    const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const occurrences = call.promptText.match(new RegExp(escaped, "g")) ?? [];
+    assert.equal(occurrences.length, 1, "current reply must appear once in the prompt");
+  }
+});

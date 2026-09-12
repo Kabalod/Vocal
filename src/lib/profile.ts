@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { buildPortrait, parseStoredPayload, type StoredProfilePayload } from "@/lib/profile-portrait";
 import {
@@ -104,41 +105,68 @@ export async function getProfileRevision(id: string | null | undefined): Promise
   return toRevisionDto(row.id, row.createdAt, row.payloadJson);
 }
 
-export async function readStoredProfilePayload(): Promise<StoredProfilePayload> {
-  const profile = await ensureLocalProfile();
-  if (!profile.currentRevisionId) {
-    return { fields: emptyProfileFields(), skipped: false, supplementing: false, portrait: null };
-  }
-  const current = await prisma.profileRevision.findUnique({ where: { id: profile.currentRevisionId } });
-  if (!current) {
-    return { fields: emptyProfileFields(), skipped: false, supplementing: false, portrait: null };
-  }
-  const stored = parseStoredPayload(current.payloadJson);
-  return { ...stored, fields: parsePayload(current.payloadJson) };
+export function emptyStoredPayload(): StoredProfilePayload {
+  return { fields: emptyProfileFields(), skipped: false, supplementing: false, portrait: null };
 }
 
-export async function persistProfilePayload(input: StoredProfilePayload): Promise<ProfileDto> {
-  await ensureLocalProfile();
+export function storedPayloadFromJson(payloadJson: string): StoredProfilePayload {
+  const stored = parseStoredPayload(payloadJson);
+  return { ...stored, fields: parsePayload(payloadJson) };
+}
+
+export function serializeStoredPayload(input: StoredProfilePayload): string {
   const fields = normalizeFields(input.fields);
   const portrait = input.portrait
     ? { ...buildPortrait(fields, input.portrait.completed), completed: input.portrait.completed }
     : null;
-  const payloadJson = JSON.stringify({
+  return JSON.stringify({
     fields,
     skipped: input.skipped,
     supplementing: input.supplementing,
     portrait,
   } satisfies StoredProfilePayload);
-  const revision = await prisma.profileRevision.create({
+}
+
+export async function readStoredProfilePayloadTx(
+  tx: Prisma.TransactionClient,
+): Promise<{ stored: StoredProfilePayload; revisionId: string | null }> {
+  const profile = await tx.creatorProfile.findUnique({ where: { id: LOCAL_PROFILE_ID } });
+  if (!profile?.currentRevisionId) {
+    return { stored: emptyStoredPayload(), revisionId: null };
+  }
+  const current = await tx.profileRevision.findUnique({ where: { id: profile.currentRevisionId } });
+  if (!current) {
+    return { stored: emptyStoredPayload(), revisionId: null };
+  }
+  return { stored: storedPayloadFromJson(current.payloadJson), revisionId: current.id };
+}
+
+export async function readStoredProfilePayload(): Promise<StoredProfilePayload> {
+  await ensureLocalProfile();
+  const { stored } = await readStoredProfilePayloadTx(prisma);
+  return stored;
+}
+
+export async function persistProfilePayloadTx(
+  tx: Prisma.TransactionClient,
+  input: StoredProfilePayload,
+): Promise<string> {
+  const revision = await tx.profileRevision.create({
     data: {
       profileId: LOCAL_PROFILE_ID,
-      payloadJson,
+      payloadJson: serializeStoredPayload(input),
     },
   });
-  await prisma.creatorProfile.update({
+  await tx.creatorProfile.update({
     where: { id: LOCAL_PROFILE_ID },
     data: { currentRevisionId: revision.id },
   });
+  return revision.id;
+}
+
+export async function persistProfilePayload(input: StoredProfilePayload): Promise<ProfileDto> {
+  await ensureLocalProfile();
+  await prisma.$transaction(async (tx) => persistProfilePayloadTx(tx, input));
   return getProfile();
 }
 

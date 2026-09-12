@@ -8,8 +8,16 @@ import { assertDailyTokenBudget, withAiInflight } from "@/lib/ai/usage-guard";
 import { extractAudio } from "@/lib/ffmpeg";
 import { transcribeAudio } from "@/lib/stt";
 import { decodeDialogueCursor, pageDialogueItems } from "@/lib/dialogue-cursor";
-import { ensureLocalProfile, getProfile, persistProfilePayload, readStoredProfilePayload } from "@/lib/profile";
+import {
+  ensureLocalProfile,
+  getProfile,
+  persistProfilePayload,
+  readStoredProfilePayload,
+  readStoredProfilePayloadTx,
+  serializeStoredPayload,
+} from "@/lib/profile";
 import { buildPortrait, decidePortraitComplete, mergeProfileFields } from "@/lib/profile-portrait";
+import type { ProfileAiReply } from "@/lib/ai/profile";
 import { LOCAL_PROFILE_ID } from "@/types/profile";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
@@ -132,9 +140,22 @@ export async function getProfileWorkspace(input: { cursor?: string | null } = {}
   };
 }
 
-async function recentStoredText(threadId: string): Promise<string> {
+class ProfileApplyConflict extends Error {
+  constructor() {
+    super("PROFILE_APPLY_CONFLICT");
+    this.name = "ProfileApplyConflict";
+  }
+}
+
+const APPLY_RETRIES = 5;
+
+async function recentStoredText(threadId: string, excludeMessageId?: string): Promise<string> {
   const rows = await prisma.dialogueMessage.findMany({
-    where: { threadId, kind: { not: "processing" } },
+    where: {
+      threadId,
+      kind: { not: "processing" },
+      ...(excludeMessageId ? { id: { not: excludeMessageId } } : {}),
+    },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 12,
   });
@@ -142,6 +163,67 @@ async function recentStoredText(threadId: string): Promise<string> {
     .reverse()
     .map((row) => `${row.role}: ${row.body}`)
     .join("\n");
+}
+
+async function applyPortraitReply(input: {
+  callId: string;
+  processingId: string;
+  parsed: ProfileAiReply;
+  rawText: string;
+  promptTokens: number | null;
+  completionTokens: number | null;
+}): Promise<void> {
+  for (let attempt = 0; attempt < APPLY_RETRIES; attempt++) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        const { stored, revisionId } = await readStoredProfilePayloadTx(tx);
+        const merged = mergeProfileFields(stored.fields, input.parsed.patch);
+        const patchHadText = Object.values(input.parsed.patch).some((item) => (item?.text ?? "").trim().length > 0);
+        const completed = decidePortraitComplete({
+          fields: merged,
+          modelComplete: input.parsed.complete,
+          supplementing: stored.supplementing,
+          patchHadText,
+        });
+        const portrait = buildPortrait(merged, completed);
+        const revision = await tx.profileRevision.create({
+          data: {
+            profileId: LOCAL_PROFILE_ID,
+            payloadJson: serializeStoredPayload({
+              fields: merged,
+              skipped: false,
+              supplementing: stored.supplementing && !completed,
+              portrait,
+            }),
+          },
+        });
+        const switched = await tx.creatorProfile.updateMany({
+          where: { id: LOCAL_PROFILE_ID, currentRevisionId: revisionId },
+          data: { currentRevisionId: revision.id },
+        });
+        if (switched.count !== 1) throw new ProfileApplyConflict();
+        await tx.aiCall.update({
+          where: { id: input.callId },
+          data: {
+            status: "done",
+            responseText: input.rawText,
+            resultJson: JSON.stringify(input.parsed),
+            promptTokens: input.promptTokens,
+            completionTokens: input.completionTokens,
+          },
+        });
+        await tx.dialogueMessage.update({
+          where: { id: input.processingId },
+          data: { kind: completed ? "text" : "question", body: input.parsed.reply, status: "done" },
+        });
+      });
+      return;
+    } catch (error) {
+      if (error instanceof ProfileApplyConflict) continue;
+      throw error;
+    }
+  }
+  throw new ProfileDialogueError("Портрет уже обновился. Повторите ответ — предыдущие смыслы не стёрты.", "STALE", 409);
 }
 
 async function seedAssistant(threadId: string, body: string) {
@@ -209,7 +291,7 @@ export async function sendProfileMessage(
     if (raced) return getProfileWorkspace();
     await assertDailyTokenBudget();
 
-    await prisma.dialogueMessage.create({
+    const userMessage = await prisma.dialogueMessage.create({
       data: {
         threadId: thread.id,
         role: "user",
@@ -234,7 +316,7 @@ export async function sendProfileMessage(
     const userPrompt = `${profileChecklistPrompt(stored.fields)}
 
 Недавняя переписка:
-${await recentStoredText(thread.id)}
+${await recentStoredText(thread.id, userMessage.id)}
 
 Ответ автора: ${text}`;
 
@@ -258,35 +340,13 @@ ${await recentStoredText(thread.id)}
         label: "profile_dialogue",
       });
       const parsed = parseProfileAiReply(parseJsonObject(raw.text));
-      await prisma.aiCall.update({
-        where: { id: call.id },
-        data: {
-          status: "done",
-          responseText: raw.text,
-          resultJson: JSON.stringify(parsed),
-          promptTokens: raw.usage?.promptTokens ?? null,
-          completionTokens: raw.usage?.completionTokens ?? null,
-        },
-      });
-
-      const merged = mergeProfileFields(stored.fields, parsed.patch);
-      const patchHadText = Object.values(parsed.patch).some((item) => (item?.text ?? "").trim().length > 0);
-      const completed = decidePortraitComplete({
-        fields: merged,
-        modelComplete: parsed.complete,
-        supplementing: stored.supplementing,
-        patchHadText,
-      });
-      const portrait = buildPortrait(merged, completed);
-      await persistProfilePayload({
-        fields: merged,
-        skipped: false,
-        supplementing: stored.supplementing && !completed,
-        portrait,
-      });
-      await prisma.dialogueMessage.update({
-        where: { id: processing.id },
-        data: { kind: completed ? "text" : "question", body: parsed.reply, status: "done" },
+      await applyPortraitReply({
+        callId: call.id,
+        processingId: processing.id,
+        parsed,
+        rawText: raw.text,
+        promptTokens: raw.usage?.promptTokens ?? null,
+        completionTokens: raw.usage?.completionTokens ?? null,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Не удалось обновить портрет.";
@@ -298,6 +358,7 @@ ${await recentStoredText(thread.id)}
         where: { id: processing.id },
         data: { kind: "error", body: message, status: "error" },
       });
+      if (error instanceof ProfileDialogueError) throw error;
     }
     return getProfileWorkspace();
   });
