@@ -8,6 +8,16 @@ export function TakePlayer({ take, seekTo }: { take: TakeDto | null; seekTo: num
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
 
   useEffect(() => {
+    const node = mediaRef.current;
+    return () => {
+      if (!node) return;
+      node.pause();
+      node.removeAttribute("src");
+      node.load();
+    };
+  }, [take?.id]);
+
+  useEffect(() => {
     if (seekTo == null || !mediaRef.current) return;
     mediaRef.current.currentTime = seekTo;
     void mediaRef.current.play().catch(() => undefined);

@@ -166,6 +166,12 @@ test("take media API: types, idempotency, range, path deny, no auto-final, no jo
   })).json();
   assert.equal(afterCreates.reel.selectedTakeId, null);
   assert.equal(afterCreates.reel.takeCount, 4);
+  assert.equal(afterCreates.reel.takes.find((row: { id: string }) => row.id === videoTake.id)?.mediaUrl, null);
+  assert.equal(listedBody.takes.find((row: { id: string }) => row.id === videoTake.id)?.mediaUrl, null);
+  const detailTake = await getTake(new Request(`http://vocal.local/api/takes/${videoTake.id}`), {
+    params: Promise.resolve({ id: videoTake.id }),
+  });
+  assert.equal((await detailTake.json()).take.mediaUrl, `/api/takes/${videoTake.id}/media`);
 
   const notePatch = await patchTake(
     new Request(`http://vocal.local/api/takes/${takeA.id}`, {
@@ -434,4 +440,71 @@ test("backfilled job take plays in browser and serves Range", async (t) => {
   assert.equal(media.headers.get("content-type"), "video/mp4");
   assert.equal(media.headers.get("content-range"), "bytes 0-3/16");
   assert.equal(Buffer.from(await media.arrayBuffer()).toString(), "0123");
+});
+
+test("voice upload stores scriptVersionId and does not auto-select final take", async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vocal-takes-script-"));
+  const storage = path.join(dir, "storage");
+  const url = fileUrl(path.join(dir, "test.db"));
+  process.env.DATABASE_URL = url;
+  process.env.VOCAL_STORAGE_ROOT = storage;
+  process.env.VOCAL_SKIP_JOB_ENQUEUE = "1";
+  await resetPrismaClient();
+  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  t.after(async () => {
+    delete process.env.VOCAL_SKIP_JOB_ENQUEUE;
+    await prisma.$disconnect();
+    await resetPrismaClient();
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* windows lock */
+    }
+  });
+  migrateDeploy(url);
+
+  const { createReel, createTake } = await import("../src/lib/reels");
+  const { saveManualScript } = await import("../src/lib/scripts");
+  const { POST: upload } = await import("../src/app/api/uploads/route");
+  const { GET: getReel } = await import("../src/app/api/reels/[id]/route");
+
+  const reel = await createReel({ title: "Запись со сценарием" });
+  await createTake(reel.id, { inputType: "text", bodyText: "исходная мысль" });
+  const bundle = await saveManualScript(reel.id, { body: "Готовый текст сценария для записи." });
+  const scriptId = bundle.headId;
+  assert.ok(scriptId);
+
+  const bytes = Buffer.from("0123456789abcdef");
+  const form = new FormData();
+  form.set("file", new File([bytes], "voice.webm", { type: "audio/webm" }));
+  form.set("reelId", reel.id);
+  form.set("inputType", "audio");
+  form.set("scriptVersionId", scriptId);
+  form.set("process", "1");
+  form.set("idempotencyKey", "voice-1");
+  const first = await upload(new Request("http://vocal.local/api/uploads", { method: "POST", body: form }));
+  assert.equal(first.status, 201);
+  const takeA = (await first.json()).take;
+  assert.equal(takeA.scriptVersionId, scriptId);
+  assert.equal(takeA.number, 2);
+
+  const form2 = new FormData();
+  form2.set("file", new File([bytes], "voice-2.webm", { type: "audio/webm" }));
+  form2.set("reelId", reel.id);
+  form2.set("inputType", "audio");
+  form2.set("scriptVersionId", scriptId);
+  form2.set("idempotencyKey", "voice-2");
+  const second = await upload(new Request("http://vocal.local/api/uploads", { method: "POST", body: form2 }));
+  const takeB = (await second.json()).take;
+  assert.equal(takeB.number, 3);
+  assert.notEqual(takeA.id, takeB.id);
+
+  const listed = await (
+    await getReel(new Request(`http://vocal.local/api/reels/${reel.id}`), {
+      params: Promise.resolve({ id: reel.id }),
+    })
+  ).json();
+  assert.equal(listed.reel.selectedTakeId, null);
+  assert.equal(listed.reel.takeCount, 3);
+  assert.equal(await prisma.job.count({ where: { takeId: takeA.id } }), 1);
 });

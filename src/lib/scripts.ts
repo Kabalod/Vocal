@@ -510,6 +510,31 @@ async function createVersion(
   return toDto(created);
 }
 
+export async function createReadyScriptFromTranscript(
+  reelId: string,
+  input: {
+    body: string;
+    transcriptId: string;
+    takeNumber: number;
+    parentId?: string | null;
+    select: boolean;
+  },
+): Promise<ScriptVersionDto> {
+  return createVersion(reelId, {
+    kind: "manual",
+    body: input.body,
+    sources: [
+      {
+        type: "transcript",
+        id: input.transcriptId,
+        label: `Из дубля №${input.takeNumber}`,
+      },
+    ],
+    parentId: input.parentId,
+    select: input.select,
+  });
+}
+
 export async function saveManualScript(
   reelId: string,
   input: {

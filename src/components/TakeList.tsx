@@ -55,7 +55,8 @@ function TakeRow({
     <li className={`rounded-xl border p-3 ${active ? "border-accent" : "border-line"}`}>
       <button type="button" onClick={onView} className="w-full text-left">
         <p className="text-sm">
-          №{take.number} · {TAKE_INPUT_TYPE_LABELS[take.inputType]}
+          №{take.number}
+          {take.number === 1 ? " · исходная мысль" : ""} · {TAKE_INPUT_TYPE_LABELS[take.inputType]}
           {isFinal ? " · финальный" : ""}
         </p>
         <p className="text-xs text-muted">{take.originalName ?? (take.inputType === "text" ? "без файла" : take.mediaStatus)}</p>
@@ -73,7 +74,7 @@ function TakeRow({
         onClick={onFinal}
         className="mt-2 rounded-full bg-bg-elev px-3 py-1 text-xs text-muted"
       >
-        {isFinal ? "Снять финальный" : "Сделать финальным"}
+        {isFinal ? "Снять итоговый" : "Сделать итоговым"}
       </button>
     </li>
   );

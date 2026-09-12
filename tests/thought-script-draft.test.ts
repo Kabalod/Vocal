@@ -237,3 +237,53 @@ test("draft finalize keeps latest body, rejects stale token, and transfer bumps 
   assert.equal(afterOldPatch.draft?.body, "Перенесённое предложение Vocal.");
   assert.equal(afterOldPatch.readyCount, immediate.readyCount);
 });
+
+test("new transcribed take creates the next ready script and leaves the draft", async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vocal-take-script-"));
+  const url = fileUrl(path.join(dir, "test.db"));
+  process.env.DATABASE_URL = url;
+  await resetPrismaClient();
+  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* windows */
+    }
+  });
+  migrateDeploy(url);
+
+  const { createReel, createTake } = await import("../src/lib/reels");
+  const { ensureOriginalFromText } = await import("../src/lib/transcripts");
+  const { listScriptWorkspace, openScriptDraft, saveManualScript } = await import("../src/lib/scripts");
+  const { applyThoughtMediaFromTranscript } = await import("../src/lib/thought-media");
+
+  const reel = await createReel({ title: "Мысль" });
+  await prisma.thoughtCreateKey.create({ data: { key: "rec-1", reelId: reel.id } });
+  const firstTake = await createTake(reel.id, { inputType: "text", bodyText: "исходная мысль" });
+  await ensureOriginalFromText(firstTake.id, "исходная мысль");
+  const ready = await saveManualScript(reel.id, { body: "Готовая версия один." });
+  assert.ok(ready.headId);
+  await openScriptDraft(reel.id);
+  const before = await listScriptWorkspace(reel.id);
+  assert.equal(before.readyCount, 1);
+  assert.ok(before.draft);
+
+  const take2 = await createTake(reel.id, {
+    inputType: "audio",
+    scriptVersionId: ready.headId ?? undefined,
+  });
+  await ensureOriginalFromText(take2.id, "новый дубль про смысл");
+  await applyThoughtMediaFromTranscript(take2.id, "новый дубль про смысл");
+
+  const after = await listScriptWorkspace(reel.id);
+  assert.equal(after.readyCount, 2);
+  assert.equal(after.selectedScriptId, ready.headId);
+  assert.equal(after.draft?.body, before.draft?.body);
+  const stored = await prisma.take.findUnique({ where: { id: take2.id } });
+  assert.equal(stored?.scriptVersionId, ready.headId);
+  await applyThoughtMediaFromTranscript(take2.id, "новый дубль про смысл");
+  assert.equal((await listScriptWorkspace(reel.id)).readyCount, 2);
+});

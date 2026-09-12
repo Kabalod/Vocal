@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { TakeList } from "@/components/TakeList";
 import { TakePlayer } from "@/components/TakePlayer";
 import { TakeUploadDropzone } from "@/components/TakeUploadDropzone";
@@ -8,7 +9,7 @@ import { TranscriptEditor } from "@/components/TranscriptEditor";
 import { QuestionList } from "@/components/QuestionList";
 import { ReviewPanel } from "@/components/ReviewPanel";
 import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
-import type { ReelDto } from "@/types/reel";
+import type { ReelDto, TakeDto } from "@/types/reel";
 
 type ReelTakesSlots = {
   media: ReactNode;
@@ -18,19 +19,27 @@ type ReelTakesSlots = {
 export function ReelTakes({
   reelId,
   children,
+  onStartVoiceRecord,
+  canRecord = false,
+  recordBlockedReason,
+  reloadToken = 0,
 }: {
   reelId: string;
   children?: (slots: ReelTakesSlots) => ReactNode;
+  onStartVoiceRecord?: () => void;
+  canRecord?: boolean;
+  recordBlockedReason?: string;
+  reloadToken?: number;
 }) {
   const [reel, setReel] = useState<ReelDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailTake, setDetailTake] = useState<TakeDto | null>(null);
   const [seekTo, setSeekTo] = useState<number | null>(null);
   const [seekInput, setSeekInput] = useState("0");
   const [textBody, setTextBody] = useState("");
   const [textNote, setTextNote] = useState("");
-  const [scriptVersionId, setScriptVersionId] = useState("");
-  const [scriptOptions, setScriptOptions] = useState<{ id: string; label: string }[]>([]);
   const [savingText, setSavingText] = useState(false);
 
   const load = useCallback(async () => {
@@ -39,24 +48,36 @@ export function ReelTakes({
     if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить дубли.");
     const next = data.reel as ReelDto;
     setReel(next);
-    const scriptsRes = await fetch(`/api/reels/${reelId}/scripts`, { cache: "no-store" });
-    if (scriptsRes.ok) {
-      const scripts = (await scriptsRes.json()) as { versions?: { id: string; kind: string; createdAt: string }[] };
-      setScriptOptions(
-        (scripts.versions ?? [])
-          .filter((row) => row.kind !== "ai_proposal")
-          .map((row) => ({ id: row.id, label: `${row.kind} · ${row.createdAt}` })),
-      );
-    }
     setViewingId((current) => {
       if (current && next.takes.some((take) => take.id === current)) return current;
-      return next.takes[0]?.id ?? null;
+      return current;
     });
   }, [reelId]);
 
   useEffect(() => {
     void load().catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."));
-  }, [load]);
+  }, [load, reloadToken]);
+
+  useEffect(() => {
+    if (!viewingId || !detailOpen) {
+      setDetailTake(null);
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/takes/${viewingId}`, { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data: { take?: TakeDto; error?: string }) => {
+        if (cancelled) return;
+        if (data.take) setDetailTake(data.take);
+        else setError(data.error ?? "Не удалось открыть дубль.");
+      })
+      .catch(() => {
+        if (!cancelled) setError("Не удалось открыть дубль.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewingId, detailOpen]);
 
   async function saveNote(takeId: string, authorNote: string) {
     const res = await fetch(`/api/takes/${takeId}`, {
@@ -81,7 +102,7 @@ export function ReelTakes({
     });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error ?? "Не удалось отметить финальный дубль.");
+      setError(data.error ?? "Не удалось отметить итоговый дубль.");
       return;
     }
     setReel(data.reel);
@@ -100,7 +121,6 @@ export function ReelTakes({
           inputType: "text",
           bodyText: textBody,
           authorNote: textNote,
-          scriptVersionId: scriptVersionId || undefined,
         }),
       });
       const data = await res.json();
@@ -108,7 +128,6 @@ export function ReelTakes({
       setTextBody("");
       setTextNote("");
       await load();
-      if (data.take?.id) setViewingId(data.take.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка.");
     } finally {
@@ -122,7 +141,54 @@ export function ReelTakes({
     return pending;
   }
 
-  const viewing = reel.takes.find((take) => take.id === viewingId) ?? null;
+  const list = (
+    <div className={detailOpen ? "hidden shell:block" : ""}>
+      <TakeList
+        reel={reel}
+        viewingId={viewingId}
+        onView={(id) => {
+          setViewingId(id);
+          setDetailOpen(true);
+        }}
+        onFinal={(id) => void setFinal(id)}
+        onNote={(id, note) => void saveNote(id, note)}
+      />
+    </div>
+  );
+
+  const detail = detailOpen ? (
+    <div className="space-y-4">
+      <ActionButton variant="secondary" className="shell:hidden" onClick={() => setDetailOpen(false)}>
+        ← К списку дублей
+      </ActionButton>
+      <TakePlayer take={detailTake} seekTo={seekTo} />
+      {detailTake ? <TranscriptEditor key={detailTake.id} takeId={detailTake.id} /> : null}
+      {detailTake && detailTake.inputType !== "text" && detailTake.browserPlayback ? (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const sec = Number(seekInput.replace(",", "."));
+            if (Number.isFinite(sec) && sec >= 0) setSeekTo(sec);
+          }}
+        >
+          <label className="text-sm text-muted">
+            Таймкод, сек
+            <input
+              value={seekInput}
+              onChange={(event) => setSeekInput(event.target.value)}
+              className="ml-2 w-24 rounded-lg border border-line bg-bg px-2 py-1"
+            />
+          </label>
+          <button type="submit" className="vocal-btn vocal-btn-primary text-sm">
+            К таймкоду
+          </button>
+        </form>
+      ) : null}
+    </div>
+  ) : (
+    <p className="hidden text-sm text-muted shell:block">Выберите дубль в списке.</p>
+  );
 
   const vocal = (
     <div className="space-y-6">
@@ -131,10 +197,10 @@ export function ReelTakes({
         <p className="text-sm text-muted">Вопросы и разбор по выбранному дублю. Обычные ответы не вызывают ИИ.</p>
       </div>
       {error ? <p className="text-bad">{error}</p> : null}
-      {viewing ? (
-        <ReviewPanel key={`review-${viewing.id}`} takeId={viewing.id} />
+      {detailTake ? (
+        <ReviewPanel key={`review-${detailTake.id}`} takeId={detailTake.id} />
       ) : (
-        <ShellEmpty title="Нет дубля" description="Добавьте попытку — разбор появится рядом." />
+        <ShellEmpty title="Нет дубля" description="Откройте попытку — разбор появится рядом." />
       )}
       <QuestionList reelId={reelId} takeId={viewingId} />
     </div>
@@ -145,85 +211,51 @@ export function ReelTakes({
       <div>
         <h2 className="font-[family-name:var(--font-display)] text-2xl">Попытки</h2>
         <p className="text-sm text-muted">
-          Новый дубль не заменяет старый и не становится финальным сам. Расшифровку можно править версиями; распознавание
-          речи по-прежнему запускается отдельно через задачу обработки.
+          Новый дубль не заменяет старый и не становится итоговым сам. Дубль №1 — исходная мысль.
         </p>
       </div>
       {error ? <p className="text-bad">{error}</p> : null}
-      <div className="grid gap-6 lg:grid-cols-[minmax(16rem,20rem)_1fr]">
-        <TakeList
-          reel={reel}
-          viewingId={viewingId}
-          onView={setViewingId}
-          onFinal={(id) => void setFinal(id)}
-          onNote={(id, note) => void saveNote(id, note)}
-        />
-        <div className="space-y-4">
-          <TakePlayer take={viewing} seekTo={seekTo} />
-          {viewing ? <TranscriptEditor key={viewing.id} takeId={viewing.id} /> : null}
-          {viewing && viewing.inputType !== "text" && viewing.browserPlayback ? (
-            <form
-              className="flex flex-wrap items-end gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const sec = Number(seekInput.replace(",", "."));
-                if (Number.isFinite(sec) && sec >= 0) setSeekTo(sec);
-              }}
-            >
-              <label className="text-sm text-muted">
-                Таймкод, сек
-                <input
-                  value={seekInput}
-                  onChange={(event) => setSeekInput(event.target.value)}
-                  className="ml-2 w-24 rounded-lg border border-line bg-bg px-2 py-1"
-                />
-              </label>
-              <button type="submit" className="vocal-btn vocal-btn-primary text-sm">
-                К таймкоду
-              </button>
-            </form>
-          ) : null}
-        </div>
+      <div className="grid gap-6 shell:grid-cols-[minmax(16rem,20rem)_1fr]">
+        {list}
+        {detail}
       </div>
-      <TakeUploadDropzone reelId={reelId} onUploaded={() => void load()} />
-      <form onSubmit={addText} className="space-y-3 p-1">
-        <p className="text-sm text-muted">Текстовая попытка. Текст сразу сохраняется как исходная версия расшифровки.</p>
-        <textarea
-          value={textBody}
-          onChange={(event) => setTextBody(event.target.value)}
-          rows={5}
-          placeholder="Текст дубля"
-          className="w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none"
-        />
-        <input
-          value={textNote}
-          onChange={(event) => setTextNote(event.target.value)}
-          placeholder="Что менял"
-          className="w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none"
-        />
-        <label className="block text-sm text-muted">
-          Сценарий этой попытки
-          <select
-            value={scriptVersionId}
-            onChange={(event) => setScriptVersionId(event.target.value)}
-            className="mt-1 w-full rounded-xl border border-line bg-bg px-3 py-2"
-          >
-            <option value="">Без привязки</option>
-            {scriptOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="submit"
-          disabled={savingText || !textBody.trim()}
-          className="vocal-btn vocal-btn-primary disabled:opacity-50"
+      <div className="space-y-3 rounded-2xl border border-line bg-bg-elev p-4">
+        <p className="text-sm text-muted">Новый дубль — голос или загруженное видео. Текстовый сценарий пишется в черновике.</p>
+        <ActionButton
+          variant="primary"
+          disabled={!canRecord}
+          disabledReason={!canRecord ? recordBlockedReason : undefined}
+          onClick={onStartVoiceRecord}
         >
-          {savingText ? "Сохраняем…" : "Добавить текст"}
-        </button>
-      </form>
+          Записать голос
+        </ActionButton>
+        <TakeUploadDropzone reelId={reelId} videoOnly onUploaded={() => void load()} />
+      </div>
+      {reel.takes.length === 0 ? (
+        <form onSubmit={addText} className="space-y-3 p-1">
+          <p className="text-sm text-muted">Если мысль ещё текстом — это дубль №1. Дальше только голос или видео.</p>
+          <textarea
+            value={textBody}
+            onChange={(event) => setTextBody(event.target.value)}
+            rows={5}
+            placeholder="Текст дубля"
+            className="w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none"
+          />
+          <input
+            value={textNote}
+            onChange={(event) => setTextNote(event.target.value)}
+            placeholder="Что менял"
+            className="w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none"
+          />
+          <button
+            type="submit"
+            disabled={savingText || !textBody.trim()}
+            className="vocal-btn vocal-btn-primary disabled:opacity-50"
+          >
+            {savingText ? "Сохраняем…" : "Добавить исходный текст"}
+          </button>
+        </form>
+      ) : null}
     </section>
   );
 

@@ -6,9 +6,15 @@ import type { TakeInputType } from "@/types/reel";
 export function TakeUploadDropzone({
   reelId,
   onUploaded,
+  scriptVersionId,
+  videoOnly = false,
+  process = false,
 }: {
   reelId: string;
   onUploaded: () => void;
+  scriptVersionId?: string;
+  videoOnly?: boolean;
+  process?: boolean;
 }) {
   const [kind, setKind] = useState<Exclude<TakeInputType, "text">>("video");
   const [note, setNote] = useState("");
@@ -24,9 +30,11 @@ export function TakeUploadDropzone({
       const form = new FormData();
       form.set("file", file);
       form.set("reelId", reelId);
-      form.set("inputType", kind);
+      form.set("inputType", videoOnly ? "video" : kind);
       form.set("authorNote", note);
       form.set("idempotencyKey", key);
+      if (scriptVersionId) form.set("scriptVersionId", scriptVersionId);
+      if (process) form.set("process", "1");
       const res = await fetch("/api/uploads", {
         method: "POST",
         headers: { "Idempotency-Key": key },
@@ -45,7 +53,12 @@ export function TakeUploadDropzone({
 
   return (
     <div className="space-y-3 rounded-2xl border border-line bg-bg-elev p-4">
-      <p className="text-sm text-muted">Готовый файл. Камера в браузере не нужна. Разбор ИИ с загрузки не запускается.</p>
+      <p className="text-sm text-muted">
+        {videoOnly
+          ? "Снимите видео отдельно и загрузите файл. Камера в приложении не нужна."
+          : "Готовый файл. Камера в браузере не нужна. Разбор ИИ с загрузки не запускается."}
+      </p>
+      {videoOnly ? null : (
       <div className="flex gap-2">
         <button
           type="button"
@@ -62,6 +75,7 @@ export function TakeUploadDropzone({
           Аудио
         </button>
       </div>
+      )}
       <textarea
         value={note}
         onChange={(event) => setNote(event.target.value)}
@@ -71,7 +85,11 @@ export function TakeUploadDropzone({
       />
       <input
         type="file"
-        accept={kind === "audio" ? "audio/*,.mp3,.wav,.m4a,.aac,.ogg,.webm" : "video/*,.mp4,.webm,.mov,.mkv"}
+        accept={
+          !videoOnly && kind === "audio"
+            ? "audio/*,.mp3,.wav,.m4a,.aac,.ogg,.webm"
+            : "video/*,.mp4,.webm,.mov,.mkv"
+        }
         disabled={busy}
         onChange={(event) => {
           const file = event.target.files?.[0] ?? null;

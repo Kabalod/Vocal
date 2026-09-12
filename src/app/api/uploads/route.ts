@@ -34,7 +34,15 @@ export async function POST(request: Request) {
         idempotencyKey:
           request.headers.get("idempotency-key")?.trim() ||
           (typeof form.get("idempotencyKey") === "string" ? String(form.get("idempotencyKey")).trim() : undefined),
+        scriptVersionId:
+          typeof form.get("scriptVersionId") === "string" ? String(form.get("scriptVersionId")).trim() : undefined,
       });
+      const shouldProcess = String(form.get("process") ?? "") === "1";
+      if (shouldProcess && take.mediaStatus === "ready" && take.hasFile) {
+        const { ensureJobForTake } = await import("@/lib/thought-media");
+        const job = await ensureJobForTake(take.id, file.name);
+        enqueueJob(job.id);
+      }
       return NextResponse.json({ take }, { status: 201 });
     }
 

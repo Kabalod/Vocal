@@ -122,6 +122,14 @@ export function toTakeDto(take: TakeWithJobs): TakeDto {
   };
 }
 
+export function toTakeListDto(take: TakeWithJobs): TakeDto {
+  return {
+    ...toTakeDto(take),
+    mediaUrl: null,
+    downloadUrl: null,
+  };
+}
+
 type ReelWithTakes = {
   id: string;
   title: string;
@@ -146,7 +154,7 @@ export function toReelDto(reel: ReelWithTakes): ReelDto {
     selectedTakeId: reel.selectedTakeId,
     createdAt: reel.createdAt.toISOString(),
     updatedAt: reel.updatedAt.toISOString(),
-    takes: reel.takes.map(toTakeDto),
+    takes: reel.takes.map(toTakeListDto),
     takeCount: reel.takes.length,
     hasScript: Boolean(
       reel.selectedScriptId || reel.finalScriptId || (reel._count?.scripts ?? 0) > 0,

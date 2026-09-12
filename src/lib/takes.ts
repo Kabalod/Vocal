@@ -165,6 +165,7 @@ export async function saveUploadedTake(
     inputType: TakeInputType;
     authorNote?: string;
     idempotencyKey?: string;
+    scriptVersionId?: string;
   },
   io: TakeUploadIo = defaultUploadIo,
 ): Promise<TakeDto> {
@@ -195,6 +196,7 @@ export async function saveUploadedTake(
     mediaStatus: "pending",
     originalName: options.file.name,
     mimeType,
+    scriptVersionId: options.scriptVersionId,
   });
 
   if (take.mediaStatus === "ready" && take.storedPath) {
