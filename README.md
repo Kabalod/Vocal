@@ -2,9 +2,9 @@
 
 Личный помощник автора: мысль → разговор с Vocal → сценарий → дубли → итоговый выбор. Анкета собирается разговором и даёт один актуальный портрет для сценариев.
 
-Целевые требования: [docs/PERSONAL_MVP.md](docs/PERSONAL_MVP.md).  
+Целевые требования актуального ядра (Stage 11): [docs/PERSONAL_MVP.md](docs/PERSONAL_MVP.md).  
 Статус этапов: [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).  
-План работы в Cursor: [docs/cursor-plan/README.md](docs/cursor-plan/README.md).
+План работы в Cursor: [docs/cursor-plan/README.md](docs/cursor-plan/README.md). Если в локальном плане есть `PRODUCT_SPEC.md` / `UI_SPEC.md`, они выше макетов.
 
 В репозитории остаётся разовый анализатор загруженного видео (FFmpeg → Groq Whisper → оценки). Описание — [SPEC.md](./SPEC.md). Это прежняя спецификация, не цель личного MVP.
 

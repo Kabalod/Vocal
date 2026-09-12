@@ -1,7 +1,8 @@
 # Статус личного MVP
 
 Репозиторий: `Kabalod/Vocal`.  
-План: локальная папка `vocal_cursor_plan_2026-09-10` (не в git). Старый `vocal_complete_plan_10_15` закрыт после DESIGN_05.  
+Актуальное ядро продукта: [PERSONAL_MVP.md](PERSONAL_MVP.md) (состояние Stage 11 на ревью; MVP не выпущен).  
+План: локальная папка `vocal_cursor_plan_2026-09-10` (не в git). Старый `vocal_complete_plan_10_15` закрыт после DESIGN_05. PRODUCT/UI-спеки из рабочего плана выше макетов.  
 Принятый DESIGN_05 / база Stage 01: `da1396f138e1be2b549a623a859ee8084cded420`.  
 Принятый Stage 01 / база Stage 02: `7e0d4b7d774405b3373f479f1b7c7a1ec7f1326f`.  
 Принятый Stage 02 / база Stage 03: `aadc2a8b309ad246286977e559553240dfb7d149`.  
@@ -43,7 +44,7 @@
 | S08 | Дубли и запись | принят | `feat/vocal-v2-08-takes-recording` | `d7900049033a6b07cc329c0b5389d70ca11ef717` | `95590acb324ccc99f8f38c6ef435cecacdc53fcb` | lint; typecheck; build; test:reels 85/85 | принято стартом Stage 09; код `bb4b067`; review-fix `aeaa195` + `6d9e7c4`; docs HEAD `95590ac` — база Stage 09 |
 | S09 | Итоговый выбор и завершение | принят | `feat/vocal-v2-09-completion` | `95590acb324ccc99f8f38c6ef435cecacdc53fcb` | `7032d7fc7083dd921504c16cf9ca2d843a3e1aff` | lint; typecheck; build; test:reels 89/89 | принято стартом Stage 10; код `7b53395`; review-fix `35bf599`; docs HEAD `7032d7f` — база Stage 10; docs-принятие `5c9b317` не база |
 | S10 | Разговорная анкета и портрет | принят | `feat/vocal-v2-10-profile-dialogue` | `7032d7fc7083dd921504c16cf9ca2d843a3e1aff` | `b2bf6bf42a4648abeb3d94d652a876e0bb557f77` | lint; typecheck; build; test:reels 92/92 | принято стартом Stage 11; код `d6255e2`; review-fix `476d2bb`; docs HEAD `b2bf6bf` — база Stage 11 |
-| S11 | Интеграция и выпуск MVP | на ревью | `feat/vocal-v2-11-release` | `b2bf6bf42a4648abeb3d94d652a876e0bb557f77` | | lint; typecheck; build; test:reels 94/94 | код `69e4682`; Stage 11 не принят; MVP не объявлен выпущенным |
+| S11 | Интеграция и выпуск MVP | на ревью | `feat/vocal-v2-11-release` | `b2bf6bf42a4648abeb3d94d652a876e0bb557f77` | | lint; typecheck; build; test:reels 94/94 | код `69e4682`; docs-ревью `10b0fe4`; PERSONAL_MVP приведён к Stage 11; этап не принят; MVP не объявлен выпущенным |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
