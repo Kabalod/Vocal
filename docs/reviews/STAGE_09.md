@@ -1,94 +1,79 @@
-# Отчёт после этапа для проверки через GitHub
+# Отчёт этапа
 
 ## Идентификация
 
-- Этап: 9 — стабилизация MVP и браузерная проверка
-- Репозиторий: Kabalod/Vocal
-- Ветка: feat/personal-mvp-09-mvp-stabilization
-- BASE_SHA (до изменений): `086292d9d0db4285382c9a3ca6f47231423928ad`
-- HEAD_SHA (коммит реализации): `21b4858f70306cd8df29b9d450c30a4356fd49f9`
-- Вершина ветки до этого отчёта: `b7db6c6254df787683e64f3aca19cd15d4c8a57f`
-- HEAD_SHA (после этого документационного коммита): вершина `feat/personal-mvp-09-mvp-stabilization` после push (см. сообщение)
-- Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-09-mvp-stabilization
-- Ветка отправлена в GitHub: да, без force push (если push прошёл)
-- Предыдущий этап принят: да, этап 8 на `086292d9d0db4285382c9a3ca6f47231423928ad`
+- Этап: Stage 09 — итоговый выбор и завершение
+- BASE_SHA: `95590acb324ccc99f8f38c6ef435cecacdc53fcb`
+- Коммит(ы) кода: `7b53395b71de73505d4f4eef480eb08a8d1a0d55`
+- HEAD_SHA: (коммит этой документации)
+- Ветка: `feat/vocal-v2-09-completion`
+- Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-09-completion
 
-Инструкция этапа лежит в `docs/cursor-plan/STAGE_09_mvp-stabilization.md` (перенесена с документационного коммита `33d7ff1`, не является базой кода).
+Stage 08 принят стартом Stage 09 на SHA `95590acb324ccc99f8f38c6ef435cecacdc53fcb` (последний код правки `6d9e7c4fdbcf6aa2f62a63a5b1ecd81ff1d28631`). Ветка создана от этой вершины. Stage 10 не начинался.
 
-## Реализовано
+## Что реализовано
 
-Сборка `npm run build` проходит. Клиентский `take-playback` больше не тянет `node:path`. Скрипт `score-analyz.ts` исключён из `tsconfig`, чтобы сборка не падала на `/is`. Узкие правки типов в `questions.ts`; старый Job-скоринг `analyze.ts` помечен `@ts-nocheck` без переписывания логики.
+- `Reel.finalTakeId`: отдельный итог дубля. `selectedTakeId` остаётся в схеме и DTO для совместимости; PATCH по нему больше не считается продуктовым итогом. Новый UI пишет только `finalTakeId`.
+- Миграция `20260912040000_final_take`: колонка + `UPDATE` копирует ненулевой `selectedTakeId` → `finalTakeId`. На локальной `dev.db` после deploy: 7 мыслей, `selectedTakeId` был у 0 строк, скопировано 0. Логика копии проверена тестом (после compat-записи `selectedTakeId` backfill копирует 1 строку).
+- Просмотр дубля — только клиентский `viewingId`. Смена просмотра и PATCH названия не меняют `finalTakeId`.
+- `finalScriptId` переиспользован. «Сделать итоговой» на готовой версии; `ai_proposal` и черновик отклоняются. Выбор сценария не меняет `finalTakeId` и наоборот.
+- Завершение (`status: completed`) только при валидных `finalTakeId` и `finalScriptId` той же мысли. Текстовый дубль №1 допустим. Это конец работы в Vocal, не публикация.
+- Возврат в работу (`in_progress`) снимает completed, итоги сохраняются. Take, media, TranscriptRevision, ScriptVersion, Review, Question, DialogueMessage, AiCall, ReelContextSnapshot не удаляются.
+- `CompletionSummary` внизу содержимого Дублей: оба выбора или чего не хватает, ссылки выбрать/открыть, «Завершить мысль» disabled с причиной. После завершения — «Успешно завершена» и «Вернуть в работу» (сводка и диалог).
+- Пока мысль завершена, смена итогов и запись заблокированы.
 
-Миграции: на существующей `prisma/dev.db` pending не было (8 уже применены); на чистой временной SQLite те же 8 применились. Новой миграции схемы нет.
+## Что намеренно не реализовано
 
-Ручной smoke (вымышленный чай): пустой список, создание идеи, повторное нажатие «Создаём…» / «Сохраняем…», два текстовых дубля, правка расшифровки, две версии сценария и финальный сценарий, текстовый diff, экспорт, 409 по устаревшему PATCH, финальный дубль, загрузка тестового mp3 и `GET` медиа 200. Q&A: показ вопроса, сохранение ответа, смена статуса, повторная загрузка страницы, без записи `AiCall`. Пустые состояния: нет идей, нет попыток, «без файла», нет разборов. Длинный текст: API `TEXT_TOO_LONG` на 20001 символ. Backup/restore после остановки dev, хеши совпали.
+- Обязательный медиа-дубль.
+- Публикация и аналитика соцсетей.
+- Удаление поля `selectedTakeId` (отдельная поздняя миграция).
+- Профиль / Stage 10.
+- Живой Groq.
 
-## Файлы
+## Изменённые файлы
 
-| Путь | Изменение и причина |
-|---|---|
-| src/lib/take-playback.ts | расширение без `node:path` — webpack client |
-| src/lib/ai/questions.ts | локальные `status` / `text`, чтобы tsc не ругался на possibly undefined |
-| src/lib/analyze.ts | `@ts-nocheck` для старого Job-скоринга, без смены логики; **временный техдолг**, не норма для нового кода |
-| tsconfig.json | exclude `scripts` |
-| tests/reels-takes.test.ts | `extensionFromName` / `mimeFromName` на Windows-пути |
-| scripts/backup.ts | позиционный dest, если `npm` съел `--dest` |
-| README.md, docs/IMPLEMENTATION_STATUS.md, docs/reviews/STAGE_09.md | что проверено и что нет |
-| docs/cursor-plan/STAGE_09_mvp-stabilization.md, README, MANIFEST | инструкция этапа на рабочей ветке |
+- `prisma/schema.prisma`, `prisma/migrations/20260912040000_final_take/migration.sql`
+- `src/lib/reels.ts`, `thought-completion.ts`, `scripts.ts`, `serialize.ts`, `export-reel.ts`
+- `src/types/reel.ts`, `src/app/api/reels/[id]/route.ts`
+- `src/components/CompletionSummary.tsx`, `ReelStudio.tsx`, `ReelTakes.tsx`, `TakeList.tsx`, `TakeComparison.tsx`, `ScriptEditor.tsx`, `ThoughtDialogue.tsx`, `ReelWorkspace.tsx`
+- `tests/thought-completion.test.ts`, `tests/reels-editor-session.test.ts`, `package.json`
 
-## Данные и миграции
+## Миграции и данные
 
-- Требуемые команды: `npx prisma migrate deploy` (новых файлов миграции нет)
-- Как сохранены старые данные: схема не менялась
-- Где находится локальная резервная копия (без её содержимого): `%USERPROFILE%\Vocal-backups\stage09-2026-09-07-235530` — после остановки `npm run dev`; предыдущие каталоги `…-234850` (при работающем dev) и `…-235400` (остановили dev, но в сессии агента остался тестовый `DATABASE_URL`, скопировалась чужая temp-SQLite) не считать проверочными
-- Проверялось ли восстановление: да, `%USERPROFILE%\Vocal-restore-check-stage09-stopped-live`, не поверх live `prisma/dev.db`
-- Хеши SHA256: live = backup = restore для `prisma/dev.db` (`4d74c75b001bb54acdd9df154e261c8a0d220a45d4334a7132b0bf6261298773`, 278528 байт). WAL/SHM не было. Пять медиафайлов из манифеста (2 mp4 + 3 mp3) совпали live/backup/restore.
-- Проверялся ли повтор миграционного переноса: на live pending не было; чистая БД в `test:reels` накатила все 8
+- Новая миграция: да, `20260912040000_final_take`
+- Проверка существующей SQLite: backup `D:\Vocal\backups\stage-09-pre-migrate\dev.db`, затем `prisma migrate deploy` — колонка добавлена, backfill выполнен
+- Проверка чистой SQLite: `reels-migration` / `migrate deploy` — 13 миграций, включая `final_take`
+- Backfill: локально hadSelected=0, copied=0; в тесте hadSelected≥1, copied=1
+- Возможность отката: git revert коммита кода; колонка nullable, данные `selectedTakeId` не уничтожены
 
 ## Проверки
 
-| Команда или ручной сценарий | Выполнено? | Результат | Ограничения |
-|---|---|---|---|
-| `npm run build` | да | успех (Next 15.5.23) | после правок этапа 9 |
-| `npm run test:reels` | да | 29/29 | mock Groq, временные SQLite |
-| `npm run lint` | да | exit 0 | — |
-| `npx prisma migrate deploy` (live) | да | No pending | существующая БД |
-| Чистая SQLite | да | 8 миграций | через тесты и отдельный прогон |
-| Браузер localhost | да | идея, дубли, diff, экспорт, финал, пустые/disabled, Q&A | диалог выбора файла недоступен |
-| Загрузка медиа | частично | curl mp3 + GET 200 + UI «№ 3 · Аудио» | не настоящий ролик, не Windows picker |
-| Вопросы и ответы | да | показ, ответ, статус, reload | вопрос вставлен в БД без Groq; кнопка «Продолжить с ИИ» не нажималась |
-| Ошибка Groq в UI | нет | — | mock в `test:reels` / pipeline |
-| Живой Groq | нет | — | ограничение этапа, не блокер после закрытия Q&A и backup |
-| Backup после stop | да | хеши SQLite и медиа совпали | live не перезаписывался |
-| Камера/микрофон | нет | — | не входят в план |
+| Проверка | Результат | Ограничения |
+|---|---|---|
+| `npm run test:reels` | 88/88 | gate, UI не пишет `selectedTakeId`, backfill, независимость итогов, complete/reopen без потери строк, фильтр completed |
+| `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01 |
+| `npm run typecheck` | exit 0 | |
+| `npm run build` | успех | |
+| Browser 390×844 | `scrollWidth=390`; без итога дубля complete disabled; после «Сделать итоговым» сводка показывает №1; complete → «успешно завершена» + «Вернуть в работу»; фильтр «Успешно завершена» показывает мысль | живой микрофон/Groq не запускались |
+| Browser 1280×800 | список + detail; сводка внизу дублей; статус «Успешно завершена»; reopen оставил оба итога, status `in_progress` | горизонтальный скролл не шире вьюпорта (`sw=w=1265`) |
 
-- Исходные ошибки проекта: Job-скоринг / `score-analyz`, если typecheck включает `scripts`
-- Новые ошибки этапа: webpack `node:path` в клиенте, TS1501 `/is` в scripts, possibly undefined в questions — исправлены
-- Платные вызовы использовались: нет
-- Какие проверки требуют компьютера пользователя: выбор файла в проводнике, просмотр настоящего видео, живой Groq
+## AI и внешние сервисы
 
-## ИИ
+- Какие AI-вызовы добавлены или изменены: нет
+- Проверено mock: да, complete/reopen в тестах без LLM
+- Проверено live: нет
+- Что не проверено: живой Groq, публикация
 
-- Какие действия реально вызывают модель: разбор, вопросы, сборка сценария, смысловое сравнение — только по кнопке
-- Какие действия проверены без ключа: CRUD карточки, тексты, версии, diff, экспорт, backup, лимит длины, сохранение ответа и смена статуса вопроса (`AiCall` по карточке остался 0)
-- Какие версии входов сохраняются: без изменений контракта этапа 8
-- Что происходит при ошибке: прежние статусы error / тексты на месте (по тестам, не по живому Groq)
+## Совместимость с будущим обучением
 
-## Осталось
+- Какие исторические данные затронуты: добавлен `finalTakeId`; старый выбор из `selectedTakeId` копируется, не стирается
+- Может ли что-либо перезаписаться/удалиться при завершении, retry или возврате в работу: нет удаления и схлопывания истории; reopen только меняет status
+- Сохраняются ли source metadata, порядок, итоговые ссылки и snapshots: да; `finalTakeId` и `finalScriptId` независимы от просмотра
+- Не создана ли новая рубрика в обход `playbook.ts`/`framework.ts`: нет
+- Можно ли позднее добавить read-only learning job без изменения смысла текущих моделей: да
 
-- Невыполненные условия готовности: живой Groq и настоящий видеофайл на Windows — оставлены ограничением
-- Известные проблемы: нет аккаунтов; не для публикации в интернет; `@ts-nocheck` в `analyze.ts` — техдолг
-- Отклонения от плана и причины: вопрос для UI-smoke вставлен в SQLite без вызова модели (иначе Q&A нельзя проверить без платного Groq); этап не объявлен принятым; этап 10 не изобретался
+## Подтверждения
 
-## Запрос ревьюеру
-
-Проверь изменения BASE_SHA..HEAD_SHA и соответствие инструкции этапа.
-Укажи блокирующие ошибки отдельно от необязательных улучшений.
-Не считай этап принятым только на основании этого отчёта.
-
-## После замечаний
-
-- Замечание: не проверены вопросы/ответы в UI; backup был при работающем `npm run dev`; в отчёте HEAD `21b4858`, вершина была `b7db6c6`; `@ts-nocheck` скрывает `analyze.ts`.
-- Исправление: только отчёт и повторные проверки, без новых функций. Q&A в UI: вопрос «Вымышленный вопрос этапа 9…», ответ сохранён, статус «Открыт» → «Ответил» → «Пропущен», после reload текст и «Пропущен» на месте; `AiCall` = 0. Dev остановлен (`taskkill` дерева PID 32992, на :3000 только TimeWait). Backup `%USERPROFILE%\Vocal-backups\stage09-2026-09-07-235530`, restore `%USERPROFILE%\Vocal-restore-check-stage09-stopped-live`. SHA256 SQLite и пяти медиа совпали с live.
-- Новый commit SHA: этот документационный коммит (значение — после push).
-- Повторная проверка: браузерный Q&A и backup после stop. Живой Groq и настоящий ролик не гонялись. Этап не принят.
+- Force push не использовался.
+- Следующий этап не начинался.
+- Этап не объявляется принятым до внешнего ревью.
