@@ -1,85 +1,77 @@
-# Отчёт после этапа для проверки через GitHub
+# Отчёт этапа
 
 ## Идентификация
 
-- Этап: 8 — сравнение, экспорт и итоговая проверка
-- Репозиторий: Kabalod/Vocal
-- Ветка: feat/personal-mvp-08-comparison-and-release-check
-- BASE_SHA (до изменений): 87cf50b8dc8d01f98a2e64120d51ab308b9921db
-- HEAD_SHA (после изменений): `0b07f90b2f0da6601a6fdd08bb60bd4805611cb0`
-- Вершина до правок ревью: `6b8f1d91467964f91d144d33d2230c237cecfbb8`
-- Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-08-comparison-and-release-check
-- Ветка отправлена в GitHub: да, без force push (если push прошёл)
-- Предыдущий этап принят: да, этап 7 на `87cf50b8dc8d01f98a2e64120d51ab308b9921db`
+- Этап: Stage 08 — дубли и запись со сценарием
+- BASE_SHA: `d7900049033a6b07cc329c0b5389d70ca11ef717`
+- Коммит(ы) кода: `bb4b0672f7f0f768039fed855e8f07964e7e37b4`
+- HEAD_SHA: `bb4b0672f7f0f768039fed855e8f07964e7e37b4`
+- Ветка: `feat/vocal-v2-08-takes-recording`
+- Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-08-takes-recording
 
-## Реализовано
+Stage 07 принят стартом Stage 08 на SHA `d7900049033a6b07cc329c0b5389d70ca11ef717` (последний код правки `aa800de8f3b0d3f963a9b6f4096b550c71bef310`). Ветка создана от этой вершины. Stage 09 не начинался.
 
-Текстовые различия двух выбранных версий считает детерминированный код; число правок не считается качеством. Смысловое сравнение пишется отдельной записью только по явной кнопке и с целью правки; модель не выбирает финальный дубль. Экспорт JSON карточки: идея, тексты, вопросы/ответы, сценарии, метаданные дублей и разборов; полная анкета и скрытый контекст только с `includeHiddenContext=1`. Ключи и абсолютные пути не входят. `scripts/backup.ts` копирует БД и медиа; восстановление — в другой каталог. Автотест проходит полный цикл на вымышленных данных с mock Groq. В `docs/reviews/STAGE_07.md` HEAD исправлен на `87cf50b`.
+## Что реализовано
 
-## Файлы
+- `RecordingView`: idle «Готовы к записи» и таймер 0:00 до Start; permission → recording → preview → saving → saved. Сценарий на экране (шапка мысли и «По сценарию · версия N»). Отмена записанного фрагмента с confirm; существующие дубли не удаляются. Unmount останавливает tracks, recorder, timers и отзывает object URL.
+- «Перейти к записи» и «Записать голос» открывают новый голосовой дубль с выбранной готовой версией. Без `selectedScriptId` кнопки недоступны с объяснением. Открытый ручной черновик не меняет источник молча: диалог предлагает закрыть черновик или перейти к сценарию.
+- Голосовой дубль пишется через `/api/uploads` с `scriptVersionId` версии на экране и `process=1` для STT. Видео — отдельная загрузка файла, без камеры в приложении; сценарий к видео не подставляется сам.
+- Новый дубль не меняет `selectedTakeId`. «Сделать итоговым» по-прежнему пишет существующий `selectedTakeId`. `finalTakeId` нет.
+- Список дублей в GET карточки без `mediaUrl`/`downloadUrl`. Плеер и URL только у открытого дубля (`GET /api/takes/:id`). На мобилке detail с «← К списку дублей»; на десктопе список и detail в левой панели, без третьей колонки.
+- После успешной расшифровки следующего дубля создаётся новая готовая версия из транскрипта (`select: false`), черновик и выбранная версия не перезаписываются. Повтор STT того же транскрипта не плодит версии. Дубль №1 остаётся исходной мыслью.
 
-| Путь | Изменение и причина |
-|---|---|
-| prisma/schema.prisma | CompareResult |
-| prisma/migrations/20260907132000_compare_results | ADD без reset |
-| src/lib/text-diff.ts | детерминированный diff |
-| src/lib/compare.ts | стороны, preview, список |
-| src/lib/ai/compare.ts | смысловое сравнение по кнопке |
-| src/app/api/reels/[id]/compare/route.ts | GET preview/история, POST |
-| src/lib/export-reel.ts | экспорт без ключей и путей |
-| src/app/api/reels/[id]/export/route.ts | GET экспорта |
-| src/lib/backup.ts, scripts/backup.ts | backup/restore в изолированный каталог |
-| src/components/TakeComparison.tsx | UI сравнения, финала, экспорта |
-| src/app/reels/[id]/page.tsx | блок сравнения |
-| tests/text-diff.test.ts, tests/personal-mvp.test.ts | diff и полный цикл |
-| README.md, docs/* | запуск, backup, ограничения, HEAD этапа 7 |
+## Что намеренно не реализовано
 
-## Данные и миграции
+- Встроенная камера для видео.
+- Обязательное AI-сравнение дублей.
+- `finalTakeId` и «Завершить мысль» (Stage 09).
+- Автопрокрутка телесуфлёра и скорость чтения.
+- Живой Groq / настоящая запись микрофона в этом отчёте.
 
-- Требуемые команды: `npx prisma migrate deploy`
-- Как сохранены старые данные: новая таблица; payload AnalysisResult не менялся
-- Где находится локальная резервная копия (без её содержимого): `%USERPROFILE%\Vocal-backups\stage08-2026-09-07-225632`
-- Проверялось ли восстановление: SHA256 копии backup совпал с файлом до миграции; restore скриптом в изолированный TEMP (не поверх live)
-- Проверялся ли повтор миграционного переноса: хеши payload AnalysisResult live vs backup совпали (2 записи)
+## Изменённые файлы
+
+- `src/components/RecordingView.tsx`, `ReelStudio.tsx`, `ReelStudioFrame.tsx`, `ReelTakes.tsx`, `TakeList.tsx`, `TakePlayer.tsx`, `TakeUploadDropzone.tsx`
+- `src/lib/recording-session.ts`, `serialize.ts`, `takes.ts`, `scripts.ts`, `thought-media.ts`
+- `src/app/api/uploads/route.ts`
+- `tests/recording-view.test.ts`, `reels-takes.test.ts`, `thought-script-draft.test.ts`, `reel-studio.test.ts`
+- `package.json`
+
+## Миграции и данные
+
+- Новая миграция: нет
+- Проверка существующей SQLite: не требовалась
+- Проверка чистой SQLite: существующие тесты `reels-migration` / deploy 12 миграций без изменений схемы
+- Backfill: нет
+- Возможность отката: git revert коммита кода
 
 ## Проверки
 
-| Команда или ручной сценарий | Выполнено? | Результат | Ограничения |
-|---|---|---|---|
-| `npm run test:reels` | да | 28/28 | временные SQLite, mock Groq |
-| `npm run lint` | да | exit 0 | — |
-| `npm run typecheck` | да | исходные analyze.ts, score-analyz.ts, questions.ts | новых ошибок этапа нет |
-| `npm run build` | нет | — | не запускался |
-| Браузер / живой Groq / плеер Windows | нет | — | не называю пройденным |
-| Камера/микрофон | нет | — | не входят в план |
+| Проверка | Результат | Ограничения |
+|---|---|---|
+| `npm run test:reels` | 83/83 | idle/confirm/cleanup; upload + `scriptVersionId`; список без media URL; STT → следующая версия, черновик цел |
+| `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01 |
+| `npm run typecheck` | exit 0 | `scripts` в exclude |
+| `npm run build` | успех | маршруты без новых страниц |
+| Browser 390×844 | «Перейти к записи» → RecordingView; «Готовы к записи»; «По сценарию · версия 1»; вкладки скрыты; `scrollWidth=390` | микрофон/STT не запускались |
+| Browser 1280×800 | список дублей + detail по клику; «Сделать итоговым»; RecordingView idle со сценарием | живая запись не гонялась |
 
-- Исходные ошибки проекта: `src/lib/analyze.ts`, `scripts/score-analyz.ts`, `src/lib/ai/questions.ts`
-- Новые ошибки этапа: нет
-- Платные вызовы использовались: нет
-- Какие проверки требуют компьютера пользователя: экспорт в UI, backup при остановленном dev, просмотр видео на Windows
+## AI и внешние сервисы
 
-## ИИ
+- Какие AI-вызовы добавлены или изменены: нет новых провайдеров; `process=1` ставит существующий job (STT + прежний analyze)
+- Проверено mock: да, applyThoughtMedia / pipeline в тестах
+- Проверено live: нет
+- Что не проверено: живой Groq, настоящий микрофон, повторные видеофайлы в браузере
 
-- Какие действия реально вызывают модель: POST compare с `runAi: true`; прежние review/questions/script generate
-- Какие действия проверены без ключа: diff, экспорт, backup, сохранение сравнения, полный цикл (mock)
-- Какие версии входов сохраняются: take/transcript ids, intent, textDiffJson, snapshot, promptVersion `compare-v1`
-- Что происходит при ошибке: CompareResult.status=error, дубли и тексты на месте
+## Совместимость с будущим обучением
 
-## Осталось
+- Какие исторические данные затронуты: новые `Take` и при STT новые `ScriptVersion` + `TranscriptRevision`; черновик не трогается
+- Может ли что-либо перезаписаться/удалиться при завершении, retry или возврате в работу: cancel записи не удаляет сохранённые дубли; повтор STT того же транскрипта не создаёт вторую версию
+- Сохраняются ли source metadata, порядок, итоговые ссылки и snapshots: да; голосовой дубль хранит `scriptVersionId` версии на экране
+- Не создана ли новая рубрика в обход `playbook.ts`/`framework.ts`: нет
+- Можно ли позднее добавить read-only learning job без изменения смысла текущих моделей: да
 
-- Невыполненные условия готовности: живой UI/Groq/Windows player не гонялись
-- Известные проблемы: нет аккаунтов; приложение не для публикации в интернет
-- Отклонения от плана и причины: автотест в `tests/personal-mvp.test.ts` (tsx/node:test), не Playwright `*.spec.ts`; этап не объявлен принятым
+## Подтверждения
 
-## Запрос ревьюеру
-
-Проверь изменения BASE_SHA..HEAD_SHA и соответствие инструкции этапа.
-Укажи блокирующие ошибки отдельно от необязательных улучшений.
-Не считай этап принятым только на основании этого отчёта.
-
-## После замечаний
-
-- Замечание: полная таблица LCS O(n×m) на текстах до 20 000 символов; в отчёте HEAD был ec1883c вместо вершины 6b8f1d9; в экспорте не было selectedScriptId.
-- Исправление: окно поиска вместо таблицы, лимит 8000 символов / 2500 токенов, поле truncated и явная пометка; selectedScriptId в экспорте; тест двух текстов по 20 000 символов.
-- Новый commit SHA: `0b07f90b2f0da6601a6fdd08bb60bd4805611cb0`
-- Повторная проверка: `npm run test:reels` 29/29; lint ок. Build, браузер и живой Groq по-прежнему не гонялись.
+- Force push не использовался.
+- Следующий этап не начинался.
+- Этап не объявляется принятым до внешнего ревью.
