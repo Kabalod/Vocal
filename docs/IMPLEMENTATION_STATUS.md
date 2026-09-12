@@ -37,7 +37,7 @@
 | S05 | Голос, видео и обработка | принят | `feat/vocal-v2-05-media-processing` | `facb78d03942506b9e9e79fa768fca097ae18b61` | `a38989733bc701b74a9690cc81518c6ce277b836` | lint; typecheck; build; test:reels 60/60 | принято внешним ревью; код `f887ef0`; review-fix `2af98a2` + `1611f27`; docs HEAD `a389897` — база Stage 06 |
 | S06 | Студия и единый диалог | принят | `feat/vocal-v2-06-studio-dialogue` | `a38989733bc701b74a9690cc81518c6ce277b836` | `d4680eb9b48ac96cdea708f6b975afe033015ba5` | lint; typecheck; build; test:reels 66/66 | принято внешним ревью; код `94d8d24`; review-fix `506753d` + `8590b54`; docs HEAD `d4680eb` — база Stage 07 |
 | S07 | Сценарии и версии | принят | `feat/vocal-v2-07-script-drafts` | `d4680eb9b48ac96cdea708f6b975afe033015ba5` | `d7900049033a6b07cc329c0b5389d70ca11ef717` | lint; typecheck; build; test:reels 69/69 | принято стартом Stage 08; код `bf7554c`; review-fix `6d6794e` + `cf23429` + `aa800de`; docs HEAD `d790004` — база Stage 08 |
-| S08 | Дубли и запись | на ревью | `feat/vocal-v2-08-takes-recording` | `d7900049033a6b07cc329c0b5389d70ca11ef717` | `bb4b0672f7f0f768039fed855e8f07964e7e37b4` | lint; typecheck; build; test:reels 83/83 | код `bb4b067`; Stage 08 не принят; Stage 09 не начат |
+| S08 | Дубли и запись | на ревью | `feat/vocal-v2-08-takes-recording` | `d7900049033a6b07cc329c0b5389d70ca11ef717` | `aeaa1955ffdccf02bd520c90b2469b71ed4010f6` | lint; typecheck; build; test:reels 84/84 | код `bb4b067`; review-fix `aeaa195`; Stage 08 не принят; Stage 09 не начат |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
@@ -99,6 +99,7 @@
 | Исправление ревью Stage 07 (UI sync) | `aa800de8f3b0d3f963a9b6f4096b550c71bef310` |
 | Принятый Stage 07 / база Stage 08 | `d7900049033a6b07cc329c0b5389d70ca11ef717` |
 | Коммит кода Stage 08 | `bb4b0672f7f0f768039fed855e8f07964e7e37b4` |
+| Исправление ревью Stage 08 | `aeaa1955ffdccf02bd520c90b2469b71ed4010f6` |
 
 ## Этап 9 — проверки
 

@@ -5,7 +5,8 @@
 - Этап: Stage 08 — дубли и запись со сценарием
 - BASE_SHA: `d7900049033a6b07cc329c0b5389d70ca11ef717`
 - Коммит(ы) кода: `bb4b0672f7f0f768039fed855e8f07964e7e37b4`
-- HEAD_SHA: `bb4b0672f7f0f768039fed855e8f07964e7e37b4`
+- Коммит исправления: `aeaa1955ffdccf02bd520c90b2469b71ed4010f6`
+- HEAD_SHA: `aeaa1955ffdccf02bd520c90b2469b71ed4010f6`
 - Ветка: `feat/vocal-v2-08-takes-recording`
 - Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-08-takes-recording
 
@@ -13,9 +14,10 @@ Stage 07 принят стартом Stage 08 на SHA `d7900049033a6b07cc329c0b
 
 ## Что реализовано
 
-- `RecordingView`: idle «Готовы к записи» и таймер 0:00 до Start; permission → recording → preview → saving → saved. Сценарий на экране (шапка мысли и «По сценарию · версия N»). Отмена записанного фрагмента с confirm; существующие дубли не удаляются. Unmount останавливает tracks, recorder, timers и отзывает object URL.
+- `RecordingView`: idle «Готовы к записи» и таймер 0:00 до Start; permission → recording → preview → saving → saved. Сценарий на экране (шапка мысли и «По сценарию · версия N»). Отмена записанного фрагмента с confirm; существующие дубли не удаляются. Unmount останавливает tracks, recorder, timers, отзывает object URL и abort'ит `fetch` загрузки. Поздний ответ не вызывает `onSaved`. Текст ухода не обещает, что сервер не создаст дубль.
 - «Перейти к записи» и «Записать голос» открывают новый голосовой дубль с выбранной готовой версией. Без `selectedScriptId` кнопки недоступны с объяснением. Открытый ручной черновик не меняет источник молча: диалог предлагает закрыть черновик или перейти к сценарию.
-- Голосовой дубль пишется через `/api/uploads` с `scriptVersionId` версии на экране и `process=1` для STT. Видео — отдельная загрузка файла, без камеры в приложении; сценарий к видео не подставляется сам.
+- Голосовой дубль пишется через `/api/uploads` с `scriptVersionId` версии на экране и `process=1` для STT. Ответ содержит `job`. `StudioJobWatch` опрашивает `GET /api/jobs/:id`; после `done` обновляются дубли, сценарии и диалог; при `error` — «Повторить расшифровку/анализ».
+- Видео в студии — загрузка файла без камеры. Нужна готовая версия: `process=1` + `scriptVersionId`. Без сценария UI и `POST /api/uploads` с `process=1` отклоняют запрос. Создаётся Job, дальше тот же STT/анализ и следующая версия сценария.
 - Новый дубль не меняет `selectedTakeId`. «Сделать итоговым» по-прежнему пишет существующий `selectedTakeId`. `finalTakeId` нет.
 - Список дублей в GET карточки без `mediaUrl`/`downloadUrl`. Плеер и URL только у открытого дубля (`GET /api/takes/:id`). На мобилке detail с «← К списку дублей»; на десктопе список и detail в левой панели, без третьей колонки.
 - После успешной расшифровки следующего дубля создаётся новая готовая версия из транскрипта (`select: false`), черновик и выбранная версия не перезаписываются. Повтор STT того же транскрипта не плодит версии. Дубль №1 остаётся исходной мыслью.
@@ -30,7 +32,7 @@ Stage 07 принят стартом Stage 08 на SHA `d7900049033a6b07cc329c0b
 
 ## Изменённые файлы
 
-- `src/components/RecordingView.tsx`, `ReelStudio.tsx`, `ReelStudioFrame.tsx`, `ReelTakes.tsx`, `TakeList.tsx`, `TakePlayer.tsx`, `TakeUploadDropzone.tsx`
+- `src/components/RecordingView.tsx`, `ReelStudio.tsx`, `ReelStudioFrame.tsx`, `ReelTakes.tsx`, `TakeList.tsx`, `TakePlayer.tsx`, `TakeUploadDropzone.tsx`, `StudioJobWatch.tsx`
 - `src/lib/recording-session.ts`, `serialize.ts`, `takes.ts`, `scripts.ts`, `thought-media.ts`
 - `src/app/api/uploads/route.ts`
 - `tests/recording-view.test.ts`, `reels-takes.test.ts`, `thought-script-draft.test.ts`, `reel-studio.test.ts`
@@ -48,7 +50,7 @@ Stage 07 принят стартом Stage 08 на SHA `d7900049033a6b07cc329c0b
 
 | Проверка | Результат | Ограничения |
 |---|---|---|
-| `npm run test:reels` | 83/83 | idle/confirm/cleanup; upload + `scriptVersionId`; список без media URL; STT → следующая версия, черновик цел |
+| `npm run test:reels` | 84/84 | idle/confirm/cleanup; upload + `scriptVersionId` + Job; видео без сценария 400; abort late result; STT → следующая версия |
 | `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01 |
 | `npm run typecheck` | exit 0 | `scripts` в exclude |
 | `npm run build` | успех | маршруты без новых страниц |
