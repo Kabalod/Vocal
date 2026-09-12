@@ -48,10 +48,14 @@ export function ScriptEditor({
   reelId,
   reloadToken = 0,
   onHelpWithScript,
+  thoughtCompleted = false,
+  onChanged,
 }: {
   reelId: string;
   reloadToken?: number;
   onHelpWithScript?: () => Promise<void> | void;
+  thoughtCompleted?: boolean;
+  onChanged?: () => void;
 }) {
   const [workspace, setWorkspace] = useState<ScriptWorkspaceDto | null>(null);
   const [viewing, setViewing] = useState<ScriptVersionDto | null>(null);
@@ -154,6 +158,20 @@ export function ScriptEditor({
     });
   }
 
+  async function setFinal() {
+    if (!viewingId || thoughtCompleted) return;
+    setLoadError(null);
+    const res = await fetch(`/api/reels/${reelId}/scripts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "final", scriptId: viewingId === workspace?.finalScriptId ? null : viewingId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Не удалось отметить итоговую версию.");
+    await load(viewingId);
+    onChanged?.();
+  }
+
   async function removeDraft() {
     if (!window.confirm("Удалить черновик? Готовые версии не изменятся.")) return;
     const res = await fetch(`/api/reels/${reelId}/scripts/draft`, { method: "DELETE" });
@@ -233,6 +251,14 @@ export function ScriptEditor({
               onClick={() => viewing?.body && downloadText("scenario.txt", viewing.body)}
             >
               Скачать
+            </button>
+            <button
+              type="button"
+              className="vocal-btn text-sm"
+              disabled={!viewingId || thoughtCompleted || !currentMeta}
+              onClick={() => void setFinal().catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))}
+            >
+              {workspace?.finalScriptId === viewingId ? "Снять итоговую" : "Сделать итоговой"}
             </button>
           </div>
           {viewing ? (

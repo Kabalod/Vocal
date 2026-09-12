@@ -8,12 +8,14 @@ export function TakeList({
   onView,
   onFinal,
   onNote,
+  locked = false,
 }: {
   reel: ReelDto;
   viewingId: string | null;
   onView: (id: string) => void;
   onFinal: (id: string | null) => void;
   onNote: (id: string, note: string) => void;
+  locked?: boolean;
 }) {
   if (reel.takes.length === 0) {
     return <p className="text-sm text-muted">Попыток пока нет. Добавьте текст или файл — без лимита числа.</p>;
@@ -26,9 +28,10 @@ export function TakeList({
           key={take.id}
           take={take}
           active={viewingId === take.id}
-          isFinal={reel.selectedTakeId === take.id}
+          isFinal={reel.finalTakeId === take.id}
+          locked={locked}
           onView={() => onView(take.id)}
-          onFinal={() => onFinal(reel.selectedTakeId === take.id ? null : take.id)}
+          onFinal={() => onFinal(reel.finalTakeId === take.id ? null : take.id)}
           onNote={(note) => onNote(take.id, note)}
         />
       ))}
@@ -40,6 +43,7 @@ function TakeRow({
   take,
   active,
   isFinal,
+  locked,
   onView,
   onFinal,
   onNote,
@@ -47,6 +51,7 @@ function TakeRow({
   take: TakeDto;
   active: boolean;
   isFinal: boolean;
+  locked: boolean;
   onView: () => void;
   onFinal: () => void;
   onNote: (note: string) => void;
@@ -57,7 +62,7 @@ function TakeRow({
         <p className="text-sm">
           №{take.number}
           {take.number === 1 ? " · исходная мысль" : ""} · {TAKE_INPUT_TYPE_LABELS[take.inputType]}
-          {isFinal ? " · финальный" : ""}
+          {isFinal ? " · итоговый" : ""}
         </p>
         <p className="text-xs text-muted">{take.originalName ?? (take.inputType === "text" ? "без файла" : take.mediaStatus)}</p>
       </button>
@@ -72,7 +77,8 @@ function TakeRow({
       <button
         type="button"
         onClick={onFinal}
-        className="mt-2 rounded-full bg-bg-elev px-3 py-1 text-xs text-muted"
+        disabled={locked}
+        className="mt-2 rounded-full bg-bg-elev px-3 py-1 text-xs text-muted disabled:opacity-50"
       >
         {isFinal ? "Снять итоговый" : "Сделать итоговым"}
       </button>

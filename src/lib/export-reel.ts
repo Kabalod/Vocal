@@ -16,6 +16,7 @@ export interface ReelExportDto {
     initialNote: string;
     status: string;
     selectedTakeId: string | null;
+    finalTakeId: string | null;
     selectedScriptId: string | null;
     finalScriptId: string | null;
     reelGoal: string;
@@ -138,6 +139,7 @@ export async function exportReel(
       initialNote: row.initialNote,
       status: reel.status,
       selectedTakeId: row.selectedTakeId,
+      finalTakeId: row.finalTakeId,
       selectedScriptId: row.selectedScriptId,
       finalScriptId: row.finalScriptId,
       reelGoal: row.reelGoal,

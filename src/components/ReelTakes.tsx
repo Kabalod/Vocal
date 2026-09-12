@@ -25,6 +25,8 @@ export function ReelTakes({
   recordScriptId,
   onTakeJobStarted,
   reloadToken = 0,
+  thoughtCompleted = false,
+  onChanged,
 }: {
   reelId: string;
   children?: (slots: ReelTakesSlots) => ReactNode;
@@ -34,6 +36,8 @@ export function ReelTakes({
   recordScriptId?: string | null;
   onTakeJobStarted?: (jobId: string) => void;
   reloadToken?: number;
+  thoughtCompleted?: boolean;
+  onChanged?: () => void;
 }) {
   const [reel, setReel] = useState<ReelDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,10 +103,13 @@ export function ReelTakes({
 
   async function setFinal(takeId: string | null) {
     if (!reel) return;
+    const freshRes = await fetch(`/api/reels/${reelId}`, { cache: "no-store" });
+    const fresh = await freshRes.json();
+    const expectedUpdatedAt = (fresh.reel as ReelDto | undefined)?.updatedAt ?? reel.updatedAt;
     const res = await fetch(`/api/reels/${reelId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ selectedTakeId: takeId, expectedUpdatedAt: reel.updatedAt }),
+      body: JSON.stringify({ finalTakeId: takeId, expectedUpdatedAt }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -110,6 +117,7 @@ export function ReelTakes({
       return;
     }
     setReel(data.reel);
+    onChanged?.();
   }
 
   async function addText(event: React.FormEvent) {
@@ -154,6 +162,7 @@ export function ReelTakes({
           setViewingId(id);
           setDetailOpen(true);
         }}
+        locked={thoughtCompleted}
         onFinal={(id) => void setFinal(id)}
         onNote={(id, note) => void saveNote(id, note)}
       />
@@ -227,8 +236,10 @@ export function ReelTakes({
         <p className="text-sm text-muted">Новый дубль — голос или загруженное видео. Текстовый сценарий пишется в черновике.</p>
         <ActionButton
           variant="primary"
-          disabled={!canRecord}
-          disabledReason={!canRecord ? recordBlockedReason : undefined}
+          disabled={!canRecord || thoughtCompleted}
+          disabledReason={
+            thoughtCompleted ? "Сначала верните мысль в работу" : !canRecord ? recordBlockedReason : undefined
+          }
           onClick={onStartVoiceRecord}
         >
           Записать голос
@@ -238,8 +249,10 @@ export function ReelTakes({
           videoOnly
           process
           scriptVersionId={recordScriptId ?? undefined}
-          disabled={!canRecord}
-          disabledReason={recordBlockedReason}
+          disabled={!canRecord || thoughtCompleted}
+          disabledReason={
+            thoughtCompleted ? "Сначала верните мысль в работу" : recordBlockedReason
+          }
           onUploaded={(info) => {
             void load();
             if (info.jobId) onTakeJobStarted?.(info.jobId);

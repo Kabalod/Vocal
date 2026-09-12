@@ -100,10 +100,13 @@ export function TakeComparison({ reelId }: { reelId: string }) {
 
   async function setFinal(takeId: string | null) {
     if (!reel) return;
+    const freshRes = await fetch(`/api/reels/${reelId}`, { cache: "no-store" });
+    const fresh = await freshRes.json();
+    const expectedUpdatedAt = (fresh.reel as { updatedAt?: string } | undefined)?.updatedAt ?? reel.updatedAt;
     const res = await fetch(`/api/reels/${reelId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ selectedTakeId: takeId, expectedUpdatedAt: reel.updatedAt }),
+      body: JSON.stringify({ finalTakeId: takeId, expectedUpdatedAt }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -276,7 +279,7 @@ export function TakeComparison({ reelId }: { reelId: string }) {
       ) : null}
       {reel ? (
         <div className="flex flex-wrap gap-2 text-sm">
-          <span className="text-muted">Финальный дубль:</span>
+          <span className="text-muted">Итоговый дубль:</span>
           <button type="button" className="rounded-full border border-line px-3 py-1" onClick={() => void setFinal(null)}>
             Снять
           </button>
@@ -284,7 +287,7 @@ export function TakeComparison({ reelId }: { reelId: string }) {
             <button
               key={take.id}
               type="button"
-              className={`rounded-full border px-3 py-1 ${reel.selectedTakeId === take.id ? "border-accent" : "border-line"}`}
+              className={`rounded-full border px-3 py-1 ${reel.finalTakeId === take.id ? "border-accent" : "border-line"}`}
               onClick={() => void setFinal(take.id)}
             >
               №{take.number}

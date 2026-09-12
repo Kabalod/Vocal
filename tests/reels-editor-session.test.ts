@@ -14,6 +14,8 @@ function reel(partial: Partial<ReelDto> & Pick<ReelDto, "id" | "title" | "initia
   return {
     status: "idea",
     selectedTakeId: null,
+    finalTakeId: null,
+    finalScriptId: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     takes: [],
     takeCount: 0,

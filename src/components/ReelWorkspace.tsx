@@ -184,7 +184,7 @@ export function ReelWorkspace({ id }: { id: string }) {
         />
       </label>
       <p className="text-sm text-muted">
-        Дублей: {session.confirmed.takeCount}. Финальный дубль — вручную в панели дублей.
+        Дублей: {session.confirmed.takeCount}. Итоговый дубль выбирается отдельно и не меняется от просмотра.
       </p>
     </header>
   );

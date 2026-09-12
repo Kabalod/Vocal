@@ -9,10 +9,12 @@ import { ReelTakes } from "@/components/ReelTakes";
 import { ReelWorkspace } from "@/components/ReelWorkspace";
 import { ScriptEditor } from "@/components/ScriptEditor";
 import { TakeComparison } from "@/components/TakeComparison";
+import { CompletionSummary } from "@/components/CompletionSummary";
 import { ThoughtDialogue } from "@/components/ThoughtDialogue";
 import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
 import { newDialogueIdempotencyKey } from "@/lib/dialogue-client";
 import { readStudioTab, writeStudioTab, type StudioMobileTab } from "@/components/reel-studio";
+import type { ReelStatus } from "@/types/reel";
 import type { ScriptWorkspaceDto } from "@/types/script";
 
 export function ReelStudio({ reelId }: { reelId: string }) {
@@ -29,6 +31,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
   const [recording, setRecording] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState(false);
   const [watchJobId, setWatchJobId] = useState<string | null>(null);
+  const [thoughtStatus, setThoughtStatus] = useState<ReelStatus>("idea");
 
   const refreshStudioAfterJob = useCallback((status: "done" | "error") => {
     setTakesTick((value) => value + 1);
@@ -56,8 +59,9 @@ export function ReelStudio({ reelId }: { reelId: string }) {
       .catch(() => undefined);
     void fetch(`/api/reels/${reelId}`, { cache: "no-store" })
       .then((res) => res.json())
-      .then((data: { reel?: { title?: string } }) => {
+      .then((data: { reel?: { title?: string; status?: ReelStatus } }) => {
         if (data.reel?.title) setThoughtTitle(data.reel.title);
+        if (data.reel?.status) setThoughtStatus(data.reel.status);
       })
       .catch(() => undefined);
   }, [reelId, scriptTick]);
@@ -105,10 +109,12 @@ export function ReelStudio({ reelId }: { reelId: string }) {
       recordScriptId={selectedScriptId}
       onTakeJobStarted={setWatchJobId}
       onStartVoiceRecord={requestRecording}
+      thoughtCompleted={thoughtStatus === "completed"}
+      onChanged={() => setTakesTick((value) => value + 1)}
     >
       {({ media }) => (
         <ReelStudioFrame
-          header={<ReelWorkspace id={reelId} />}
+          header={<ReelWorkspace key={`${reelId}:${thoughtStatus}`} id={reelId} />}
           tab={tab}
           onTab={changeTab}
           hideTabs={recording}
@@ -130,13 +136,26 @@ export function ReelStudio({ reelId }: { reelId: string }) {
               <div className="space-y-8">
                 {watchJobId ? <StudioJobWatch jobId={watchJobId} onSettled={refreshStudioAfterJob} /> : null}
                 {media}
+                <CompletionSummary
+                  reelId={reelId}
+                  reloadToken={takesTick + scriptTick}
+                  onPickTake={() => changeTab("takes")}
+                  onPickScript={() => changeTab("script")}
+                  onStatusChange={setThoughtStatus}
+                />
                 <ReelContextForm reelId={reelId} />
                 <TakeComparison reelId={reelId} />
               </div>
             )
           }
           script={
-            <ScriptEditor reelId={reelId} reloadToken={scriptTick} onHelpWithScript={helpWithScript} />
+            <ScriptEditor
+              reelId={reelId}
+              reloadToken={scriptTick}
+              thoughtCompleted={thoughtStatus === "completed"}
+              onHelpWithScript={helpWithScript}
+              onChanged={() => setScriptTick((value) => value + 1)}
+            />
           }
           dialog={
             <ThoughtDialogue
@@ -149,7 +168,20 @@ export function ReelStudio({ reelId }: { reelId: string }) {
                 setScriptTick((value) => value + 1);
                 if (!window.matchMedia("(min-width: 75rem)").matches) changeTab("script");
               }}
+              thoughtCompleted={thoughtStatus === "completed"}
               onGoRecord={requestRecording}
+              onReopen={() => {
+                void fetch(`/api/reels/${reelId}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ status: "in_progress" }),
+                }).then((res) => {
+                  if (!res.ok) return;
+                  setThoughtStatus("in_progress");
+                  setDialogTick((value) => value + 1);
+                  setTakesTick((value) => value + 1);
+                });
+              }}
             />
           }
         />

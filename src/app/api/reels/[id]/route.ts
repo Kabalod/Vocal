@@ -68,6 +68,15 @@ export async function PATCH(
       }
       input.selectedTakeId = body.selectedTakeId as string | null;
     }
+    if ("finalTakeId" in body) {
+      if (body.finalTakeId !== null && typeof body.finalTakeId !== "string") {
+        return NextResponse.json(
+          { error: "Итоговый дубль должен принадлежать этой мысли.", code: "TAKE_NOT_IN_REEL" },
+          { status: 400 },
+        );
+      }
+      input.finalTakeId = body.finalTakeId as string | null;
+    }
     if ("expectedUpdatedAt" in body) {
       if (typeof body.expectedUpdatedAt !== "string") {
         return NextResponse.json({ error: "Некорректная версия карточки.", code: "STALE" }, { status: 400 });

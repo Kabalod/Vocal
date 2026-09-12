@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import type { Take as TakeRow } from "@prisma/client";
 import {
   parseReelStatusInput,
+  normalizeReelStatus,
   isTakeInputType,
   type CreateReelInput,
   type CreateTakeInput,
@@ -18,6 +19,8 @@ import {
   TAKE_TEXT_MAX,
 } from "@/types/reel";
 import { toReelDto, toReelListItemDto } from "@/lib/serialize";
+import { thoughtCompletionGate } from "@/lib/thought-completion";
+import { isHeadKind } from "@/types/script";
 
 const reelInclude = {
   takes: {
@@ -193,7 +196,53 @@ export async function listReels(query: ReelListQuery = {}): Promise<ReelListResu
   return { reels: page, nextCursor, hasMore, totalCount, matchCount };
 }
 
+async function assertFinalTakeBelongs(reelId: string, takeId: string): Promise<void> {
+  const take = await prisma.take.findUnique({ where: { id: takeId } });
+  if (!take || take.reelId !== reelId) {
+    throw new ReelError("Итоговый дубль должен принадлежать этой мысли.", "TAKE_NOT_IN_REEL");
+  }
+}
+
+async function assertFinalScriptReady(reelId: string, scriptId: string): Promise<void> {
+  const row = await prisma.scriptVersion.findFirst({ where: { id: scriptId, reelId } });
+  if (!row) {
+    throw new ReelError("Итоговый сценарий должен принадлежать этой мысли.", "SCRIPT_NOT_IN_REEL");
+  }
+  if (!isHeadKind(row.kind)) {
+    throw new ReelError(
+      "Итоговой может быть только готовая версия сценария, не черновик и не предложение модели.",
+      "SCRIPT_NOT_READY",
+    );
+  }
+}
+
 export async function updateReel(id: string, input: UpdateReelInput): Promise<ReelDto> {
+  const current = await prisma.reel.findUnique({ where: { id } });
+  if (!current) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+
+  const nextFinalTake = input.finalTakeId !== undefined ? input.finalTakeId : current.finalTakeId;
+  const nextFinalScript = current.finalScriptId;
+  const nextStatus = input.status !== undefined ? input.status : normalizeReelStatus(current.status);
+
+  if (current.status === "completed" && nextStatus === "completed") {
+    if (input.finalTakeId !== undefined && input.finalTakeId !== current.finalTakeId) {
+      throw new ReelError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN");
+    }
+  }
+
+  if (nextStatus === "completed" && normalizeReelStatus(current.status) !== "completed") {
+    const gate = thoughtCompletionGate({
+      finalTakeId: nextFinalTake,
+      finalScriptId: nextFinalScript,
+      status: "idea",
+    });
+    if (!gate.canComplete) {
+      throw new ReelError(gate.blockedReason || "Нельзя завершить мысль без обоих итогов.", "COMPLETE_INCOMPLETE");
+    }
+    if (nextFinalTake) await assertFinalTakeBelongs(id, nextFinalTake);
+    if (nextFinalScript) await assertFinalScriptReady(id, nextFinalScript);
+  }
+
   const data: Prisma.ReelUpdateManyMutationInput = {};
   if (input.title !== undefined) {
     const title = input.title.trim();
@@ -224,6 +273,14 @@ export async function updateReel(id: string, input: UpdateReelInput): Promise<Re
         throw new ReelError("Финальный дубль должен принадлежать этой карточке.", "TAKE_NOT_IN_REEL");
       }
       data.selectedTakeId = take.id;
+    }
+  }
+  if (input.finalTakeId !== undefined) {
+    if (input.finalTakeId === null) {
+      data.finalTakeId = null;
+    } else {
+      await assertFinalTakeBelongs(id, input.finalTakeId);
+      data.finalTakeId = input.finalTakeId;
     }
   }
 

@@ -74,6 +74,8 @@ export function ThoughtDialogue({
   hasReadyScript,
   onTransferred,
   onGoRecord,
+  thoughtCompleted = false,
+  onReopen,
 }: {
   reelId: string;
   draft: string;
@@ -81,6 +83,8 @@ export function ThoughtDialogue({
   hasReadyScript: boolean;
   onTransferred: () => void;
   onGoRecord: () => void;
+  thoughtCompleted?: boolean;
+  onReopen?: () => void;
 }) {
   const [page, setPage] = useState<DialoguePageDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -383,6 +387,11 @@ export function ThoughtDialogue({
         </div>
       ) : null}
       <div className="mt-3 space-y-2 border-t border-line pt-3">
+        {thoughtCompleted ? (
+          <ActionButton variant="secondary" onClick={onReopen}>
+            Вернуть в работу
+          </ActionButton>
+        ) : (
         <ActionButton
           variant="secondary"
           disabled={!hasReadyScript}
@@ -391,7 +400,8 @@ export function ThoughtDialogue({
         >
           Перейти к записи
         </ActionButton>
-        {recording || finalizing ? (
+        )}
+        {thoughtCompleted ? null : recording || finalizing ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <p className="mr-auto text-sm text-muted">
               {finalizing ? "Собираем запись…" : `Запись · ${formatRecordingDuration(seconds)}`}

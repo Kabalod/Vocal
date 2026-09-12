@@ -583,10 +583,19 @@ export async function restoreScript(
 }
 
 export async function setFinalScript(reelId: string, scriptId: string | null): Promise<ScriptBundleDto> {
-  await assertReel(reelId);
+  const reel = await assertReel(reelId);
+  if (reel.status === "completed") {
+    throw new ScriptError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN");
+  }
   if (scriptId) {
     const row = await prisma.scriptVersion.findFirst({ where: { id: scriptId, reelId } });
     if (!row) throw new ScriptError("Версия сценария не найдена.", "SCRIPT_NOT_FOUND", 404);
+    if (!isHeadKind(row.kind)) {
+      throw new ScriptError(
+        "Итоговой может быть только готовая версия сценария, не черновик и не предложение модели.",
+        "SCRIPT_NOT_READY",
+      );
+    }
   }
   await prisma.reel.update({
     where: { id: reelId },

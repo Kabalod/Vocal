@@ -11,7 +11,7 @@ export const REEL_STATUS_LABELS: Record<ReelStatus, string> = {
   idea: "Идея",
   in_progress: "В работе",
   ready_to_record: "Готов к записи",
-  completed: "Завершён",
+  completed: "Успешно завершена",
   archived: "Архив",
 };
 
@@ -109,6 +109,8 @@ export interface ReelDto {
   initialNote: string;
   status: ReelStatus;
   selectedTakeId: string | null;
+  finalTakeId: string | null;
+  finalScriptId: string | null;
   createdAt: string;
   updatedAt: string;
   takes: TakeDto[];
@@ -138,6 +140,7 @@ export interface UpdateReelInput {
   initialNote?: string;
   status?: ReelStatus;
   selectedTakeId?: string | null;
+  finalTakeId?: string | null;
   expectedUpdatedAt?: string;
 }
 

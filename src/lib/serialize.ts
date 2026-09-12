@@ -137,6 +137,7 @@ type ReelWithTakes = {
   status: string;
   selectedTakeId: string | null;
   selectedScriptId?: string | null;
+  finalTakeId?: string | null;
   finalScriptId?: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -152,6 +153,8 @@ export function toReelDto(reel: ReelWithTakes): ReelDto {
     initialNote: reel.initialNote,
     status,
     selectedTakeId: reel.selectedTakeId,
+    finalTakeId: reel.finalTakeId ?? null,
+    finalScriptId: reel.finalScriptId ?? null,
     createdAt: reel.createdAt.toISOString(),
     updatedAt: reel.updatedAt.toISOString(),
     takes: reel.takes.map(toTakeListDto),
