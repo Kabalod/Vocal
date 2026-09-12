@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ScriptVersionTimeline } from "@/components/ScriptVersionTimeline";
 import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
 import { GenerationGuard } from "@/lib/generation-guard";
+import { DraftSaveError, ScriptDraftSaveSession } from "@/lib/script-draft-save";
 import { isHeadKind, type ScriptVersionDto, type ScriptWorkspaceDto } from "@/types/script";
 
 function readyVersions(workspace: ScriptWorkspaceDto) {
@@ -43,32 +44,58 @@ export function ScriptEditor({
   const [helping, setHelping] = useState(false);
   const guardRef = useRef(new GenerationGuard());
   const skipAutosave = useRef(false);
-  const draftBodyRef = useRef("");
-  const expectedUpdatedAtRef = useRef<string | null>(null);
-  const expectedSaveTokenRef = useRef<number | null>(null);
-  const savedBodyRef = useRef<string | null>(null);
+  const reelIdRef = useRef(reelId);
+  reelIdRef.current = reelId;
+  const sessionRef = useRef<ScriptDraftSaveSession | null>(null);
 
-  draftBodyRef.current = draftBody;
-  expectedUpdatedAtRef.current = expectedUpdatedAt;
-  expectedSaveTokenRef.current = expectedSaveToken;
-  savedBodyRef.current = workspace?.draft?.body ?? null;
+  function session() {
+    if (!sessionRef.current) {
+      sessionRef.current = new ScriptDraftSaveSession({
+        patch: async (input) => {
+          const res = await fetch(`/api/reels/${reelIdRef.current}/scripts/draft`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(input),
+          });
+          const data = await res.json();
+          if (res.status === 409) throw new DraftSaveError(data.error ?? "STALE", "STALE");
+          if (!res.ok) throw new Error(data.error ?? "Не удалось сохранить черновик.");
+          return data as { draft: { body: string; updatedAt: string; saveToken: number } };
+        },
+        onStale: async () => {
+          const fresh = await fetch(`/api/reels/${reelIdRef.current}/scripts`, { cache: "no-store" });
+          const workspaceJson = (await fresh.json()) as ScriptWorkspaceDto;
+          if (!workspaceJson.draft) return null;
+          return { updatedAt: workspaceJson.draft.updatedAt, saveToken: workspaceJson.draft.saveToken };
+        },
+      });
+    }
+    return sessionRef.current;
+  }
+
+  function syncSession() {
+    const current = session();
+    setSaving(current.saving);
+    setFinalizing(current.finalizing);
+    setError(current.error);
+    setStatus(current.status);
+    setMode(current.mode);
+    setExpectedUpdatedAt(current.expectedUpdatedAt);
+    setExpectedSaveToken(current.expectedSaveToken);
+    setDraftBody(current.body);
+  }
 
   const applyWorkspace = useCallback((next: ScriptWorkspaceDto, keepDraftText: boolean) => {
     setWorkspace(next);
     const nextViewId = next.viewing?.id ?? next.headId ?? next.versions.find((row) => isHeadKind(row.kind))?.id ?? null;
     setViewingId((current) => current ?? nextViewId);
     if (next.viewing) setViewing(next.viewing);
+    const current = session();
+    current.hydrate(next.draft, keepDraftText);
     if (next.draft) {
-      setExpectedUpdatedAt(next.draft.updatedAt);
-      setExpectedSaveToken(next.draft.saveToken);
-      if (!keepDraftText) {
-        skipAutosave.current = true;
-        setDraftBody(next.draft.body);
-      }
-    } else {
-      setExpectedUpdatedAt(null);
-      setExpectedSaveToken(null);
+      if (!keepDraftText) skipAutosave.current = true;
     }
+    syncSession();
   }, []);
 
   const load = useCallback(
@@ -86,7 +113,10 @@ export function ScriptEditor({
   useEffect(() => {
     void load()
       .then((next) => {
-        if (reloadToken > 0 && next.draft) setMode("draft");
+        if (reloadToken > 0 && next.draft) {
+          session().mode = "draft";
+          setMode("draft");
+        }
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."));
   }, [load, reloadToken]);
@@ -108,48 +138,6 @@ export function ScriptEditor({
       });
   }, [reelId, viewing, viewingId]);
 
-  async function saveDraft(body: string, expected: string, token: number) {
-    setSaving(true);
-    setStatus("Сохраняем…");
-    const res = await fetch(`/api/reels/${reelId}/scripts/draft`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body, expectedUpdatedAt: expected, expectedSaveToken: token }),
-    });
-    const data = await res.json();
-    if (res.status === 409) {
-      const fresh = await fetch(`/api/reels/${reelId}/scripts`, { cache: "no-store" });
-      const workspaceJson = (await fresh.json()) as ScriptWorkspaceDto;
-      if (workspaceJson.draft) {
-        setExpectedUpdatedAt(workspaceJson.draft.updatedAt);
-        setExpectedSaveToken(workspaceJson.draft.saveToken);
-      }
-      setError("Черновик уже изменился в другом окне. Текст здесь не потерян.");
-      setStatus(null);
-      setSaving(false);
-      throw new Error("Черновик уже изменился в другом окне. Текст здесь не потерян.");
-    }
-    if (!res.ok) throw new Error(data.error ?? "Не удалось сохранить черновик.");
-    applyWorkspace(data as ScriptWorkspaceDto, true);
-    setError(null);
-    setStatus("Сохранено");
-    setSaving(false);
-    return data as ScriptWorkspaceDto;
-  }
-
-  async function persistDraft() {
-    const body = draftBodyRef.current;
-    const expected = expectedUpdatedAtRef.current;
-    const token = expectedSaveTokenRef.current;
-    if (!expected || token == null) return null;
-    if (savedBodyRef.current === body) {
-      return { updatedAt: expected, saveToken: token };
-    }
-    const next = await saveDraft(body, expected, token);
-    if (!next.draft) return null;
-    return { updatedAt: next.draft.updatedAt, saveToken: next.draft.saveToken };
-  }
-
   useEffect(() => {
     if (mode !== "draft" || !expectedUpdatedAt || expectedSaveToken == null || !workspace?.draft) return;
     if (skipAutosave.current) {
@@ -158,10 +146,9 @@ export function ScriptEditor({
     }
     if (draftBody === workspace.draft.body) return;
     const timer = window.setTimeout(() => {
-      void saveDraft(draftBody, expectedUpdatedAt, expectedSaveToken).catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Ошибка.");
-        setSaving(false);
-      });
+      const current = session();
+      current.body = draftBody;
+      void current.save().finally(() => syncSession());
     }, 600);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- автосохранение только по тексту и метке
@@ -177,45 +164,33 @@ export function ScriptEditor({
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Не удалось открыть черновик.");
     applyWorkspace(data as ScriptWorkspaceDto, false);
+    session().mode = "draft";
     setMode("draft");
   }
 
   async function finalize() {
-    const body = draftBodyRef.current;
-    setFinalizing(true);
-    setError(null);
-    try {
-      const persisted = await persistDraft();
-      const expected = persisted?.updatedAt ?? expectedUpdatedAtRef.current;
-      const token = persisted?.saveToken ?? expectedSaveTokenRef.current;
-      if (!expected || token == null || !body.trim()) return;
+    const current = session();
+    current.body = draftBody;
+    await current.finalize(async (input) => {
       const res = await fetch(`/api/reels/${reelId}/scripts/draft/finalize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body, expectedUpdatedAt: expected, expectedSaveToken: token }),
+        body: JSON.stringify(input),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Не удалось завершить версию.");
       applyWorkspace(data as ScriptWorkspaceDto, false);
-      setMode("ready");
       setViewingId((data as ScriptWorkspaceDto).headId);
       setViewing((data as ScriptWorkspaceDto).viewing);
-      setStatus("Готовая версия создана.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка.");
-    } finally {
-      setFinalizing(false);
-    }
+    });
+    syncSession();
   }
 
   async function backToReady() {
-    setError(null);
-    try {
-      await persistDraft();
-      setMode("ready");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка.");
-    }
+    const current = session();
+    current.body = draftBody;
+    await current.backToReady();
+    syncSession();
   }
 
   async function removeDraft() {
@@ -316,6 +291,7 @@ export function ScriptEditor({
           <textarea
             value={draftBody}
             onChange={(event) => {
+              session().body = event.target.value;
               setDraftBody(event.target.value);
               setStatus(null);
             }}
