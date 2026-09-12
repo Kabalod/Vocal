@@ -44,7 +44,7 @@
 | S08 | Дубли и запись | принят | `feat/vocal-v2-08-takes-recording` | `d7900049033a6b07cc329c0b5389d70ca11ef717` | `95590acb324ccc99f8f38c6ef435cecacdc53fcb` | lint; typecheck; build; test:reels 85/85 | принято стартом Stage 09; код `bb4b067`; review-fix `aeaa195` + `6d9e7c4`; docs HEAD `95590ac` — база Stage 09 |
 | S09 | Итоговый выбор и завершение | принят | `feat/vocal-v2-09-completion` | `95590acb324ccc99f8f38c6ef435cecacdc53fcb` | `7032d7fc7083dd921504c16cf9ca2d843a3e1aff` | lint; typecheck; build; test:reels 89/89 | принято стартом Stage 10; код `7b53395`; review-fix `35bf599`; docs HEAD `7032d7f` — база Stage 10; docs-принятие `5c9b317` не база |
 | S10 | Разговорная анкета и портрет | принят | `feat/vocal-v2-10-profile-dialogue` | `7032d7fc7083dd921504c16cf9ca2d843a3e1aff` | `b2bf6bf42a4648abeb3d94d652a876e0bb557f77` | lint; typecheck; build; test:reels 92/92 | принято стартом Stage 11; код `d6255e2`; review-fix `476d2bb`; docs HEAD `b2bf6bf` — база Stage 11 |
-| S11 | Интеграция и выпуск MVP | на ревью | `feat/vocal-v2-11-release` | `b2bf6bf42a4648abeb3d94d652a876e0bb557f77` | | lint; typecheck; build; test:reels 94/94 | код `69e4682`; docs-ревью `10b0fe4`; PERSONAL_MVP приведён к Stage 11; этап не принят; MVP не объявлен выпущенным |
+| S11 | Интеграция и выпуск MVP | на ревью | `feat/vocal-v2-11-release` | `b2bf6bf42a4648abeb3d94d652a876e0bb557f77` | `dc5f0ec4b7afb458cb847ce4b51030076d9d9776` | lint; typecheck; build; test:reels 94/94 | код `69e4682`; docs-ревью `10b0fe4`; PERSONAL_MVP `dc5f0ec`; этап не принят; MVP не объявлен выпущенным |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
@@ -117,6 +117,8 @@
 | Исправление ревью Stage 10 (параллельный портрет) | `476d2bb2cf2c1467a158b128dc19a0a0484213b3` |
 | Принятый Stage 10 / база Stage 11 | `b2bf6bf42a4648abeb3d94d652a876e0bb557f77` |
 | Коммит кода Stage 11 | `69e468283ade66a30a36843e9fb6776b1d16a281` |
+| Документация Stage 11 (ревью) | `10b0fe463ffcc93b39cf66409f7dbf69b0e65713` |
+| Исправление PERSONAL_MVP Stage 11 | `dc5f0ec4b7afb458cb847ce4b51030076d9d9776` |
 
 ## Этап 9 — проверки
 

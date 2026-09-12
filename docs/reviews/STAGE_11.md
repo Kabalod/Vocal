@@ -5,8 +5,8 @@
 - Этап: Stage 11 — интеграция и выпуск MVP
 - BASE_SHA: `b2bf6bf42a4648abeb3d94d652a876e0bb557f77`
 - Коммит(ы) кода: `69e468283ade66a30a36843e9fb6776b1d16a281`
-- Коммит правки документации: будет записан после коммита
-- HEAD_SHA: коммит правки документации
+- Коммит правки документации: `dc5f0ec4b7afb458cb847ce4b51030076d9d9776`
+- HEAD_SHA: `dc5f0ec4b7afb458cb847ce4b51030076d9d9776`
 - Ветка: `feat/vocal-v2-11-release`
 - Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-11-release
 
