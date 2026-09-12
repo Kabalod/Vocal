@@ -5,7 +5,8 @@
 - Этап: Stage 09 — итоговый выбор и завершение
 - BASE_SHA: `95590acb324ccc99f8f38c6ef435cecacdc53fcb`
 - Коммит(ы) кода: `7b53395b71de73505d4f4eef480eb08a8d1a0d55`
-- HEAD_SHA: (коммит этой документации)
+- Коммит исправления: `35bf599a299e980beeafb14fadf81e3889e822a0`
+- HEAD_SHA: `cc32c2a43b53050e1cc1aa9426080d6e741af03e` (первый отчёт); актуальный HEAD ветки — коммит этой правки документации
 - Ветка: `feat/vocal-v2-09-completion`
 - Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-09-completion
 
@@ -17,7 +18,7 @@ Stage 08 принят стартом Stage 09 на SHA `95590acb324ccc99f8f38c6e
 - Миграция `20260912040000_final_take`: колонка + `UPDATE` копирует ненулевой `selectedTakeId` → `finalTakeId`. На локальной `dev.db` после deploy: 7 мыслей, `selectedTakeId` был у 0 строк, скопировано 0. Логика копии проверена тестом (после compat-записи `selectedTakeId` backfill копирует 1 строку).
 - Просмотр дубля — только клиентский `viewingId`. Смена просмотра и PATCH названия не меняют `finalTakeId`.
 - `finalScriptId` переиспользован. «Сделать итоговой» на готовой версии; `ai_proposal` и черновик отклоняются. Выбор сценария не меняет `finalTakeId` и наоборот.
-- Завершение (`status: completed`) только при валидных `finalTakeId` и `finalScriptId` той же мысли. Текстовый дубль №1 допустим. Это конец работы в Vocal, не публикация.
+- Завершение (`status: completed`) только при валидных `finalTakeId` и `finalScriptId` той же мысли, в одной транзакции с `updateMany`: статус пишется лишь если оба итога всё ещё не null и мысль ещё не `completed`. Смена `finalTakeId` / `finalScriptId` — тоже условный `updateMany` (`status != completed`); иначе 409 `NEED_REOPEN`. Параллельное снятие или смена итога и завершение: один запрос 409/`COMPLETE_INCOMPLETE`/`STALE`, либо мысль не завершена; `completed` без обоих итогов не возникает. Текстовый дубль №1 допустим. Это конец работы в Vocal, не публикация.
 - Возврат в работу (`in_progress`) снимает completed, итоги сохраняются. Take, media, TranscriptRevision, ScriptVersion, Review, Question, DialogueMessage, AiCall, ReelContextSnapshot не удаляются.
 - `CompletionSummary` внизу содержимого Дублей: оба выбора или чего не хватает, ссылки выбрать/открыть, «Завершить мысль» disabled с причиной. После завершения — «Успешно завершена» и «Вернуть в работу» (сводка и диалог).
 - Пока мысль завершена, смена итогов и запись заблокированы.
@@ -50,7 +51,7 @@ Stage 08 принят стартом Stage 09 на SHA `95590acb324ccc99f8f38c6e
 
 | Проверка | Результат | Ограничения |
 |---|---|---|
-| `npm run test:reels` | 88/88 | gate, UI не пишет `selectedTakeId`, backfill, независимость итогов, complete/reopen без потери строк, фильтр completed |
+| `npm run test:reels` | 89/89 | плюс гонки: снятие/смена каждого итога ↔ завершение; инвариант `completed` ⇒ оба итога |
 | `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01 |
 | `npm run typecheck` | exit 0 | |
 | `npm run build` | успех | |

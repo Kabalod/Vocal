@@ -39,7 +39,7 @@
 | S06 | Студия и единый диалог | принят | `feat/vocal-v2-06-studio-dialogue` | `a38989733bc701b74a9690cc81518c6ce277b836` | `d4680eb9b48ac96cdea708f6b975afe033015ba5` | lint; typecheck; build; test:reels 66/66 | принято внешним ревью; код `94d8d24`; review-fix `506753d` + `8590b54`; docs HEAD `d4680eb` — база Stage 07 |
 | S07 | Сценарии и версии | принят | `feat/vocal-v2-07-script-drafts` | `d4680eb9b48ac96cdea708f6b975afe033015ba5` | `d7900049033a6b07cc329c0b5389d70ca11ef717` | lint; typecheck; build; test:reels 69/69 | принято стартом Stage 08; код `bf7554c`; review-fix `6d6794e` + `cf23429` + `aa800de`; docs HEAD `d790004` — база Stage 08 |
 | S08 | Дубли и запись | принят | `feat/vocal-v2-08-takes-recording` | `d7900049033a6b07cc329c0b5389d70ca11ef717` | `95590acb324ccc99f8f38c6ef435cecacdc53fcb` | lint; typecheck; build; test:reels 85/85 | принято стартом Stage 09; код `bb4b067`; review-fix `aeaa195` + `6d9e7c4`; docs HEAD `95590ac` — база Stage 09 |
-| S09 | Итоговый выбор и завершение | на ревью | `feat/vocal-v2-09-completion` | `95590acb324ccc99f8f38c6ef435cecacdc53fcb` | | lint; typecheck; build; test:reels 88/88 | код `7b53395`; Stage 09 не принят; Stage 10 не начат |
+| S09 | Итоговый выбор и завершение | на ревью | `feat/vocal-v2-09-completion` | `95590acb324ccc99f8f38c6ef435cecacdc53fcb` | `cc32c2a43b53050e1cc1aa9426080d6e741af03e` | lint; typecheck; build; test:reels 89/89 | код `7b53395`; review-fix `35bf599`; первый отчёт `cc32c2a`; Stage 09 не принят; Stage 10 не начат |
 
 Этап не считается принятым, пока внешнее ревью не подтвердит его явно.
 
@@ -105,6 +105,8 @@
 | Исправление ревью Stage 08 (video abort) | `6d9e7c4fdbcf6aa2f62a63a5b1ecd81ff1d28631` |
 | Принятый Stage 08 / база Stage 09 | `95590acb324ccc99f8f38c6ef435cecacdc53fcb` |
 | Коммит кода Stage 09 | `7b53395b71de73505d4f4eef480eb08a8d1a0d55` |
+| Документация Stage 09 | `cc32c2a43b53050e1cc1aa9426080d6e741af03e` |
+| Исправление ревью Stage 09 (атомарное завершение) | `35bf599a299e980beeafb14fadf81e3889e822a0` |
 
 ## Этап 9 — проверки
 
