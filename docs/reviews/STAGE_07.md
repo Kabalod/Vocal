@@ -7,7 +7,8 @@
 - Коммит(ы) кода: `bf7554cc320ab947de946dc6cdeeace914d6d083`
 - Коммит исправления: `6d6794e918aa3a32049bdaf1dc3f3d6767f063c1`
 - Коммит исправления (saving unlock): `cf234293bf1a1fd1e735b79bacf8065f0dcc305c`
-- HEAD_SHA: `cf234293bf1a1fd1e735b79bacf8065f0dcc305c`
+- Коммит исправления (UI sync): `aa800de8f3b0d3f963a9b6f4096b550c71bef310`
+- HEAD_SHA: `aa800de8f3b0d3f963a9b6f4096b550c71bef310`
 - Ветка: `feat/vocal-v2-07-script-drafts`
 - Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-07-script-drafts
 
@@ -17,7 +18,7 @@ Stage 06 принят на SHA `d4680eb9b48ac96cdea708f6b975afe033015ba5` (по�
 
 - Один `ScriptDraft` на мысль: body, sources, sourceKind, baseVersionId, `saveToken`, timestamps. Миграция `20260912030000_script_draft`.
 - `PATCH` черновика автосохраняет один объект и не создаёт `ScriptVersion`. Параллельный PATCH с тем же токеном даёт 409/`STALE` без потери текста у проигравшего клиента.
-- «Завершить версию» транзакционно создаёт готовую версию (`manual` или `accepted_ai` для переноса из Vocal) и удаляет черновик. Клиент передаёт актуальный `body`; перед выходом к готовым версиям дожидается PATCH. В транзакции `expectedSaveToken` сравнивается с `draft.saveToken`. `replaceScriptDraft` увеличивает `saveToken`, поэтому старый PATCH после переноса получает 409. Сохранение черновика всегда снимает `saving` в `finally`; параллельные PATCH идут очередью. После сетевой ошибки или 500 пользователь остаётся в черновике, кнопки снова доступны, повтор с тем же текстом возможен.
+- «Завершить версию» транзакционно создаёт готовую версию (`manual` или `accepted_ai` для переноса из Vocal) и удаляет черновик. Клиент передаёт актуальный `body`; перед выходом к готовым версиям дожидается PATCH. В транзакции `expectedSaveToken` сравнивается с `draft.saveToken`. `replaceScriptDraft` увеличивает `saveToken`, поэтому старый PATCH после переноса получает 409. Сохранение черновика всегда снимает `saving` в `finally`; параллельные PATCH идут очередью. Сессия сразу `emit()` при `saving`/`finalizing`; `ScriptEditor` читает снимок через `useSyncExternalStore` и рисует `ScriptDraftComposer`. Кнопки блокируются в том же тике, что старт PATCH/finalize, и снова доступны после ошибки.
 - Готовые версии не имеют route правки body. `GET /api/reels/:id/scripts` отдаёт метаданные всех версий без `body`; полный текст — у выбранной версии и текущего черновика. `GET /scripts/:scriptId` — одно тело. Переключение версии на клиенте идёт через `GenerationGuard`.
 - «Перенести в сценарий» создаёт/заменяет черновик, не готовую версию. Повтор и гонка по-прежнему через `claimKey`.
 - Старые `ScriptVersion(kind=ai_proposal)` не мигрируются; читаются как метаданные. Предложение Vocal остаётся в `DialogueMessage(kind=script_proposal)`.
