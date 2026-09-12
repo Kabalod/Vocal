@@ -51,7 +51,20 @@ export function ScriptVersionTimeline({
   }
 
   return (
-    <div className="space-y-3">
+    <div
+      className="space-y-3"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft" && prevId) {
+          event.preventDefault();
+          onView(prevId);
+        }
+        if (event.key === "ArrowRight" && nextId) {
+          event.preventDefault();
+          onView(nextId);
+        }
+      }}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -92,7 +105,7 @@ export function ScriptVersionTimeline({
             const next = list[Number(event.target.value)];
             if (next) onView(next.id);
           }}
-          className="w-full accent-[var(--vocal-accent)]"
+          className={`w-full accent-[var(--vocal-accent)] ${list.length < 2 ? "pointer-events-none opacity-40" : ""}`}
         />
       </label>
       <div

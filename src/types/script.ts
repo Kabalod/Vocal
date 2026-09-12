@@ -52,6 +52,40 @@ export interface ScriptBundleDto {
   sources: ScriptSourceOption[];
 }
 
+export interface ScriptVersionMetaDto {
+  id: string;
+  reelId: string;
+  kind: ScriptKind;
+  createdAt: string;
+  sourceLabel: string;
+  number: number | null;
+  parentId: string | null;
+}
+
+export interface ScriptDraftDto {
+  id: string;
+  reelId: string;
+  body: string;
+  sources: ScriptSourceRef[];
+  sourceKind: string;
+  baseVersionId: string | null;
+  sourceLabel: string;
+  updatedAt: string;
+  saveToken: number;
+}
+
+export interface ScriptWorkspaceDto {
+  reelId: string;
+  headId: string | null;
+  selectedScriptId: string | null;
+  finalScriptId: string | null;
+  readyCount: number;
+  versions: ScriptVersionMetaDto[];
+  viewing: ScriptVersionDto | null;
+  draft: ScriptDraftDto | null;
+  sources: ScriptSourceOption[];
+}
+
 export function emptyRecording(): RecordingCardDto {
   return { opening: "", supports: "", example: "", ending: "" };
 }
@@ -62,4 +96,20 @@ export function isScriptKind(value: string): value is ScriptKind {
 
 export function isHeadKind(kind: string): boolean {
   return SCRIPT_HEAD_KINDS.includes(kind as ScriptKind);
+}
+
+export function scriptOriginLabel(
+  kind: string,
+  sources: ScriptSourceRef[],
+  takeNumberByTranscriptId?: Map<string, number>,
+): string {
+  if (kind === "accepted_ai" || kind === "ai_proposal") return "Создана с Vocal";
+  const transcript = sources.find((item) => item.type === "transcript");
+  if (transcript) {
+    const numbered = takeNumberByTranscriptId?.get(transcript.id);
+    if (typeof numbered === "number") return `Из дубля №${numbered}`;
+    const match = transcript.label?.match(/№\s*(\d+)/);
+    if (match) return `Из дубля №${match[1]}`;
+  }
+  return "Создана вами";
 }

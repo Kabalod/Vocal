@@ -10,10 +10,14 @@ import {
   isScriptKind,
   type RecordingCardDto,
   type ScriptBundleDto,
+  type ScriptDraftDto,
   type ScriptKind,
   type ScriptSourceOption,
   type ScriptSourceRef,
   type ScriptVersionDto,
+  type ScriptVersionMetaDto,
+  type ScriptWorkspaceDto,
+  scriptOriginLabel,
 } from "@/types/script";
 
 export class ScriptError extends Error {
@@ -225,6 +229,227 @@ export async function listScriptBundle(reelId: string): Promise<ScriptBundleDto>
     versions: versions.map(toDto),
     sources: await listAvailableSources(reelId),
   };
+}
+
+function toDraftDto(
+  row: {
+    id: string;
+    reelId: string;
+    body: string;
+    sourcesJson: string;
+    sourceKind: string;
+    baseVersionId: string | null;
+    saveToken: number;
+    updatedAt: Date;
+  },
+  takeNumberByTranscriptId?: Map<string, number>,
+): ScriptDraftDto {
+  const sources = parseSources(row.sourcesJson);
+  const kind = row.sourceKind === "vocal" ? "accepted_ai" : "manual";
+  return {
+    id: row.id,
+    reelId: row.reelId,
+    body: row.body,
+    sources,
+    sourceKind: row.sourceKind,
+    baseVersionId: row.baseVersionId,
+    sourceLabel: scriptOriginLabel(kind, sources, takeNumberByTranscriptId),
+    updatedAt: row.updatedAt.toISOString(),
+    saveToken: row.saveToken,
+  };
+}
+
+async function takeNumberMap(reelId: string): Promise<Map<string, number>> {
+  const takes = await prisma.take.findMany({
+    where: { reelId },
+    select: { number: true, transcripts: { select: { id: true } } },
+  });
+  const map = new Map<string, number>();
+  for (const take of takes) {
+    for (const transcript of take.transcripts) map.set(transcript.id, take.number);
+  }
+  return map;
+}
+
+function toMeta(
+  row: { id: string; reelId: string; kind: string; sourcesJson: string; parentId: string | null; createdAt: Date },
+  number: number | null,
+  takeNumberByTranscriptId?: Map<string, number>,
+): ScriptVersionMetaDto {
+  const sources = parseSources(row.sourcesJson);
+  return {
+    id: row.id,
+    reelId: row.reelId,
+    kind: isScriptKind(row.kind) ? row.kind : "manual",
+    createdAt: row.createdAt.toISOString(),
+    sourceLabel: scriptOriginLabel(row.kind, sources, takeNumberByTranscriptId),
+    number,
+    parentId: row.parentId,
+  };
+}
+
+export async function getScriptVersion(reelId: string, scriptId: string): Promise<ScriptVersionDto> {
+  await assertReel(reelId);
+  const row = await prisma.scriptVersion.findFirst({ where: { id: scriptId, reelId } });
+  if (!row) throw new ScriptError("Версия сценария не найдена.", "SCRIPT_NOT_FOUND", 404);
+  return toDto(row);
+}
+
+export async function listScriptWorkspace(reelId: string, viewId?: string | null): Promise<ScriptWorkspaceDto> {
+  const reel = await assertReel(reelId);
+  const versions = await prisma.scriptVersion.findMany({
+    where: { reelId },
+    orderBy: { createdAt: "desc" },
+  });
+  const takeMap = await takeNumberMap(reelId);
+  const readyAsc = [...versions].filter((row) => isHeadKind(row.kind)).sort((a, b) => {
+    const byTime = a.createdAt.getTime() - b.createdAt.getTime();
+    return byTime !== 0 ? byTime : a.id.localeCompare(b.id);
+  });
+  const readyIndex = new Map(readyAsc.map((row, index) => [row.id, index + 1]));
+  const headId = versions.find((row) => isHeadKind(row.kind))?.id ?? null;
+  const selectedId = viewId || reel.selectedScriptId || headId;
+  const viewingRow = selectedId ? versions.find((row) => row.id === selectedId) ?? null : null;
+  const draft = await prisma.scriptDraft.findUnique({ where: { reelId } });
+  return {
+    reelId,
+    headId,
+    selectedScriptId: reel.selectedScriptId,
+    finalScriptId: reel.finalScriptId,
+    readyCount: readyAsc.length,
+    versions: versions.map((row) => toMeta(row, readyIndex.get(row.id) ?? null, takeMap)),
+    viewing: viewingRow ? toDto(viewingRow) : null,
+    draft: draft ? toDraftDto(draft, takeMap) : null,
+    sources: await listAvailableSources(reelId),
+  };
+}
+
+export async function replaceScriptDraft(
+  reelId: string,
+  input: {
+    body: string;
+    baseVersionId?: string | null;
+    sourceKind?: string;
+    sources?: ScriptSourceRef[];
+  },
+  db: ScriptDb = prisma,
+): Promise<ScriptDraftDto> {
+  await assertReel(reelId);
+  const body = input.body.trim();
+  if (!body) throw new ScriptError("Введите текст сценария.", "SCRIPT_REQUIRED");
+  if (body.length > SCRIPT_BODY_MAX) {
+    throw new ScriptError(`Сценарий короче ${SCRIPT_BODY_MAX} символов.`, "SCRIPT_TOO_LONG");
+  }
+  const sources = input.sources ?? [];
+  const existing = await db.scriptDraft.findUnique({ where: { reelId } });
+  const row = existing
+    ? await db.scriptDraft.update({
+        where: { reelId },
+        data: {
+          body,
+          baseVersionId: input.baseVersionId ?? existing.baseVersionId,
+          sourceKind: input.sourceKind ?? existing.sourceKind,
+          sourcesJson: JSON.stringify(sources.length ? sources : parseSources(existing.sourcesJson)),
+        },
+      })
+    : await db.scriptDraft.create({
+        data: {
+          reelId,
+          body,
+          baseVersionId: input.baseVersionId ?? null,
+          sourceKind: input.sourceKind ?? "manual",
+          sourcesJson: JSON.stringify(sources),
+        },
+      });
+  return toDraftDto(row);
+}
+
+export async function openScriptDraft(reelId: string, baseVersionId?: string | null): Promise<ScriptWorkspaceDto> {
+  await assertReel(reelId);
+  const existing = await prisma.scriptDraft.findUnique({ where: { reelId } });
+  if (existing) return listScriptWorkspace(reelId, baseVersionId);
+  const targetId = baseVersionId ?? (await getScriptHeadId(reelId));
+  if (!targetId) throw new ScriptError("Нет версии, с которой можно начать черновик.", "SCRIPT_NOT_FOUND", 404);
+  const source = await prisma.scriptVersion.findFirst({ where: { id: targetId, reelId } });
+  if (!source) throw new ScriptError("Версия сценария не найдена.", "SCRIPT_NOT_FOUND", 404);
+  await replaceScriptDraft(reelId, {
+    body: source.body,
+    baseVersionId: source.id,
+    sourceKind: "manual",
+    sources: parseSources(source.sourcesJson),
+  });
+  return listScriptWorkspace(reelId, source.id);
+}
+
+function resolveDraftToken(
+  draft: { saveToken: number; updatedAt: Date },
+  input: { expectedUpdatedAt: string; expectedSaveToken?: number },
+): number {
+  if (typeof input.expectedSaveToken === "number" && Number.isFinite(input.expectedSaveToken)) {
+    return input.expectedSaveToken;
+  }
+  if (draft.updatedAt.toISOString() === input.expectedUpdatedAt) return draft.saveToken;
+  throw new ScriptError("Черновик уже изменился. Обновите и повторите.", "STALE", 409);
+}
+
+export async function patchScriptDraft(
+  reelId: string,
+  input: { body: string; expectedUpdatedAt: string; expectedSaveToken?: number; sources?: ScriptSourceRef[] },
+): Promise<ScriptWorkspaceDto> {
+  await assertReel(reelId);
+  const body = input.body.trim();
+  if (!body) throw new ScriptError("Введите текст сценария.", "SCRIPT_REQUIRED");
+  if (body.length > SCRIPT_BODY_MAX) {
+    throw new ScriptError(`Сценарий короче ${SCRIPT_BODY_MAX} символов.`, "SCRIPT_TOO_LONG");
+  }
+  const draft = await prisma.scriptDraft.findUnique({ where: { reelId } });
+  if (!draft) throw new ScriptError("Черновик не найден.", "DRAFT_NOT_FOUND", 404);
+  const expectedToken = resolveDraftToken(draft, input);
+  const updated = await prisma.scriptDraft.updateMany({
+    where: { reelId, saveToken: expectedToken },
+    data: {
+      body,
+      sourcesJson: JSON.stringify(input.sources?.length ? input.sources : parseSources(draft.sourcesJson)),
+      saveToken: expectedToken + 1,
+    },
+  });
+  if (updated.count === 0) {
+    throw new ScriptError("Черновик уже изменился. Обновите и повторите.", "STALE", 409);
+  }
+  return listScriptWorkspace(reelId);
+}
+
+export async function finalizeScriptDraft(
+  reelId: string,
+  input: { expectedUpdatedAt: string; expectedSaveToken?: number },
+): Promise<ScriptWorkspaceDto> {
+  await assertReel(reelId);
+  await prisma.$transaction(async (tx) => {
+    const draft = await tx.scriptDraft.findUnique({ where: { reelId } });
+    if (!draft) throw new ScriptError("Черновик не найден.", "DRAFT_NOT_FOUND", 404);
+    resolveDraftToken(draft, input);
+    const kind: ScriptKind = draft.sourceKind === "vocal" ? "accepted_ai" : "manual";
+    await createVersion(
+      reelId,
+      {
+        kind,
+        body: draft.body,
+        sources: parseSources(draft.sourcesJson),
+        parentId: draft.baseVersionId,
+      },
+      tx,
+    );
+    await tx.scriptDraft.delete({ where: { reelId } });
+  });
+  return listScriptWorkspace(reelId);
+}
+
+export async function deleteScriptDraft(reelId: string): Promise<ScriptWorkspaceDto> {
+  await assertReel(reelId);
+  const draft = await prisma.scriptDraft.findUnique({ where: { reelId } });
+  if (!draft) throw new ScriptError("Черновик не найден.", "DRAFT_NOT_FOUND", 404);
+  await prisma.scriptDraft.delete({ where: { reelId } });
+  return listScriptWorkspace(reelId);
 }
 
 async function createVersion(

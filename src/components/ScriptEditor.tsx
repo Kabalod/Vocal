@@ -1,19 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { RecordingCard } from "@/components/RecordingCard";
-import { ScriptVersionList, versionById } from "@/components/ScriptVersionList";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ScriptVersionTimeline } from "@/components/ScriptVersionTimeline";
 import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
-import {
-  emptyRecording,
-  type RecordingCardDto,
-  type ScriptBundleDto,
-  type ScriptSourceRef,
-} from "@/types/script";
+import { GenerationGuard } from "@/lib/generation-guard";
+import { isHeadKind, type ScriptVersionDto, type ScriptWorkspaceDto } from "@/types/script";
 
-function sourceKey(ref: ScriptSourceRef) {
-  return `${ref.type}:${ref.id}`;
+function readyVersions(workspace: ScriptWorkspaceDto) {
+  return workspace.versions.filter((row) => isHeadKind(row.kind));
+}
+
+function downloadText(filename: string, text: string) {
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export function ScriptEditor({
@@ -25,224 +29,299 @@ export function ScriptEditor({
   reloadToken?: number;
   onHelpWithScript?: () => Promise<void> | void;
 }) {
-  const [bundle, setBundle] = useState<ScriptBundleDto | null>(null);
-  const [body, setBody] = useState("");
-  const [recording, setRecording] = useState<RecordingCardDto>(emptyRecording());
-  const [selected, setSelected] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [dirty, setDirty] = useState(false);
+  const [workspace, setWorkspace] = useState<ScriptWorkspaceDto | null>(null);
+  const [viewing, setViewing] = useState<ScriptVersionDto | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const [mode, setMode] = useState<"ready" | "draft">("ready");
+  const [draftBody, setDraftBody] = useState("");
+  const [expectedUpdatedAt, setExpectedUpdatedAt] = useState<string | null>(null);
+  const [expectedSaveToken, setExpectedSaveToken] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
+  const [helping, setHelping] = useState(false);
+  const guardRef = useRef(new GenerationGuard());
+  const skipAutosave = useRef(false);
 
-  const applyBundle = useCallback((next: ScriptBundleDto, keepDraft: boolean) => {
-    setBundle(next);
-    if (!keepDraft) {
-      const head = next.versions.find((row) => row.id === next.headId) ?? null;
-      setBody(head?.body ?? "");
-      setRecording(head?.recording ?? emptyRecording());
-      setSelected((head?.sources ?? []).map(sourceKey));
-      setDirty(false);
+  const applyWorkspace = useCallback((next: ScriptWorkspaceDto, keepDraftText: boolean) => {
+    setWorkspace(next);
+    const nextViewId = next.viewing?.id ?? next.headId ?? next.versions.find((row) => isHeadKind(row.kind))?.id ?? null;
+    setViewingId((current) => current ?? nextViewId);
+    if (next.viewing) setViewing(next.viewing);
+    if (next.draft) {
+      setExpectedUpdatedAt(next.draft.updatedAt);
+      setExpectedSaveToken(next.draft.saveToken);
+      if (!keepDraftText) {
+        skipAutosave.current = true;
+        setDraftBody(next.draft.body);
+      }
+    } else {
+      setExpectedUpdatedAt(null);
+      setExpectedSaveToken(null);
     }
-    setViewingId((current) => current ?? next.headId ?? next.versions[0]?.id ?? null);
   }, []);
 
-  const load = useCallback(async () => {
-    const res = await fetch(`/api/reels/${reelId}/scripts`, { cache: "no-store" });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить сценарий.");
-    applyBundle(data as ScriptBundleDto, dirty);
-  }, [applyBundle, dirty, reelId]);
+  const load = useCallback(
+    async (view?: string | null) => {
+      const query = view ? `?view=${encodeURIComponent(view)}` : "";
+      const res = await fetch(`/api/reels/${reelId}/scripts${query}`, { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить сценарий.");
+      applyWorkspace(data as ScriptWorkspaceDto, false);
+      return data as ScriptWorkspaceDto;
+    },
+    [applyWorkspace, reelId],
+  );
 
   useEffect(() => {
-    void load().catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."));
+    void load()
+      .then((next) => {
+        if (reloadToken > 0 && next.draft) setMode("draft");
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."));
   }, [load, reloadToken]);
 
-  function currentSources(): ScriptSourceRef[] {
-    return (bundle?.sources ?? [])
-      .filter((item) => selected.includes(sourceKey(item)))
-      .map((item) => ({ type: item.type, id: item.id }));
-  }
+  useEffect(() => {
+    if (!viewingId) return;
+    if (viewing?.id === viewingId) return;
+    const token = guardRef.current.begin();
+    void fetch(`/api/reels/${reelId}/scripts/${viewingId}`, { cache: "no-store" })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить версию.");
+        if (!token.isCurrent()) return;
+        setViewing(data as ScriptVersionDto);
+      })
+      .catch((err: unknown) => {
+        if (!token.isCurrent()) return;
+        setError(err instanceof Error ? err.message : "Ошибка.");
+      });
+  }, [reelId, viewing, viewingId]);
 
-  async function post(action: string, extra: Record<string, unknown> = {}) {
-    const res = await fetch(`/api/reels/${reelId}/scripts`, {
-      method: "POST",
+  async function saveDraft(body: string, expected: string, token: number) {
+    setSaving(true);
+    setStatus("Сохраняем…");
+    const res = await fetch(`/api/reels/${reelId}/scripts/draft`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action,
-        expectedHeadId: bundle?.headId ?? null,
-        ...extra,
-      }),
+      body: JSON.stringify({ body, expectedUpdatedAt: expected, expectedSaveToken: token }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? "Не удалось сохранить сценарий.");
-    applyBundle(data as ScriptBundleDto, false);
-    return data as ScriptBundleDto;
-  }
-
-  async function save() {
-    setSaving(true);
-    setError(null);
-    try {
-      await post("save", { body, recording, sources: currentSources() });
-      setStatus("Сохранено как новая версия.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка.");
-    } finally {
+    if (res.status === 409) {
+      const fresh = await fetch(`/api/reels/${reelId}/scripts`, { cache: "no-store" });
+      const workspaceJson = (await fresh.json()) as ScriptWorkspaceDto;
+      if (workspaceJson.draft) {
+        setExpectedUpdatedAt(workspaceJson.draft.updatedAt);
+        setExpectedSaveToken(workspaceJson.draft.saveToken);
+      }
+      setError("Черновик уже изменился в другом окне. Текст здесь не потерян.");
+      setStatus(null);
       setSaving(false);
+      return;
     }
+    if (!res.ok) throw new Error(data.error ?? "Не удалось сохранить черновик.");
+    applyWorkspace(data as ScriptWorkspaceDto, true);
+    setError(null);
+    setStatus("Сохранено");
+    setSaving(false);
   }
 
-  async function generate() {
-    setGenerating(true);
+  useEffect(() => {
+    if (mode !== "draft" || !expectedUpdatedAt || expectedSaveToken == null || !workspace?.draft) return;
+    if (skipAutosave.current) {
+      skipAutosave.current = false;
+      return;
+    }
+    if (draftBody === workspace.draft.body) return;
+    const timer = window.setTimeout(() => {
+      void saveDraft(draftBody, expectedUpdatedAt, expectedSaveToken).catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Ошибка.");
+        setSaving(false);
+      });
+    }, 600);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- автосохранение только по тексту и метке
+  }, [draftBody, expectedUpdatedAt, expectedSaveToken, mode, workspace?.draft?.id]);
+
+  async function openDraft() {
     setError(null);
-    const draftBody = body;
-    const draftRecording = recording;
-    const draftSelected = selected;
+    const res = await fetch(`/api/reels/${reelId}/scripts/draft`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseVersionId: viewingId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Не удалось открыть черновик.");
+    applyWorkspace(data as ScriptWorkspaceDto, false);
+    setMode("draft");
+  }
+
+  async function finalize() {
+    if (!expectedUpdatedAt || !draftBody.trim()) return;
+    setFinalizing(true);
+    setError(null);
     try {
-      const res = await fetch(`/api/reels/${reelId}/scripts/generate`, {
+      const res = await fetch(`/api/reels/${reelId}/scripts/draft/finalize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sources: currentSources() }),
+        body: JSON.stringify({ expectedUpdatedAt, expectedSaveToken }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Не удалось собрать сценарий.");
-      applyBundle(data.bundle as ScriptBundleDto, true);
-      setBody(draftBody);
-      setRecording(draftRecording);
-      setSelected(draftSelected);
-      setDirty(true);
-      setStatus("Предложение модели сохранено отдельно. Черновик не затёрт.");
+      if (!res.ok) throw new Error(data.error ?? "Не удалось завершить версию.");
+      applyWorkspace(data as ScriptWorkspaceDto, false);
+      setMode("ready");
+      setViewingId((data as ScriptWorkspaceDto).headId);
+      setViewing((data as ScriptWorkspaceDto).viewing);
+      setStatus("Готовая версия создана.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка.");
     } finally {
-      setGenerating(false);
+      setFinalizing(false);
     }
   }
 
-  const viewing = bundle ? versionById(bundle, viewingId) : null;
+  async function removeDraft() {
+    if (!window.confirm("Удалить черновик? Готовые версии не изменятся.")) return;
+    const res = await fetch(`/api/reels/${reelId}/scripts/draft`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Не удалось удалить черновик.");
+    applyWorkspace(data as ScriptWorkspaceDto, false);
+    setMode("ready");
+    setStatus("Черновик удалён.");
+  }
+
+  const ready = workspace ? readyVersions(workspace) : [];
+  const currentMeta = ready.find((row) => row.id === viewingId) ?? null;
+  const baseNumber = workspace?.draft?.baseVersionId
+    ? ready.find((row) => row.id === workspace.draft?.baseVersionId)?.number
+    : null;
 
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="font-[family-name:var(--font-display)] text-2xl">Ваша версия</h2>
+        <h2 className="font-[family-name:var(--font-display)] text-2xl">
+          {mode === "draft" ? "Черновик новой версии" : "Сценарий"}
+        </h2>
         <p className="text-sm text-muted">
-          Последняя сохранённая версия — главный текст. Ручное сохранение не вызывает модель. Помощь модели пишет
-          отдельное предложение и не затирает черновик. Финальный сценарий и финальный дубль — разные выборы.
+          {mode === "draft"
+            ? baseNumber
+              ? `На основе версии ${baseNumber}`
+              : "Новый черновик без номера"
+            : "Готовые версии только для чтения. Правка начинается отдельной командой."}
         </p>
       </div>
       {error ? <ShellError message={error} /> : null}
       {status ? <p className="text-sm text-muted">{status}</p> : null}
-      {bundle ? (
+      {workspace ? (
         <ScriptVersionTimeline
-          versions={bundle.versions}
+          versions={ready}
           viewingId={viewingId}
-          headId={bundle.headId}
-          finalScriptId={bundle.finalScriptId}
-          onView={setViewingId}
+          headId={workspace.headId}
+          finalScriptId={workspace.finalScriptId}
+          onView={(id) => {
+            setViewingId(id);
+            if (mode === "ready") setViewing(null);
+          }}
         />
       ) : (
         <ShellLoading label="Загрузка версий…" />
       )}
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(16rem,0.8fr)]">
+      {mode === "ready" ? (
         <div className="space-y-4">
-          <textarea
-            value={body}
-            onChange={(event) => {
-              setBody(event.target.value);
-              setDirty(true);
-            }}
-            rows={16}
-            placeholder="Текст сценария"
-            className="vocal-input min-h-[22rem] resize-y font-[family-name:var(--font-display)] text-lg leading-relaxed"
-          />
-          <RecordingCard
-            value={recording}
-            onChange={(next) => {
-              setRecording(next);
-              setDirty(true);
-            }}
-          />
-          <fieldset className="space-y-2">
-            <legend className="text-sm text-muted">Источники (выбираете сами, ничего не склеивается само)</legend>
-            {(bundle?.sources ?? []).length === 0 ? (
-              <ShellEmpty
-                title="Нет источников"
-                description="Пока нет заметок, расшифровок, ответов или прошлых сценариев."
-              />
-            ) : (
-              bundle?.sources.map((source) => {
-                const key = sourceKey(source);
-                return (
-                  <label key={key} className="flex items-start gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(key)}
-                      onChange={(event) => {
-                        setSelected((current) =>
-                          event.target.checked ? [...current, key] : current.filter((item) => item !== key),
-                        );
-                        setDirty(true);
-                      }}
-                    />
-                    <span>{source.label}</span>
-                  </label>
-                );
-              })
-            )}
-          </fieldset>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => void save()}
-              disabled={saving || !body.trim()}
-              className="vocal-btn vocal-btn-primary disabled:opacity-50"
+              className="vocal-btn"
+              onClick={() => void openDraft().catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."))}
             >
-              {saving ? "Сохраняем…" : dirty ? "Сохранить новую версию" : "Сохранить"}
+              {workspace?.draft ? "Продолжить черновик" : "Создать новую версию"}
             </button>
             <button
               type="button"
+              className="vocal-btn text-sm"
+              disabled={helping}
               onClick={() => {
-                if (onHelpWithScript) {
-                  void Promise.resolve(onHelpWithScript()).catch((err: unknown) =>
-                    setError(err instanceof Error ? err.message : "Ошибка."),
-                  );
-                  return;
-                }
-                void generate();
+                if (!onHelpWithScript) return;
+                setHelping(true);
+                void Promise.resolve(onHelpWithScript())
+                  .catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."))
+                  .finally(() => setHelping(false));
               }}
-              disabled={generating || (onHelpWithScript ? false : selected.length === 0)}
-              className="vocal-btn disabled:opacity-50"
             >
-              {generating ? "Собираем…" : "Помочь со сценарием"}
+              {helping ? "Просим…" : "Помочь со сценарием"}
+            </button>
+            <button
+              type="button"
+              className="vocal-btn text-sm"
+              disabled={!viewing?.body}
+              onClick={() => viewing?.body && downloadText("scenario.txt", viewing.body)}
+            >
+              Скачать
+            </button>
+          </div>
+          {viewing ? (
+            <article className="vocal-card space-y-2 p-4">
+              <p className="text-sm text-muted">
+                {currentMeta?.number ? `Версия ${currentMeta.number}` : "Версия"} · {currentMeta?.sourceLabel ?? viewing.kind}
+              </p>
+              <p className="whitespace-pre-wrap font-[family-name:var(--font-display)] text-lg leading-relaxed">
+                {viewing.body}
+              </p>
+            </article>
+          ) : workspace ? (
+            <ShellEmpty title="Нет готовой версии" description="Сохраните первую версию или откройте черновик." />
+          ) : null}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-sm text-muted">{saving ? "Сохраняем…" : expectedUpdatedAt ? "Сохранено" : ""}</p>
+          <textarea
+            value={draftBody}
+            onChange={(event) => {
+              setDraftBody(event.target.value);
+              setStatus(null);
+            }}
+            rows={16}
+            placeholder="Текст новой версии"
+            className="vocal-input min-h-[22rem] resize-y font-[family-name:var(--font-display)] text-lg leading-relaxed"
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="vocal-btn vocal-btn-primary disabled:opacity-50"
+              disabled={finalizing || saving || !draftBody.trim()}
+              onClick={() => void finalize()}
+            >
+              {finalizing ? "Завершаем…" : "Завершить версию"}
+            </button>
+            <button type="button" className="vocal-btn" onClick={() => setMode("ready")}>
+              К готовым версиям
+            </button>
+            <button
+              type="button"
+              className="vocal-btn text-sm"
+              onClick={() => void removeDraft().catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."))}
+            >
+              Удалить черновик
+            </button>
+            <button
+              type="button"
+              className="vocal-btn text-sm"
+              disabled={helping}
+              onClick={() => {
+                if (!onHelpWithScript) return;
+                setHelping(true);
+                void Promise.resolve(onHelpWithScript())
+                  .catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."))
+                  .finally(() => setHelping(false));
+              }}
+            >
+              {helping ? "Просим…" : "Помочь со сценарием"}
             </button>
           </div>
         </div>
-        <div className="space-y-3">
-          {bundle ? (
-            <ScriptVersionList
-              bundle={bundle}
-              viewingId={viewingId}
-              onView={setViewingId}
-              onRestore={(id) => void post("restore", { scriptId: id }).catch((err) => setError(err.message))}
-              onFinal={(id) => void post("final", { scriptId: id }).catch((err) => setError(err.message))}
-              onAccept={(id) => void post("accept", { proposalId: id }).catch((err) => setError(err.message))}
-            />
-          ) : (
-            <ShellLoading label="Загрузка версий…" />
-          )}
-          {viewing ? (
-            <div className="vocal-card p-4 text-sm">
-              <p className="text-muted">Просмотр версии</p>
-              <p className="mt-2 whitespace-pre-wrap leading-relaxed">{viewing.body}</p>
-              {viewing.inventedIdeas.length > 0 ? (
-                <p className="mt-2 text-muted">Новые идеи модели: {viewing.inventedIdeas.join("; ")}</p>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </div>
+      )}
     </section>
   );
 }

@@ -1,0 +1,27 @@
+import { NextResponse } from "next/server";
+import { ReelError } from "@/lib/reels";
+import { finalizeScriptDraft, ScriptError } from "@/lib/scripts";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await context.params;
+    const body = (await request.json()) as { expectedUpdatedAt?: string; expectedSaveToken?: number };
+    if (typeof body.expectedUpdatedAt !== "string") {
+      return NextResponse.json({ error: "Нужна метка черновика.", code: "DRAFT_REQUIRED" }, { status: 400 });
+    }
+    const workspace = await finalizeScriptDraft(id, {
+      expectedUpdatedAt: body.expectedUpdatedAt,
+      expectedSaveToken: typeof body.expectedSaveToken === "number" ? body.expectedSaveToken : undefined,
+    });
+    return NextResponse.json(workspace, { status: 201 });
+  } catch (error) {
+    if (error instanceof ReelError || error instanceof ScriptError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
+    }
+    console.error(error);
+    return NextResponse.json({ error: "Не удалось завершить версию." }, { status: 500 });
+  }
+}

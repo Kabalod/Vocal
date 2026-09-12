@@ -70,7 +70,6 @@ export function ReelStudio({ reelId }: { reelId: string }) {
               hasReadyScript={hasReadyScript}
               onTransferred={() => {
                 setScriptTick((value) => value + 1);
-                setHasReadyScript(true);
                 if (!window.matchMedia("(min-width: 75rem)").matches) changeTab("script");
               }}
               onGoRecord={() => changeTab("takes")}

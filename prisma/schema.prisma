@@ -29,6 +29,7 @@ model Reel {
   compares         CompareResult[]
   thoughtCreateKeys ThoughtCreateKey[]
   dialogueThreads   DialogueThread[]
+  scriptDraft       ScriptDraft?
 }
 
 model CreatorProfile {
@@ -228,6 +229,19 @@ model ScriptVersion {
   takes              Take[]
 
   @@index([reelId, createdAt])
+}
+
+model ScriptDraft {
+  id            String   @id @default(cuid())
+  reelId        String   @unique
+  reel          Reel     @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  body          String
+  sourcesJson   String   @default("[]")
+  sourceKind    String   @default("manual")
+  baseVersionId String?
+  saveToken     Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model DialogueThread {

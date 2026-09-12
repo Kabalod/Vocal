@@ -20,7 +20,12 @@ export type DialogueMessageDto = {
   createdAt: string;
   status: "pending" | "done" | "error";
   voice: { durationLabel: string } | null;
-  proposal: { transferred: boolean; scriptVersionId: string | null; versionLabel: string | null } | null;
+  proposal: {
+    transferred: boolean;
+    scriptVersionId: string | null;
+    draftId: string | null;
+    versionLabel: string | null;
+  } | null;
   source: { type: string; id: string } | null;
 };
 

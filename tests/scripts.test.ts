@@ -145,6 +145,8 @@ test("scripts: manual save, versions, generate, restore, sources, take link", as
   const apiJson = await api.json();
   assert.equal(api.ok, true);
   assert.equal(apiJson.versions.length, restored.versions.length);
+  assert.equal("body" in apiJson.versions[0], false);
+  assert.ok(apiJson.viewing?.body);
 
   const linked = await createTake(reel.id, {
     inputType: "text",

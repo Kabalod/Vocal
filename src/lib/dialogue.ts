@@ -9,7 +9,7 @@ import { transcribeAudio } from "@/lib/stt";
 import { assertDailyTokenBudget, withAiInflight } from "@/lib/ai/usage-guard";
 import { pageDialogueItems, decodeDialogueCursor } from "@/lib/dialogue-cursor";
 import { ReelError } from "@/lib/reels";
-import { createAcceptedScriptFromText } from "@/lib/scripts";
+import { replaceScriptDraft } from "@/lib/scripts";
 import { listTranscriptBundle } from "@/lib/transcripts";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
@@ -38,6 +38,7 @@ type Payload = {
   voiceDurationLabel?: string;
   transferred?: boolean;
   scriptVersionId?: string;
+  draftId?: string;
   versionLabel?: string;
   script?: string;
 };
@@ -76,6 +77,7 @@ function asDto(row: {
         ? {
             transferred: Boolean(payload.transferred),
             scriptVersionId: payload.scriptVersionId ?? null,
+            draftId: payload.draftId ?? null,
             versionLabel: payload.versionLabel ?? null,
           }
         : null,
@@ -425,19 +427,17 @@ export async function transferDialogueProposal(reelId: string, messageId: string
     const fresh = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: message.id } });
     const payload = parsePayload(fresh.payloadJson);
     const body = (payload.script ?? fresh.body).trim();
-    const created = await createAcceptedScriptFromText(
+    const reel = await tx.reel.findUniqueOrThrow({ where: { id: reelId }, select: { selectedScriptId: true } });
+    const draft = await replaceScriptDraft(
       reelId,
-      { body, inputSnapshotJson: JSON.stringify({ dialogueMessageId: fresh.id }) },
+      {
+        body,
+        sourceKind: "vocal",
+        baseVersionId: reel.selectedScriptId,
+        sources: [],
+      },
       tx,
     );
-    const numbered =
-      (
-        await tx.scriptVersion.findMany({
-          where: { reelId, kind: { not: "ai_proposal" } },
-          orderBy: { createdAt: "asc" },
-          select: { id: true },
-        })
-      ).findIndex((row) => row.id === created.id) + 1;
     await tx.dialogueMessage.update({
       where: { id: fresh.id },
       data: {
@@ -445,8 +445,9 @@ export async function transferDialogueProposal(reelId: string, messageId: string
           ...payload,
           script: body,
           transferred: true,
-          scriptVersionId: created.id,
-          versionLabel: numbered > 0 ? `версия ${numbered}` : null,
+          draftId: draft.id,
+          scriptVersionId: null,
+          versionLabel: "черновик",
         }),
       },
     });

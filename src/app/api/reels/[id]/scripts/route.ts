@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ReelError } from "@/lib/reels";
 import {
   acceptScriptProposal,
-  listScriptBundle,
+  listScriptWorkspace,
   parseSourceRefs,
   restoreScript,
   saveManualScript,
@@ -22,11 +22,12 @@ function errorResponse(error: unknown) {
   return NextResponse.json({ error: "Не удалось обработать сценарий." }, { status: 500 });
 }
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
-    const bundle = await listScriptBundle(id);
-    return NextResponse.json(bundle);
+    const view = new URL(request.url).searchParams.get("view");
+    const workspace = await listScriptWorkspace(id, view);
+    return NextResponse.json(workspace);
   } catch (error) {
     return errorResponse(error);
   }

@@ -146,11 +146,14 @@ test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", asy
   ]);
   const again = await transferDialogueProposal(reel.id, proposal!.id);
   const versions = await prisma.scriptVersion.findMany({ where: { reelId: reel.id, kind: "accepted_ai" } });
-  assert.equal(versions.length, 1);
+  assert.equal(versions.length, 0);
+  const draft = await prisma.scriptDraft.findUnique({ where: { reelId: reel.id } });
+  assert.ok(draft);
   assert.equal(
-    parallel.messages.find((item) => item.id === proposal!.id)?.proposal?.scriptVersionId,
-    transferred.messages.find((item) => item.id === proposal!.id)?.proposal?.scriptVersionId,
+    parallel.messages.find((item) => item.id === proposal!.id)?.proposal?.draftId,
+    transferred.messages.find((item) => item.id === proposal!.id)?.proposal?.draftId,
   );
+  assert.equal(transferred.messages.find((item) => item.id === proposal!.id)?.proposal?.draftId, draft.id);
 
   let voiceComplete = 0;
   await assert.rejects(
@@ -187,7 +190,7 @@ test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", asy
   assert.equal(voiceComplete, 0);
   const after = transferred.messages.find((item) => item.id === proposal!.id);
   assert.equal(after?.proposal?.transferred, true);
-  assert.equal(again.messages.find((item) => item.id === proposal!.id)?.proposal?.scriptVersionId, after?.proposal?.scriptVersionId);
+  assert.equal(again.messages.find((item) => item.id === proposal!.id)?.proposal?.draftId, after?.proposal?.draftId);
 
   const stored = await prisma.dialogueMessage.count({ where: { threadId: first.threadId } });
   assert.ok(stored >= 3);

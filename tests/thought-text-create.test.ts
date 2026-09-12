@@ -124,7 +124,8 @@ test("text thought create is one transaction, idempotent, and keeps draft on err
     })
   ).json();
   assert.equal(scripts.versions.length, 1);
-  assert.equal(scripts.versions[0].body, expected);
+  assert.equal("body" in scripts.versions[0], false);
+  assert.equal(scripts.viewing?.body, expected);
   assert.equal(scripts.versions[0].kind, "manual");
   assert.equal(scripts.selectedScriptId, scripts.versions[0].id);
 
