@@ -114,3 +114,54 @@ export function emptyProfileFields(): ProfileFieldValue[] {
     usage: id === "boundaries" ? "understanding" : "understanding",
   }));
 }
+
+export const PROFILE_PHASES = ["idle", "conversation", "portrait"] as const;
+export type ProfilePhase = (typeof PROFILE_PHASES)[number];
+
+export const PORTRAIT_SECTION_IDS = ["goals", "experience", "topics", "delivery", "boundaries"] as const;
+export type PortraitSectionId = (typeof PORTRAIT_SECTION_IDS)[number];
+
+export const PORTRAIT_SECTION_TITLES: Record<PortraitSectionId, string> = {
+  goals: "Цели",
+  experience: "Опыт",
+  topics: "Темы",
+  delivery: "Подача",
+  boundaries: "Границы",
+};
+
+export const PORTRAIT_SECTION_FIELDS: Record<PortraitSectionId, readonly ProfileFieldId[]> = {
+  goals: ["whyRecord", "blogGoal", "audience"],
+  experience: ["lifeNow", "experience"],
+  topics: ["topics"],
+  delivery: ["speakingStyle"],
+  boundaries: ["boundaries"],
+};
+
+export interface PortraitSection {
+  id: PortraitSectionId;
+  title: string;
+  text: string;
+}
+
+export interface PortraitDto {
+  completed: boolean;
+  coveredKeys: ProfileFieldId[];
+  missingKeys: ProfileFieldId[];
+  sections: PortraitSection[];
+}
+
+export interface ProfileFieldPatch {
+  text?: string;
+  usage?: ProfileUsage;
+}
+
+export type ProfilePortraitPatch = Partial<Record<ProfileFieldId, ProfileFieldPatch>>;
+
+export interface ProfileWorkspaceDto {
+  phase: ProfilePhase;
+  skipped: boolean;
+  supplementing: boolean;
+  portrait: PortraitDto | null;
+  applyError: string | null;
+  profile: ProfileDto;
+}

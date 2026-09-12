@@ -39,6 +39,8 @@ model CreatorProfile {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   revisions          ProfileRevision[]
+  dialogueThreads    DialogueThread[]
+  aiCalls            AiCall[]
 }
 
 model ProfileRevision {
@@ -153,14 +155,16 @@ model Criterion {
 }
 
 model AiCall {
-  id                 String    @id @default(cuid())
+  id                 String          @id @default(cuid())
   kind               String
-  reelId             String
-  reel               Reel      @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  reelId             String?
+  reel               Reel?           @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  profileId          String?
+  profile            CreatorProfile? @relation(fields: [profileId], references: [id], onDelete: Restrict)
   takeId             String?
   reviewId           String?
   model              String
-  status             String    @default("queued")
+  status             String          @default("queued")
   promptText         String
   inputSnapshotJson  String
   responseText       String?
@@ -168,8 +172,11 @@ model AiCall {
   errorMessage       String?
   promptTokens       Int?
   completionTokens   Int?
-  createdAt          DateTime  @default(now())
+  createdAt          DateTime        @default(now())
   reviews            Review[]
+
+  @@index([reelId, createdAt])
+  @@index([profileId, createdAt])
 }
 
 model Review {
@@ -250,6 +257,8 @@ model DialogueThread {
   scope     String            @default("reel")
   reelId    String?           @unique
   reel      Reel?             @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  profileId String?           @unique
+  profile   CreatorProfile?   @relation(fields: [profileId], references: [id], onDelete: Restrict)
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
   messages  DialogueMessage[]
