@@ -1,87 +1,80 @@
-# Отчёт после этапа для проверки через GitHub
+# Отчёт этапа
 
 ## Идентификация
 
-- Этап: 7 — итоговый сценарий и версии
-- Репозиторий: Kabalod/Vocal
-- Ветка: feat/personal-mvp-07-script-editor
-- BASE_SHA (до изменений): d265b0d287b791e981577774b9b1a5215f5d2fc3
-- HEAD_SHA (после изменений): `87cf50b8dc8d01f98a2e64120d51ab308b9921db`
-- Ссылка на ветку: https://github.com/Kabalod/Vocal/tree/feat/personal-mvp-07-script-editor
-- Ветка отправлена в GitHub: да, без force push (если push прошёл)
-- Предыдущий этап принят: да, этап 6 на `d265b0d287b791e981577774b9b1a5215f5d2fc3`
+- Этап: Stage 07 — сценарии и версии
+- BASE_SHA: `d4680eb9b48ac96cdea708f6b975afe033015ba5`
+- Коммит(ы) кода: `bf7554cc320ab947de946dc6cdeeace914d6d083`
+- HEAD_SHA: `bf7554cc320ab947de946dc6cdeeace914d6d083`
+- Ветка: `feat/vocal-v2-07-script-drafts`
+- Ссылка GitHub: https://github.com/Kabalod/Vocal/tree/feat/vocal-v2-07-script-drafts
 
-## Реализовано
+Stage 06 принят на SHA `d4680eb9b48ac96cdea708f6b975afe033015ba5` (последний код правки `8590b541920b10d69875028a67a51ac00858ebb4`). Это BASE Stage 07. Ветка создана от этой вершины. Stage 08 не начинался.
 
-Ручной редактор сценария сохраняет новую неизменяемую версию без ИИ. Ожидаемый `headId` (последняя не-`ai_proposal` версия) даёт 409 при устаревшей записи. Восстановление копирует старую версию в новую (`restore`) и не удаляет последующую историю. Генерация замораживает контекст, пишет только `ai_proposal` и не двигает head / `selectedScriptId`. Предложение можно принять отдельной версией `accepted_ai`. Источники задаёт автор; чужие для карточки отклоняются. Карточка записи — поля opening/supports/example/ending; просмотр не вызывает модель. Take может ссылаться на ScriptVersion той же карточки. Финал сценария (`finalScriptId`) отдельно от финального дубля (`selectedTakeId`).
+## Что реализовано
 
-## Файлы
+- Один `ScriptDraft` на мысль: body, sources, sourceKind, baseVersionId, `saveToken`, timestamps. Миграция `20260912030000_script_draft`.
+- `PATCH` черновика автосохраняет один объект и не создаёт `ScriptVersion`. Параллельный PATCH с тем же токеном даёт 409/`STALE` без потери текста у проигравшего клиента.
+- «Завершить версию» транзакционно создаёт готовую версию (`manual` или `accepted_ai` для переноса из Vocal) и удаляет черновик.
+- Готовые версии не имеют route правки body. `GET /api/reels/:id/scripts` отдаёт метаданные всех версий без `body`; полный текст — у выбранной версии и текущего черновика. `GET /scripts/:scriptId` — одно тело. Переключение версии на клиенте идёт через `GenerationGuard`.
+- «Перенести в сценарий» создаёт/заменяет черновик, не готовую версию. Повтор и гонка по-прежнему через `claimKey`.
+- Старые `ScriptVersion(kind=ai_proposal)` не мигрируются; читаются как метаданные. Предложение Vocal остаётся в `DialogueMessage(kind=script_proposal)`.
+- UI: готовая версия read-only; «Создать новую версию» / «Продолжить черновик»; заголовок «Черновик новой версии», «На основе версии N», автосохранение, «Завершить версию», «К готовым версиям», удаление черновика с подтверждением. Навигатор: назад/вперёд, `N из M`, ползунок; при одной версии ползунок неинтерактивен. Источник: «Из дубля №N / Создана вами / Создана с Vocal». «Скачать» — вторичная кнопка. Длинный список v1…v20 убран.
+- Выбор другой готовой версии не подменяет тело существующего черновика.
 
-| Путь | Изменение и причина |
-|---|---|
-| prisma/schema.prisma | ScriptVersion, selected/final script, Take.scriptVersionId |
-| prisma/migrations/20260907131000_script_versions | ADD без reset |
-| src/types/script.ts | контракт версий, источников, карточки записи |
-| src/lib/scripts.ts | сохранение, restore, 409, принятие предложения |
-| src/lib/ai/script.ts | явная генерация, snapshot, inventedIdeas |
-| src/app/api/reels/[id]/scripts/route.ts | список и ручные действия без ИИ |
-| src/app/api/reels/[id]/scripts/generate/route.ts | отдельный POST генерации |
-| src/components/ScriptEditor.tsx | ручной редактор и состояние сохранения |
-| src/components/ScriptVersionList.tsx | просмотр, restore, финал, accept |
-| src/components/RecordingCard.tsx | начало / опоры / пример / финал |
-| src/app/reels/[id]/page.tsx | блок сценария на карточке |
-| src/lib/reels.ts, takes.ts, serialize.ts, types/reel.ts | связь дубля со сценарием, hasScript |
-| src/components/ReelTakes.tsx | выбор версии при текстовом дубле |
-| tests/scripts.test.ts | ручной путь, restart, generate, restore, 409, источники, take |
-| docs/IMPLEMENTATION_STATUS.md | этап 6 принят; этап 7 на ревью |
-| docs/reviews/STAGE_06.md | HEAD_SHA принятого этапа 6 |
-| docs/PERSONAL_MVP.md | состояние после этапа 7 |
+## Что намеренно не реализовано
 
-## Данные и миграции
+- История черновиков и undo.
+- Смена `finalTakeId` / `selectedTakeId` и автовыбор финала.
+- Профильный чат (Stage 10).
+- Запись нового дубля со сценария (Stage 08).
+- Разрушительная миграция `ai_proposal` → диалог.
+- Живой Groq в этом отчёте.
 
-- Требуемые команды: `npx prisma migrate deploy`
-- Как сохранены старые данные: ADD COLUMN/TABLE; payload AnalysisResult не менялся
-- Где находится локальная резервная копия (без её содержимого): `%USERPROFILE%\Vocal-backups\stage07-2026-09-07-224501`
-- Проверялось ли восстановление: SHA256 копии backup совпал с файлом до миграции
-- Проверялся ли повтор миграционного переноса: хеши payload AnalysisResult live vs backup совпали (2 записи)
+## Изменённые файлы
+
+- `prisma/schema.prisma`, `prisma/migrations/20260912030000_script_draft/migration.sql`
+- `src/lib/scripts.ts`, `src/lib/dialogue.ts`, `src/types/script.ts`, `src/types/dialogue.ts`
+- `src/app/api/reels/[id]/scripts/route.ts`, `[scriptId]/route.ts`, `draft/route.ts`, `draft/finalize/route.ts`
+- `src/components/ScriptEditor.tsx`, `ScriptVersionTimeline.tsx`, `ReelStudio.tsx`
+- `tests/thought-script-draft.test.ts`, `thought-dialogue.test.ts`, `scripts.test.ts`, `thought-text-create.test.ts`, `package.json`
+
+## Миграции и данные
+
+- Новая миграция: да, `20260912030000_script_draft`
+- Проверка существующей SQLite: `prisma migrate deploy` на `prisma/dev.db` применил ScriptDraft
+- Проверка чистой SQLite: `reels-migration` empty deploy, 12 миграций
+- Backfill: нет; готовые `ScriptVersion` не трогаются
+- Возможность отката: git revert коммита кода + откат миграции (DROP TABLE ScriptDraft)
 
 ## Проверки
 
-| Команда или ручной сценарий | Выполнено? | Результат | Ограничения |
-|---|---|---|---|
-| `npm run test:reels` | да | 26/26 | временные SQLite, mock Groq |
-| `npm run lint` | да | exit 0 | — |
-| `npm run typecheck` | да | исходные analyze.ts, score-analyz.ts, questions.ts | новая ошибка этапа в scripts.ts исправлена |
-| `npm run build` | нет | — | не запускался |
-| Браузер / живой Groq | нет | — | не называю пройденным |
+| Проверка | Результат | Ограничения |
+|---|---|---|
+| `npm run test:reels` | 69/69 | draft не увеличивает ready; finalize +1; 409/STALE; GET без body; transfer → draft; 20+ метаданных |
+| `npm run lint` | exit 0 | предупреждение exhaustive-deps в `VocalAppShell` с Stage 01 |
+| `npm run typecheck` | exit 0 | `scripts` в exclude |
+| `npm run build` | успех | маршруты `/scripts`, `/scripts/[scriptId]`, `/scripts/draft`, `/scripts/draft/finalize` |
+| Browser 390×844 | вкладки Дубли / Сценарий / Диалог; `scrollWidth=390`; ползунок disabled при 1 версии; «Создать новую версию» | живой send/STT не гонялись |
+| Browser 1280×800 | read-only версия «Из дубля №1»; открытие черновика; «Завершить версию» | автосохранение в браузере подтверждено тестами; textarea в UI открылась |
 
-- Исходные ошибки проекта: `src/lib/analyze.ts`, `scripts/score-analyz.ts`, плюс прежние `src/lib/ai/questions.ts`
-- Новые ошибки этапа: нет
-- Платные вызовы использовались: нет
-- Какие проверки требуют компьютера пользователя: ручное сохранение сценария в UI, кнопка «Собрать с ИИ» с ключом Groq
+## AI и внешние сервисы
 
-## ИИ
+- Какие AI-вызовы добавлены или изменены: нет новых; help/transfer без смены Groq
+- Проверено mock: да, диалог и generate как раньше
+- Проверено live: нет
+- Что не проверено: живой Groq, 20+ версий в браузере (есть в тестах и навигатор 1 версии)
 
-- Какие действия реально вызывают модель: POST `/api/reels/:id/scripts/generate`
-- Какие действия проверены без ключа: ручное save/restore/final, 409, чужие источники, связь take, invalid JSON (mock)
-- Какие версии входов сохраняются: sourcesJson, contextSnapshotId, promptVersion `script-v1`, model, inputSnapshotJson, AiCall kind=`script`
-- Что происходит при ошибке или повторе: предложение не пишется; AiCall.status=error; черновик редактора не меняется сервером
+## Совместимость с будущим обучением
 
-## Осталось
+- Какие исторические данные затронуты: новые строки `ScriptDraft`; готовые версии и `ai_proposal` не переписываются
+- Может ли что-либо перезаписаться/удалиться при завершении, retry или возврате в работу: finalize удаляет текущий черновик после создания версии; delete draft не трогает готовые версии; повторный transfer заменяет тело черновика
+- Сохраняются ли source metadata, порядок, итоговые ссылки и snapshots: да у `ScriptVersion`; у черновика — sourcesJson / baseVersionId / sourceKind
+- Не создана ли новая рубрика в обход `playbook.ts`/`framework.ts`: нет
+- Можно ли позднее добавить read-only learning job без изменения смысла текущих моделей: да
 
-- Невыполненные условия готовности: нет по автотестам; UI и живой Groq не гонялись
-- Известные проблемы: генерация синхронная в запросе; сравнение/экспорт — этап 8
-- Отклонения от плана и причины: head для конфликтов — последняя версия не-`ai_proposal`, чтобы появление предложения не ломало последующее ручное сохранение; этап 8 не начинался
+## Подтверждения
 
-## Запрос ревьюеру
-
-Проверь изменения BASE_SHA..HEAD_SHA и соответствие инструкции этапа.
-Укажи блокирующие ошибки отдельно от необязательных улучшений.
-Не считай этап принятым только на основании этого отчёта.
-
-## После замечаний
-
-- Замечание:
-- Исправление:
-- Новый commit SHA:
-- Повторная проверка:
+- Force push не использовался.
+- Следующий этап не начинался.
+- Этап не объявляется принятым до внешнего ревью.
