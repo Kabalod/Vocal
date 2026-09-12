@@ -30,5 +30,6 @@ export function shellHeaderTitle(pathname: string): string {
   if (pathname === "/settings") return "Критерии";
   if (pathname.startsWith("/jobs/")) return "Задача";
   if (pathname === "/dev/ui") return "Каталог UI";
+  if (pathname === "/dev/ai") return "Сводка AiCall";
   return "Vocal";
 }

@@ -17,4 +17,5 @@ test("shell nav is only thoughts and profile", () => {
   assert.equal(shellHeaderTitle("/reels"), "Мысли");
   assert.equal(shellHeaderTitle("/reels/abc"), "Мысль");
   assert.equal(shellHeaderTitle("/profile"), "Профиль");
+  assert.equal(shellHeaderTitle("/dev/ai"), "Сводка AiCall");
 });
