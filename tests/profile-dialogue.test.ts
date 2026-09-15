@@ -14,6 +14,7 @@ import {
   buildPortrait,
   decidePortraitComplete,
   mergeProfileFields,
+  sanitizeFieldOperations,
   sanitizePortraitPatch,
 } from "../src/lib/profile-portrait";
 import { fallbackProfileReply, parseProfileAiReply } from "../src/lib/ai/profile";
@@ -86,7 +87,27 @@ test("merge keeps confirmed meanings and empty patch does not wipe", () => {
       mode: "intake",
       hasChange: true,
     }),
-    true,
+    false,
+  );
+  assert.equal(
+    decidePortraitComplete({
+      fields: withAudience,
+      modelComplete: true,
+      mode: "intake",
+      hasChange: true,
+      openQuestions: ["Цель противоречит аудитории"],
+    }),
+    false,
+  );
+  assert.equal(
+    decidePortraitComplete({
+      fields: withAudience,
+      modelComplete: true,
+      mode: "intake",
+      hasChange: true,
+      kind: "clarify",
+    }),
+    false,
   );
   const cleared = applyFieldOperations(withAudience, [{ field: "audience", op: "clear" }]);
   assert.equal(cleared.find((field) => field.id === "audience")?.text, "");
@@ -134,6 +155,7 @@ test("sanitize and parse accept live Groq value patch and empty reply", () => {
   assert.equal(parsed.operations[0]?.text, "Своими словами");
   assert.equal(parsed.reply, fallbackProfileReply(["audience"]));
   assert.ok(!parsed.reply.includes("too_small"));
+  assert.equal(sanitizeFieldOperations([{ field: "audience", op: "delete", text: "все" }]).length, 0);
 });
 
 test("profile dialogue covers keys, voice skips confirm, reload and snapshots stay", async (t) => {
@@ -158,7 +180,6 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
 
   const {
     startProfileDialogue,
-    skipProfileDialogue,
     sendProfileMessage,
     sendProfileVoice,
     getProfileWorkspace,
@@ -169,12 +190,6 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
   const started = await startProfileDialogue();
   assert.equal(started.phase, "conversation");
   assert.ok(started.dialogue.messages.some((item) => item.body.includes("зачем")));
-  await skipProfileDialogue();
-  const continued = await startProfileDialogue();
-  assert.equal(continued.phase, "conversation");
-  assert.equal(continued.dialogue.messages.filter((item) => item.role === "user").length, 0);
-  assert.equal(continued.dialogue.messages.length, 1);
-  assert.ok(continued.dialogue.messages[0]?.body.includes("зачем"));
 
   const replies = [
     {
@@ -220,7 +235,11 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
   };
 
   for (const item of replies) {
-    await sendProfileMessage({ text: item.text, idempotencyKey: item.key }, complete);
+    const after = await sendProfileMessage({ text: item.text, idempotencyKey: item.key }, complete);
+    if (item.key === "a2") {
+      assert.equal(after.phase, "conversation");
+      assert.equal(after.portrait, null);
+    }
   }
   assert.equal(completeCalls, 3);
   const done = await getProfileWorkspace();
@@ -529,4 +548,208 @@ test("parallel profile answers rematch onto the latest portrait", async (t) => {
     const occurrences = call.promptText.match(new RegExp(escaped, "g")) ?? [];
     assert.equal(occurrences.length, 1, "current reply must appear once in the prompt");
   }
+});
+
+test("late answer for the same field does not overwrite a newer value", async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-stale-"));
+  const url = fileUrl(path.join(dir, "test.db"));
+  process.env.DATABASE_URL = url;
+  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  await resetPrismaClient();
+  resetAiInflightForTests();
+  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+    resetAiInflightForTests();
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* windows lock */
+    }
+  });
+  migrateDeploy(url);
+
+  const { startProfileDialogue, sendProfileMessage, getProfileWorkspace } = await import(
+    "../src/lib/profile-dialogue"
+  );
+  await startProfileDialogue();
+
+  let releaseFirst!: () => void;
+  const holdFirst = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let enteredFirst!: () => void;
+  const firstInModel = new Promise<void>((resolve) => {
+    enteredFirst = resolve;
+  });
+
+  const first = sendProfileMessage({ text: "для коллег", idempotencyKey: "aud-old" }, async () => {
+    enteredFirst();
+    await holdFirst;
+    return {
+      text: JSON.stringify({
+        reply: "Записал старую аудиторию.",
+        coveredKeys: ["audience"],
+        missingKeys: [],
+        patch: { audience: { text: "коллеги", usage: "understanding" } },
+        complete: false,
+      }),
+      usage: { promptTokens: 2, completionTokens: 2 },
+    };
+  });
+  const second = sendProfileMessage({ text: "для близких", idempotencyKey: "aud-new" }, async () => {
+    await firstInModel;
+    return {
+      text: JSON.stringify({
+        reply: "Записал новую аудиторию.",
+        coveredKeys: ["audience"],
+        missingKeys: [],
+        patch: { audience: { text: "близкие", usage: "understanding" } },
+        complete: false,
+      }),
+      usage: { promptTokens: 2, completionTokens: 2 },
+    };
+  });
+
+  await second;
+  releaseFirst();
+  await first;
+
+  const workspace = await getProfileWorkspace();
+  assert.equal(workspace.profile.fields.find((field) => field.id === "audience")?.text, "близкие");
+});
+
+test("incomplete intake resume keeps the current question", async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-resume-"));
+  const url = fileUrl(path.join(dir, "test.db"));
+  process.env.DATABASE_URL = url;
+  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  await resetPrismaClient();
+  resetAiInflightForTests();
+  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+    resetAiInflightForTests();
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* windows lock */
+    }
+  });
+  migrateDeploy(url);
+
+  const {
+    startProfileDialogue,
+    skipProfileDialogue,
+    sendProfileMessage,
+    supplementProfileDialogue,
+    getProfileWorkspace,
+  } = await import("../src/lib/profile-dialogue");
+  await startProfileDialogue();
+  const afterFirst = await sendProfileMessage(
+    { text: "Записываю, чтобы говорить своими словами.", idempotencyKey: "resume-1" },
+    async () => ({
+      text: JSON.stringify({
+        reply: "Для кого это?",
+        kind: "clarify",
+        coveredKeys: ["whyRecord"],
+        missingKeys: ["audience"],
+        patch: { whyRecord: { text: "Говорить своими словами", usage: "understanding" } },
+        complete: false,
+      }),
+      usage: { promptTokens: 2, completionTokens: 2 },
+    }),
+  );
+  assert.ok(afterFirst.dialogue.messages.some((item) => item.body === "Для кого это?"));
+  await skipProfileDialogue();
+  const resumed = await startProfileDialogue();
+  assert.equal(resumed.phase, "conversation");
+  assert.ok(resumed.dialogue.messages.some((item) => item.body === "Записываю, чтобы говорить своими словами."));
+  assert.ok(resumed.dialogue.messages.some((item) => item.body === "Для кого это?"));
+  assert.equal(resumed.dialogue.messages.filter((item) => item.body.includes("зачем вы хотите записывать")).length, 1);
+
+  await sendProfileMessage(
+    { text: "Для людей рядом.", idempotencyKey: "resume-2" },
+    async () => ({
+      text: JSON.stringify({
+        reply: "Портрета достаточно.",
+        kind: "ready",
+        coveredKeys: ["whyRecord", "audience"],
+        missingKeys: [],
+        patch: { audience: { text: "Люди рядом", usage: "in_text" } },
+        complete: true,
+      }),
+      usage: { promptTokens: 2, completionTokens: 2 },
+    }),
+  );
+  const portrait = await getProfileWorkspace();
+  assert.equal(portrait.phase, "portrait");
+
+  const amending = await supplementProfileDialogue();
+  assert.ok(amending.dialogue.messages.some((item) => item.body.includes("Что изменить")));
+  const afterClarify = await sendProfileMessage(
+    { text: "хочу изменить аудиторию", idempotencyKey: "resume-aud" },
+    async () => ({
+      text: JSON.stringify({
+        reply: "На какую аудиторию заменить?",
+        kind: "clarify",
+        understood: "изменить аудиторию",
+        openQuestions: ["На какую аудиторию заменить?"],
+        complete: false,
+        patch: {},
+      }),
+      usage: { promptTokens: 2, completionTokens: 2 },
+    }),
+  );
+  assert.equal(afterClarify.phase, "conversation");
+  await skipProfileDialogue();
+  const continueAmend = await supplementProfileDialogue();
+  assert.ok(continueAmend.dialogue.messages.some((item) => item.body === "На какую аудиторию заменить?"));
+  assert.equal(continueAmend.dialogue.messages.filter((item) => item.body.includes("Что изменить")).length, 1);
+});
+
+test("unresolved contradiction does not publish a portrait", async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-conflict-"));
+  const url = fileUrl(path.join(dir, "test.db"));
+  process.env.DATABASE_URL = url;
+  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  await resetPrismaClient();
+  resetAiInflightForTests();
+  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+    resetAiInflightForTests();
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* windows lock */
+    }
+  });
+  migrateDeploy(url);
+
+  const { startProfileDialogue, sendProfileMessage } = await import("../src/lib/profile-dialogue");
+  await startProfileDialogue();
+  const after = await sendProfileMessage(
+    { text: "Хочу говорить для всех и ни для кого.", idempotencyKey: "contra-1" },
+    async () => ({
+      text: JSON.stringify({
+        reply: "Цель и аудитория пока противоречат друг другу. Для кого это в первую очередь?",
+        kind: "ready",
+        complete: true,
+        coveredKeys: ["whyRecord", "audience"],
+        missingKeys: [],
+        openQuestions: ["Цель и аудитория противоречат друг другу"],
+        patch: {
+          whyRecord: { text: "говорить для всех", usage: "understanding" },
+          audience: { text: "ни для кого", usage: "understanding" },
+        },
+      }),
+      usage: { promptTokens: 2, completionTokens: 2 },
+    }),
+  );
+  assert.equal(after.phase, "conversation");
+  assert.equal(after.portrait, null);
 });

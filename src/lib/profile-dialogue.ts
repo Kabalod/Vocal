@@ -17,12 +17,12 @@ import {
   readStoredProfilePayloadTx,
   serializeStoredPayload,
 } from "@/lib/profile";
-import { buildPortrait, coveredProfileKeys, decidePortraitComplete, applyFieldOperations, hasUsefulPortraitMinimum } from "@/lib/profile-portrait";
+import { buildPortrait, coveredProfileKeys, decidePortraitComplete, applyFieldOperations, applyUnchangedFieldsOnly } from "@/lib/profile-portrait";
 import type { ProfileAiReply } from "@/lib/ai/profile";
 import { LOCAL_PROFILE_ID } from "@/types/profile";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
-import type { ProfileWorkspaceDto } from "@/types/profile";
+import type { ProfileFieldValue, ProfileWorkspaceDto } from "@/types/profile";
 
 export const PROFILE_DIALOGUE_PAGE_SIZE = 20;
 
@@ -176,15 +176,6 @@ async function healStoredPortrait(stored: Awaited<ReturnType<typeof readStoredPr
     }
     next = { ...next, fields };
   }
-  if (hasUsefulPortraitMinimum(next.fields) && next.pending?.mode !== "amend") {
-    next = {
-      ...next,
-      skipped: false,
-      supplementing: false,
-      portrait: buildPortrait(next.fields, true),
-      pending: null,
-    };
-  }
   const changed =
     stored.portrait?.completed !== next.portrait?.completed ||
     stored.supplementing !== next.supplementing ||
@@ -263,6 +254,7 @@ async function applyPortraitReply(input: {
   rawText: string;
   promptTokens: number | null;
   completionTokens: number | null;
+  snapshotFields: ProfileFieldValue[];
 }): Promise<void> {
   for (let attempt = 0; attempt < APPLY_RETRIES; attempt++) {
     try {
@@ -270,18 +262,24 @@ async function applyPortraitReply(input: {
         const { stored, revisionId } = await readStoredProfilePayloadTx(tx);
         const mode = stored.portrait?.completed || stored.supplementing || stored.pending?.mode === "amend" ? "amend" : "intake";
         const baseFields = mode === "amend" ? (stored.pending?.draftFields ?? stored.fields) : stored.fields;
-        const merged = applyFieldOperations(baseFields, input.parsed.operations, input.parsed.patch);
-        const hasChange =
-          input.parsed.operations.length > 0 ||
-          Object.values(input.parsed.patch).some(
-            (item) => Boolean(item?.clear) || Boolean(item?.text?.trim()) || item?.usage !== undefined,
-          );
+        const merged = applyUnchangedFieldsOnly(
+          baseFields,
+          input.snapshotFields,
+          input.parsed.operations,
+          input.parsed.patch,
+        );
+        const hasChange = baseFields.some((before) => {
+          const after = merged.find((field) => field.id === before.id);
+          return before.text !== after?.text || before.usage !== after?.usage;
+        });
         const completed = decidePortraitComplete({
           fields: merged,
           modelComplete: input.parsed.complete,
           mode,
           hasChange,
           noChange: input.parsed.noChange,
+          kind: input.parsed.kind,
+          openQuestions: input.parsed.openQuestions,
         });
         const understood = input.parsed.understood || stored.pending?.understood || "";
         const openQuestions = input.parsed.openQuestions;
@@ -382,6 +380,14 @@ export async function startProfileDialogue(): Promise<ProfileWorkspaceDto & { di
   if (stored.portrait?.completed) {
     return supplementProfileDialogue();
   }
+  if (stored.dialogueSessionStartId) {
+    await persistProfilePayload({
+      ...stored,
+      skipped: false,
+      supplementing: false,
+    });
+    return getProfileWorkspace();
+  }
   const dialogueSessionStartId = await startDialogueSession(FIRST_QUESTION);
   await persistProfilePayload({
     ...stored,
@@ -408,7 +414,16 @@ export async function skipProfileDialogue(): Promise<ProfileWorkspaceDto & { dia
 
 export async function supplementProfileDialogue(): Promise<ProfileWorkspaceDto & { dialogue: DialoguePageDto }> {
   const stored = await readStoredProfilePayload();
-  const dialogueSessionStartId = await startDialogueSession(SUPPLEMENT_PROMPT);
+  if (stored.dialogueSessionStartId && (stored.pending?.mode === "amend" || stored.supplementing)) {
+    await persistProfilePayload({
+      ...stored,
+      skipped: false,
+      supplementing: true,
+    });
+    return getProfileWorkspace();
+  }
+  const seedBody = stored.pending?.openQuestions[0]?.trim() || SUPPLEMENT_PROMPT;
+  const dialogueSessionStartId = await startDialogueSession(seedBody);
   await persistProfilePayload({
     ...stored,
     skipped: false,
@@ -490,7 +505,13 @@ ${await recentStoredText(thread.id, userMessage.id)}
         model: LLM_MODEL,
         status: "running",
         promptText: userPrompt,
-        inputSnapshotJson: JSON.stringify({ text, profileId: LOCAL_PROFILE_ID, mode, playbook: false }),
+        inputSnapshotJson: JSON.stringify({
+          text,
+          profileId: LOCAL_PROFILE_ID,
+          mode,
+          playbook: false,
+          fields: workingFields,
+        }),
       },
     });
 
@@ -509,6 +530,7 @@ ${await recentStoredText(thread.id, userMessage.id)}
         rawText: raw.text,
         promptTokens: raw.usage?.promptTokens ?? null,
         completionTokens: raw.usage?.completionTokens ?? null,
+        snapshotFields: workingFields,
       });
     } catch (error) {
       const message = assistantErrorBody(error);

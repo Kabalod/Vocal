@@ -161,6 +161,7 @@ test("release routes: thought, dialogue, draft, finals, profile context, usage, 
         missingKeys: [],
         patch: {
           whyRecord: { text: "говорить своими словами", usage: "in_text" },
+          audience: { text: "свои", usage: "understanding" },
           experience: { text: "веду заметки", usage: "understanding" },
         },
         complete: true,

@@ -130,8 +130,11 @@ export function sanitizeFieldOperations(input: unknown): ProfileFieldOperation[]
     if (!item || typeof item !== "object") continue;
     const row = item as { field?: unknown; op?: unknown; action?: unknown; text?: unknown; value?: unknown; usage?: unknown };
     if (typeof row.field !== "string" || !isProfileFieldId(row.field)) continue;
-    const rawOp = typeof row.op === "string" ? row.op : typeof row.action === "string" ? row.action : "set";
-    const op = (PROFILE_FIELD_OPS as readonly string[]).includes(rawOp) ? (rawOp as ProfileFieldOpKind) : "set";
+    const rawOp = typeof row.op === "string" ? row.op : typeof row.action === "string" ? row.action : null;
+    if (rawOp && !(PROFILE_FIELD_OPS as readonly string[]).includes(rawOp)) continue;
+    const op = (rawOp && (PROFILE_FIELD_OPS as readonly string[]).includes(rawOp)
+      ? rawOp
+      : "set") as ProfileFieldOpKind;
     const usage = typeof row.usage === "string" && isProfileUsage(row.usage) ? row.usage : undefined;
     const text =
       typeof row.text === "string" ? row.text : typeof row.value === "string" ? row.value : undefined;
@@ -164,17 +167,40 @@ export function applyFieldOperations(
   return next;
 }
 
+export function applyUnchangedFieldsOnly(
+  current: ProfileFieldValue[],
+  snapshot: ProfileFieldValue[] | null | undefined,
+  operations: ProfileFieldOperation[],
+  legacyPatch: ProfilePortraitPatch = {},
+): ProfileFieldValue[] {
+  const tentative = applyFieldOperations(current, operations, legacyPatch);
+  if (!snapshot?.length) return tentative;
+  const nowById = new Map(current.map((field) => [field.id, field]));
+  const nextById = new Map(tentative.map((field) => [field.id, field]));
+  const snapById = new Map(snapshot.map((field) => [field.id, field]));
+  return PROFILE_FIELD_IDS.map((id) => {
+    const now = nowById.get(id) ?? emptyProfileFields().find((field) => field.id === id)!;
+    const next = nextById.get(id) ?? now;
+    const snap = snapById.get(id);
+    if (now.text === next.text && now.usage === next.usage) return now;
+    if (snap && snap.text === now.text && snap.usage === now.usage) return next;
+    return now;
+  });
+}
+
 export function decidePortraitComplete(input: {
   fields: ProfileFieldValue[];
   modelComplete: boolean;
   mode: ProfileDialogueMode;
   hasChange: boolean;
   noChange?: boolean;
+  kind?: "clarify" | "ready";
+  openQuestions?: string[];
 }): boolean {
-  if (input.mode === "amend") {
-    if (!input.modelComplete) return false;
-    return input.hasChange || input.noChange === true;
-  }
+  if (input.kind === "clarify") return false;
+  if ((input.openQuestions ?? []).some((item) => item.trim().length > 0)) return false;
+  if (!input.modelComplete) return false;
+  if (input.mode === "amend") return input.hasChange || input.noChange === true;
   return hasUsefulPortraitMinimum(input.fields);
 }
 
