@@ -5,25 +5,40 @@ import {
   PROFILE_FIELD_IDS,
   PROFILE_FIELD_LABELS,
   PROFILE_FIELD_MAX,
+  PROFILE_FIELD_OPS,
   emptyProfileFields,
   isProfileFieldId,
   isProfileUsage,
   type PortraitDto,
+  type ProfileDialogueMode,
   type ProfileFieldId,
+  type ProfileFieldOpKind,
+  type ProfileFieldOperation,
   type ProfileFieldPatch,
   type ProfileFieldValue,
+  type ProfilePendingChange,
   type ProfilePortraitPatch,
   type ProfileUsage,
 } from "@/types/profile";
+
 export type StoredProfilePayload = {
   fields: ProfileFieldValue[];
   skipped: boolean;
   supplementing: boolean;
   portrait: PortraitDto | null;
+  pending: ProfilePendingChange | null;
+  dialogueSessionStartId: string | null;
 };
 
 export function coveredProfileKeys(fields: ProfileFieldValue[]): ProfileFieldId[] {
   return PROFILE_FIELD_IDS.filter((id) => (fields.find((field) => field.id === id)?.text.trim() ?? "") !== "");
+}
+
+export function hasUsefulPortraitMinimum(fields: ProfileFieldValue[]): boolean {
+  const byId = new Map(fields.map((field) => [field.id, field.text.trim()]));
+  const hasGoal = Boolean(byId.get("whyRecord") || byId.get("blogGoal"));
+  const hasAudienceOrTopics = Boolean(byId.get("audience") || byId.get("topics"));
+  return hasGoal && hasAudienceOrTopics;
 }
 
 export function buildPortrait(fields: ProfileFieldValue[], completed: boolean): PortraitDto {
@@ -59,9 +74,12 @@ export function mergeProfileFields(
     };
     const next = patch[id];
     if (!next) return field;
-    const rawText = typeof next.text === "string" ? next.text.trim().slice(0, PROFILE_FIELD_MAX) : "";
     const usage =
       typeof next.usage === "string" && isProfileUsage(next.usage) ? next.usage : field.usage;
+    if (next.clear === true) {
+      return { ...field, text: "", usage };
+    }
+    const rawText = typeof next.text === "string" ? next.text.trim().slice(0, PROFILE_FIELD_MAX) : "";
     if (!rawText) {
       return next.usage !== undefined ? { ...field, usage } : field;
     }
@@ -69,32 +87,115 @@ export function mergeProfileFields(
   });
 }
 
+function patchFieldText(raw: unknown): string | undefined {
+  if (typeof raw === "string") return raw;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const row = raw as { text?: unknown; value?: unknown };
+  if (typeof row.text === "string") return row.text;
+  if (typeof row.value === "string") return row.value;
+  return undefined;
+}
+
+function patchFieldUsage(raw: unknown): ProfileUsage | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const usage = (raw as { usage?: unknown }).usage;
+  return typeof usage === "string" && isProfileUsage(usage) ? usage : undefined;
+}
+
 export function sanitizePortraitPatch(input: unknown): ProfilePortraitPatch {
   if (!input || typeof input !== "object" || Array.isArray(input)) return {};
   const patch: ProfilePortraitPatch = {};
-  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-    if (!isProfileFieldId(key) || !value || typeof value !== "object") continue;
-    const row = value as { text?: unknown; usage?: unknown };
+  for (const [key, raw] of Object.entries(input as Record<string, unknown>)) {
+    if (!isProfileFieldId(key) || raw == null) continue;
     const item: ProfileFieldPatch = {};
-    if (typeof row.text === "string") item.text = row.text;
-    if (typeof row.usage === "string" && isProfileUsage(row.usage)) item.usage = row.usage;
-    if (item.text !== undefined || item.usage !== undefined) patch[key] = item;
+    if (raw === true || (typeof raw === "object" && !Array.isArray(raw) && (raw as { clear?: unknown }).clear === true)) {
+      item.clear = true;
+    }
+    const text = patchFieldText(raw);
+    if (typeof text === "string") item.text = text;
+    const usage = patchFieldUsage(raw);
+    if (usage) item.usage = usage;
+    if (typeof raw === "object" && !Array.isArray(raw) && (raw as { op?: unknown }).op === "clear") {
+      item.clear = true;
+    }
+    if (item.text !== undefined || item.usage !== undefined || item.clear) patch[key] = item;
   }
   return patch;
+}
+
+export function sanitizeFieldOperations(input: unknown): ProfileFieldOperation[] {
+  if (!Array.isArray(input)) return [];
+  const ops: ProfileFieldOperation[] = [];
+  for (const item of input) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as { field?: unknown; op?: unknown; action?: unknown; text?: unknown; value?: unknown; usage?: unknown };
+    if (typeof row.field !== "string" || !isProfileFieldId(row.field)) continue;
+    const rawOp = typeof row.op === "string" ? row.op : typeof row.action === "string" ? row.action : "set";
+    const op = (PROFILE_FIELD_OPS as readonly string[]).includes(rawOp) ? (rawOp as ProfileFieldOpKind) : "set";
+    const usage = typeof row.usage === "string" && isProfileUsage(row.usage) ? row.usage : undefined;
+    const text =
+      typeof row.text === "string" ? row.text : typeof row.value === "string" ? row.value : undefined;
+    ops.push({ field: row.field, op, text, usage });
+  }
+  return ops;
+}
+
+export function applyFieldOperations(
+  current: ProfileFieldValue[],
+  operations: ProfileFieldOperation[],
+  legacyPatch: ProfilePortraitPatch = {},
+): ProfileFieldValue[] {
+  let next = mergeProfileFields(current, legacyPatch);
+  for (const operation of operations) {
+    if (operation.op === "clear") {
+      next = mergeProfileFields(next, { [operation.field]: { clear: true, usage: operation.usage } });
+      continue;
+    }
+    if (operation.op === "usage" && operation.usage) {
+      next = mergeProfileFields(next, { [operation.field]: { usage: operation.usage } });
+      continue;
+    }
+    if (operation.op === "set" && typeof operation.text === "string") {
+      next = mergeProfileFields(next, {
+        [operation.field]: { text: operation.text, usage: operation.usage },
+      });
+    }
+  }
+  return next;
 }
 
 export function decidePortraitComplete(input: {
   fields: ProfileFieldValue[];
   modelComplete: boolean;
-  supplementing: boolean;
-  patchHadText: boolean;
+  mode: ProfileDialogueMode;
+  hasChange: boolean;
+  noChange?: boolean;
 }): boolean {
-  const covered = coveredProfileKeys(input.fields).length;
-  if (input.supplementing) {
-    return input.modelComplete || (input.patchHadText && covered >= 1);
+  if (input.mode === "amend") {
+    if (!input.modelComplete) return false;
+    return input.hasChange || input.noChange === true;
   }
-  if (covered >= 5) return true;
-  return input.modelComplete && covered >= 2;
+  return hasUsefulPortraitMinimum(input.fields);
+}
+
+export function parsePending(raw: unknown): ProfilePendingChange | null {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as {
+    mode?: unknown;
+    understood?: unknown;
+    openQuestions?: unknown;
+    draftFields?: unknown;
+  };
+  const mode: ProfileDialogueMode = row.mode === "amend" ? "amend" : "intake";
+  const understood = typeof row.understood === "string" ? row.understood : "";
+  const openQuestions = Array.isArray(row.openQuestions)
+    ? row.openQuestions.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+  const draftFields =
+    Array.isArray(row.draftFields) || (row.draftFields && typeof row.draftFields === "object")
+      ? mergeProfileFields(emptyProfileFields(), sanitizePortraitPatch(asFieldPatch(row.draftFields)))
+      : emptyProfileFields();
+  return { mode, understood, openQuestions, draftFields };
 }
 
 export function parseStoredPayload(raw: string): StoredProfilePayload {
@@ -104,15 +205,23 @@ export function parseStoredPayload(raw: string): StoredProfilePayload {
       skipped?: unknown;
       supplementing?: unknown;
       portrait?: unknown;
+      pending?: unknown;
+      dialogueSessionStartId?: unknown;
     };
-    const fields = Array.isArray(parsed.fields) || (parsed.fields && typeof parsed.fields === "object")
-      ? mergeProfileFields(emptyProfileFields(), sanitizePortraitPatch(asFieldPatch(parsed.fields)))
-      : emptyProfileFields();
+    const fields =
+      Array.isArray(parsed.fields) || (parsed.fields && typeof parsed.fields === "object")
+        ? mergeProfileFields(emptyProfileFields(), sanitizePortraitPatch(asFieldPatch(parsed.fields)))
+        : emptyProfileFields();
     return {
       fields,
       skipped: parsed.skipped === true,
       supplementing: parsed.supplementing === true,
       portrait: parsed.portrait && typeof parsed.portrait === "object" ? (parsed.portrait as PortraitDto) : null,
+      pending: parsePending(parsed.pending),
+      dialogueSessionStartId:
+        typeof parsed.dialogueSessionStartId === "string" && parsed.dialogueSessionStartId.trim()
+          ? parsed.dialogueSessionStartId
+          : null,
     };
   } catch {
     return {
@@ -120,6 +229,8 @@ export function parseStoredPayload(raw: string): StoredProfilePayload {
       skipped: false,
       supplementing: false,
       portrait: null,
+      pending: null,
+      dialogueSessionStartId: null,
     };
   }
 }
@@ -129,11 +240,12 @@ function asFieldPatch(input: unknown): ProfilePortraitPatch {
     const patch: ProfilePortraitPatch = {};
     for (const item of input) {
       if (!item || typeof item !== "object") continue;
-      const row = item as { id?: unknown; text?: unknown; usage?: unknown };
+      const row = item as { id?: unknown; text?: unknown; value?: unknown; usage?: unknown };
       if (typeof row.id !== "string" || !isProfileFieldId(row.id)) continue;
+      const text = patchFieldText(row);
       patch[row.id] = {
-        text: typeof row.text === "string" ? row.text : "",
-        usage: typeof row.usage === "string" && isProfileUsage(row.usage) ? row.usage : undefined,
+        text: typeof text === "string" ? text : "",
+        usage: patchFieldUsage(row),
       };
     }
     return patch;

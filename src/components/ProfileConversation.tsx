@@ -272,14 +272,15 @@ export function ProfileConversation() {
   const phase: ProfilePhase = workspace?.phase ?? "idle";
   const portrait: PortraitDto | null = workspace?.portrait ?? null;
   const messages = workspace?.dialogue.messages ?? [];
+  const amending = workspace?.mode === "amend" && phase === "conversation";
   const showChat = phase === "conversation";
 
   return (
     <div className="space-y-6">
       {phase === "idle" ? (
         <EmptyState
-          title="Разговор вместо анкеты"
-          description="Vocal задаст по одному вопросу и соберёт портрет для сценариев. Анкета необязательна: мысль можно начать и без неё."
+          title="Портрет для сценариев"
+          description="Ответы нужны, чтобы в вопросах и сценариях учитывать ваши цели, аудиторию, интересы, манеру речи и границы — без чужих догадок. Анкету можно отложить: мысль создать уже можно."
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <ActionButton
@@ -318,6 +319,9 @@ export function ProfileConversation() {
       {phase === "portrait" ? (
         <div className="space-y-4">
           {portrait ? <Portrait portrait={portrait} /> : null}
+          {workspace?.pendingChange ? (
+            <p className="text-sm text-muted">Есть незавершённые уточнения. Действующий портрет пока прежний.</p>
+          ) : null}
           <ActionButton
             variant="secondary"
             onClick={() => {
@@ -327,23 +331,22 @@ export function ProfileConversation() {
               );
             }}
           >
-            Дополнить анкету
+            {workspace?.pendingChange ? "Продолжить изменения" : "Внести изменения"}
           </ActionButton>
         </div>
       ) : null}
 
       {showChat ? (
         <section className="flex min-h-[28rem] flex-col" aria-label="Диалог анкеты">
-          {workspace?.skipped === false && messages.some((item) => item.role === "user") === false && !portrait ? (
+          {workspace?.skipped === false && messages.some((item) => item.role === "user") === false && !amending ? (
             <p className="mb-3 text-sm text-muted">Можно прервать и продолжить позже.</p>
           ) : null}
-          {portrait && workspace?.applyError ? (
-            <div className="mb-4 space-y-3">
+          {workspace?.applyError ? (
+            <div className="mb-4">
               <InlineError message="Новое изменение не применено. Предыдущий портрет сохранён." />
-              <Portrait portrait={portrait} />
             </div>
           ) : null}
-          {messages.length > 0 && !workspace?.dialogue.analyzing && !portrait?.completed ? (
+          {messages.length > 0 && !workspace?.dialogue.analyzing && (!portrait?.completed || amending) ? (
             <div className="mb-3">
               <ActionButton
                 variant="compact"
@@ -354,7 +357,7 @@ export function ProfileConversation() {
                   );
                 }}
               >
-                Продолжить позже
+                {amending ? "К портрету" : "Продолжить позже"}
               </ActionButton>
             </div>
           ) : null}
@@ -420,7 +423,7 @@ export function ProfileConversation() {
               </div>
             ) : (
               <Composer
-                placeholder="Напишите ответ…"
+                placeholder={amending ? "Что изменить в портрете?" : "Напишите ответ…"}
                 value={draft}
                 onChange={setDraft}
                 disabled={sending}

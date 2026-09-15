@@ -106,7 +106,14 @@ export async function getProfileRevision(id: string | null | undefined): Promise
 }
 
 export function emptyStoredPayload(): StoredProfilePayload {
-  return { fields: emptyProfileFields(), skipped: false, supplementing: false, portrait: null };
+  return {
+    fields: emptyProfileFields(),
+    skipped: false,
+    supplementing: false,
+    portrait: null,
+    pending: null,
+    dialogueSessionStartId: null,
+  };
 }
 
 export function storedPayloadFromJson(payloadJson: string): StoredProfilePayload {
@@ -124,7 +131,9 @@ export function serializeStoredPayload(input: StoredProfilePayload): string {
     skipped: input.skipped,
     supplementing: input.supplementing,
     portrait,
-  } satisfies StoredProfilePayload);
+    pending: input.pending,
+    dialogueSessionStartId: input.dialogueSessionStartId,
+  });
 }
 
 export async function readStoredProfilePayloadTx(

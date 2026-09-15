@@ -10,10 +10,13 @@ import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { resetPrismaClient } from "../src/lib/db";
 import { assembleReelContext } from "../src/lib/reel-context";
 import {
+  applyFieldOperations,
   buildPortrait,
   decidePortraitComplete,
   mergeProfileFields,
+  sanitizePortraitPatch,
 } from "../src/lib/profile-portrait";
+import { fallbackProfileReply, parseProfileAiReply } from "../src/lib/ai/profile";
 import { emptyProfileFields, LOCAL_PROFILE_ID } from "../src/types/profile";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -52,8 +55,8 @@ test("merge keeps confirmed meanings and empty patch does not wipe", () => {
     decidePortraitComplete({
       fields: current,
       modelComplete: true,
-      supplementing: false,
-      patchHadText: false,
+      mode: "intake",
+      hasChange: false,
     }),
     false,
   );
@@ -61,11 +64,76 @@ test("merge keeps confirmed meanings and empty patch does not wipe", () => {
     decidePortraitComplete({
       fields: merged,
       modelComplete: true,
-      supplementing: false,
-      patchHadText: true,
+      mode: "intake",
+      hasChange: true,
+    }),
+    false,
+  );
+  const withAudience = mergeProfileFields(merged, { audience: { text: "свои" } });
+  assert.equal(
+    decidePortraitComplete({
+      fields: withAudience,
+      modelComplete: true,
+      mode: "intake",
+      hasChange: true,
     }),
     true,
   );
+  assert.equal(
+    decidePortraitComplete({
+      fields: withAudience,
+      modelComplete: false,
+      mode: "intake",
+      hasChange: true,
+    }),
+    true,
+  );
+  const cleared = applyFieldOperations(withAudience, [{ field: "audience", op: "clear" }]);
+  assert.equal(cleared.find((field) => field.id === "audience")?.text, "");
+  assert.equal(
+    decidePortraitComplete({
+      fields: withAudience,
+      modelComplete: true,
+      mode: "amend",
+      hasChange: false,
+    }),
+    false,
+  );
+  assert.equal(
+    decidePortraitComplete({
+      fields: withAudience,
+      modelComplete: true,
+      mode: "amend",
+      hasChange: true,
+    }),
+    true,
+  );
+});
+
+test("sanitize and parse accept live Groq value patch and empty reply", () => {
+  const patch = sanitizePortraitPatch({
+    whyRecord: { value: "Говорить своими словами", usage: "understanding" },
+    blogGoal: "Помогать говорить яснее",
+    audience: { text: "Коллеги", usage: "in_text" },
+  });
+  assert.equal(patch.whyRecord?.text, "Говорить своими словами");
+  assert.equal(patch.blogGoal?.text, "Помогать говорить яснее");
+  assert.equal(patch.audience?.text, "Коллеги");
+  assert.equal(patch.audience?.usage, "in_text");
+
+  const parsed = parseProfileAiReply({
+    reply: "",
+    coveredKeys: ["whyRecord"],
+    missingKeys: ["audience"],
+    patch: { whyRecord: { value: "Своими словами", usage: "understanding" } },
+    operations: [{ field: "whyRecord", op: "set", value: "Своими словами", usage: "understanding" }],
+    complete: false,
+  });
+  assert.equal(parsed.patch.whyRecord?.text, "Своими словами");
+  assert.equal(parsed.operations[0]?.op, "set");
+  assert.equal(parsed.operations[0]?.text, "Своими словами");
+  assert.equal(parsed.reply, fallbackProfileReply(["audience"]));
+  assert.ok(!parsed.reply.includes("too_small"));
 });
 
 test("profile dialogue covers keys, voice skips confirm, reload and snapshots stay", async (t) => {
@@ -90,6 +158,7 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
 
   const {
     startProfileDialogue,
+    skipProfileDialogue,
     sendProfileMessage,
     sendProfileVoice,
     getProfileWorkspace,
@@ -100,6 +169,12 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
   const started = await startProfileDialogue();
   assert.equal(started.phase, "conversation");
   assert.ok(started.dialogue.messages.some((item) => item.body.includes("зачем")));
+  await skipProfileDialogue();
+  const continued = await startProfileDialogue();
+  assert.equal(continued.phase, "conversation");
+  assert.equal(continued.dialogue.messages.filter((item) => item.role === "user").length, 0);
+  assert.equal(continued.dialogue.messages.length, 1);
+  assert.ok(continued.dialogue.messages[0]?.body.includes("зачем"));
 
   const replies = [
     {
@@ -150,6 +225,7 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
   assert.equal(completeCalls, 3);
   const done = await getProfileWorkspace();
   assert.equal(done.phase, "portrait");
+  assert.equal(done.pendingChange, false);
   assert.ok(done.portrait);
   assert.ok(done.portrait.coveredKeys.includes("whyRecord"));
   assert.ok(done.portrait.coveredKeys.includes("audience"));
@@ -169,12 +245,18 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
     },
   );
   assert.equal(failedApply.applyError, "модель недоступна");
+  assert.equal(failedApply.phase, "conversation");
+  assert.equal(failedApply.pendingChange, true);
   assert.equal(failedApply.portrait?.sections.find((section) => section.id === "goals")?.text, keptGoals);
   assert.ok(failedApply.dialogue.messages.some((item) => item.body === "добавить опыт путешествий, которых не было"));
+  assert.equal(
+    failedApply.dialogue.messages.some((item) => item.body === replies[0].text),
+    false,
+  );
 
   const again = await sendProfileMessage({ text: replies[0].text, idempotencyKey: "a1" }, complete);
   assert.equal(completeCalls, 3);
-  assert.equal(again.dialogue.messages.filter((item) => item.body === replies[0].text).length, 1);
+  assert.equal(again.dialogue.messages.filter((item) => item.body === replies[0].text).length, 0);
 
   let voiceComplete = 0;
   const afterVoice = await sendProfileVoice(
@@ -201,6 +283,28 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
   assert.equal(voiceUser.body, "Хочу говорить про тишину и речь");
   assert.ok(!afterVoice.dialogue.messages.some((item) => item.body.includes("подтвердите транскрипт")));
 
+  const groqShape = await sendProfileMessage(
+    { text: "Говорить хочу коротко и спокойно.", idempotencyKey: "value-live-shape" },
+    async () => ({
+      text: JSON.stringify({
+        reply: "",
+        coveredKeys: ["speakingStyle"],
+        missingKeys: ["lifeNow"],
+        patch: { speakingStyle: { value: "Коротко и спокойно", usage: "understanding" } },
+        complete: false,
+      }),
+      usage: { promptTokens: 2, completionTokens: 2 },
+    }),
+  );
+  assert.equal(groqShape.pendingChange, true);
+  assert.equal(groqShape.profile.fields.find((field) => field.id === "speakingStyle")?.text, "");
+  assert.ok(
+    groqShape.dialogue.messages.some(
+      (item) => item.role === "assistant" && item.body.includes("Какая у меня сейчас жизнь"),
+    ),
+  );
+  assert.ok(!groqShape.dialogue.messages.some((item) => item.body.includes("too_small")));
+
   const reloaded = await getProfileWorkspace();
   assert.ok(reloaded.dialogue.messages.length >= afterVoice.dialogue.messages.length);
   assert.ok(reloaded.portrait?.coveredKeys.includes("whyRecord"));
@@ -220,16 +324,37 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
       usage: { promptTokens: 2, completionTokens: 1 },
     }),
   );
+  assert.equal(afterBoundary.phase, "portrait");
+  assert.equal(afterBoundary.pendingChange, false);
   assert.equal(afterBoundary.profile.fields.find((field) => field.id === "whyRecord")?.text, beforeBoundary);
   assert.equal(afterBoundary.profile.fields.find((field) => field.id === "boundaries")?.text, "не хочу говорить о теме работы");
   assert.ok(afterBoundary.portrait?.sections.some((section) => section.id === "boundaries"));
+
+  const afterClear = await sendProfileMessage(
+    { text: "убери границу про работу", idempotencyKey: "clear-bound-1" },
+    async () => ({
+      text: JSON.stringify({
+        reply: "Убрал границу.",
+        kind: "ready",
+        complete: true,
+        operations: [{ field: "boundaries", op: "clear" }],
+        patch: {},
+      }),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    }),
+  );
+  assert.equal(afterClear.profile.fields.find((field) => field.id === "boundaries")?.text, "");
+  assert.equal(
+    afterClear.portrait?.sections.some((section) => section.id === "boundaries"),
+    false,
+  );
 
   const calls = await prisma.aiCall.findMany({ where: { kind: "profile_dialogue" } });
   assert.ok(calls.length >= 1);
   assert.ok(calls.every((row) => row.reelId === null && row.profileId === LOCAL_PROFILE_ID));
   assert.ok(calls.some((row) => (row.promptTokens ?? 0) + (row.completionTokens ?? 0) > 0));
 
-  const firstRevision = afterBoundary.profile.currentRevisionId;
+  const firstRevision = afterClear.profile.currentRevisionId;
   const { GET: getContext, PUT: putContext } = await import("../src/app/api/reels/[id]/context/route");
   const { createThoughtFromText } = await import("../src/lib/thought-create");
   const { reel } = await createThoughtFromText({
@@ -382,13 +507,13 @@ test("parallel profile answers rematch onto the latest portrait", async (t) => {
   await first;
 
   const workspace = await getProfileWorkspace();
+  assert.equal(workspace.phase, "conversation");
+  assert.equal(workspace.portrait, null);
   assert.equal(workspace.profile.fields.find((field) => field.id === "whyRecord")?.text, "оставить свои слова");
   assert.equal(
     workspace.profile.fields.find((field) => field.id === "boundaries")?.text,
     "не хочу говорить о теме работы",
   );
-  assert.ok(workspace.portrait?.coveredKeys.includes("whyRecord"));
-  assert.ok(workspace.portrait?.coveredKeys.includes("boundaries"));
 
   const users = await prisma.dialogueMessage.findMany({ where: { role: "user" } });
   assert.equal(users.filter((row) => row.body === whyText).length, 1);

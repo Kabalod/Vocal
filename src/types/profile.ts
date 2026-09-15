@@ -153,14 +153,36 @@ export interface PortraitDto {
 export interface ProfileFieldPatch {
   text?: string;
   usage?: ProfileUsage;
+  clear?: boolean;
 }
 
 export type ProfilePortraitPatch = Partial<Record<ProfileFieldId, ProfileFieldPatch>>;
+
+export type ProfileDialogueMode = "intake" | "amend";
+
+export const PROFILE_FIELD_OPS = ["set", "clear", "usage"] as const;
+export type ProfileFieldOpKind = (typeof PROFILE_FIELD_OPS)[number];
+
+export interface ProfileFieldOperation {
+  field: ProfileFieldId;
+  op: ProfileFieldOpKind;
+  text?: string;
+  usage?: ProfileUsage;
+}
+
+export interface ProfilePendingChange {
+  mode: ProfileDialogueMode;
+  understood: string;
+  openQuestions: string[];
+  draftFields: ProfileFieldValue[];
+}
 
 export interface ProfileWorkspaceDto {
   phase: ProfilePhase;
   skipped: boolean;
   supplementing: boolean;
+  pendingChange: boolean;
+  mode: ProfileDialogueMode | null;
   portrait: PortraitDto | null;
   applyError: string | null;
   profile: ProfileDto;

@@ -2,6 +2,7 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { prisma } from "@/lib/db";
+import { ZodError } from "zod";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
 import { PROFILE_DIALOGUE_KIND, PROFILE_DIALOGUE_SYSTEM, parseProfileAiReply, profileChecklistPrompt } from "@/lib/ai/profile";
 import { assertDailyTokenBudget, withAiInflight } from "@/lib/ai/usage-guard";
@@ -16,7 +17,7 @@ import {
   readStoredProfilePayloadTx,
   serializeStoredPayload,
 } from "@/lib/profile";
-import { buildPortrait, decidePortraitComplete, mergeProfileFields } from "@/lib/profile-portrait";
+import { buildPortrait, coveredProfileKeys, decidePortraitComplete, applyFieldOperations, hasUsefulPortraitMinimum } from "@/lib/profile-portrait";
 import type { ProfileAiReply } from "@/lib/ai/profile";
 import { LOCAL_PROFILE_ID } from "@/types/profile";
 import type { CompleteJsonFn } from "@/types/review";
@@ -37,14 +38,31 @@ export class ProfileDialogueError extends Error {
 }
 
 const FIRST_QUESTION =
-  "Я задаю по одному вопросу и собираю портрет для сценариев: цели, опыт, темы, подача и границы. Можно пропускать то, о чём не хотите говорить. Если какой-то факт можно использовать в тексте ролика — скажите об этом обычным ответом.\n\nС чего начнём: зачем вы хотите записывать ролики?";
+  "Ответы нужны, чтобы в вопросах и сценариях учитывать ваши цели, аудиторию, интересы, манеру речи и границы — без чужих догадок.\n\nМожно пропускать то, о чём не хотите говорить. Если факт можно использовать в тексте ролика — скажите об этом обычными словами.\n\nС чего начнём: зачем вы хотите записывать ролики?";
 
 const SUPPLEMENT_PROMPT =
-  "Что хотите уточнить в портрете — цель, опыт, темы, подачу или границы? Можно просто сказать, что изменилось.";
+  "Что изменить в портрете? Можно назвать цель, аудиторию, темы, подачу или границы. Если формулировка неоднозначная, я уточню, прежде чем что-то менять.";
 
 type Payload = {
   voiceDurationLabel?: string;
 };
+
+function assistantErrorBody(error: unknown): string {
+  if (error instanceof ProfileDialogueError) return error.message;
+  if (error instanceof ZodError) {
+    return "Не удалось прочитать ответ модели. Повторите отправку — прежний портрет сохранён.";
+  }
+  const message = error instanceof Error ? error.message : "";
+  if (!message.trim() || message.trim().startsWith("[") || /too_small|ZodError|не JSON/i.test(message)) {
+    return "Не удалось прочитать ответ модели. Повторите отправку — прежний портрет сохранён.";
+  }
+  return message;
+}
+
+function isTechnicalErrorBody(body: string): boolean {
+  const text = body.trim();
+  return text.startsWith("[") || /too_small|ZodError|String must contain/i.test(text);
+}
 
 function parseMessagePayload(raw: string): Payload {
   try {
@@ -94,16 +112,24 @@ export async function ensureProfileThread() {
   }
 }
 
+function visibleDialogueItems<T extends { id: string }>(items: T[], sessionStartId: string | null): T[] {
+  if (!sessionStartId) return items;
+  const index = items.findIndex((item) => item.id === sessionStartId);
+  if (index < 0) return items;
+  return items.slice(index);
+}
+
 export async function listProfileDialoguePage(input: { cursor?: string | null; limit?: number } = {}): Promise<DialoguePageDto> {
   const thread = await prisma.dialogueThread.findUnique({ where: { profileId: LOCAL_PROFILE_ID } });
   if (!thread) {
     return { threadId: "", messages: [], nextCursor: null, analyzing: false };
   }
+  const stored = await readStoredProfilePayload();
   const rows = await prisma.dialogueMessage.findMany({
     where: { threadId: thread.id },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
-  const items = rows.map(asDto);
+  const items = visibleDialogueItems(rows.map(asDto), stored.dialogueSessionStartId);
   const limit = input.limit && input.limit > 0 ? Math.min(input.limit, 50) : PROFILE_DIALOGUE_PAGE_SIZE;
   const paged = pageDialogueItems(items, { cursor: decodeDialogueCursor(input.cursor), limit });
   return {
@@ -114,26 +140,93 @@ export async function listProfileDialoguePage(input: { cursor?: string | null; l
   };
 }
 
+async function hideTechnicalProfileErrors(): Promise<void> {
+  const thread = await prisma.dialogueThread.findUnique({ where: { profileId: LOCAL_PROFILE_ID } });
+  if (!thread) return;
+  const rows = await prisma.dialogueMessage.findMany({
+    where: { threadId: thread.id, kind: "error" },
+    select: { id: true, body: true },
+  });
+  const friendly = "Не удалось прочитать ответ модели. Повторите отправку — прежний портрет сохранён.";
+  for (const row of rows) {
+    if (!isTechnicalErrorBody(row.body)) continue;
+    await prisma.dialogueMessage.update({ where: { id: row.id }, data: { body: friendly } });
+  }
+}
+
+async function healStoredPortrait(stored: Awaited<ReturnType<typeof readStoredProfilePayload>>) {
+  await hideTechnicalProfileErrors();
+  let next = stored;
+  if (!coveredProfileKeys(stored.fields).length) {
+    const calls = await prisma.aiCall.findMany({
+      where: { kind: PROFILE_DIALOGUE_KIND, profileId: LOCAL_PROFILE_ID, status: "done" },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { responseText: true, resultJson: true },
+    });
+    let fields = stored.fields;
+    for (const call of calls) {
+      const raw = (call.responseText || call.resultJson || "").trim();
+      if (!raw) continue;
+      try {
+        const parsed = parseProfileAiReply(parseJsonObject(raw), "intake");
+        fields = applyFieldOperations(fields, parsed.operations, parsed.patch);
+      } catch {
+        continue;
+      }
+    }
+    next = { ...next, fields };
+  }
+  if (hasUsefulPortraitMinimum(next.fields) && next.pending?.mode !== "amend") {
+    next = {
+      ...next,
+      skipped: false,
+      supplementing: false,
+      portrait: buildPortrait(next.fields, true),
+      pending: null,
+    };
+  }
+  const changed =
+    stored.portrait?.completed !== next.portrait?.completed ||
+    stored.supplementing !== next.supplementing ||
+    JSON.stringify(stored.fields) !== JSON.stringify(next.fields);
+  if (!changed) return stored;
+  await persistProfilePayload(next);
+  return next;
+}
+
 export async function getProfileWorkspace(input: { cursor?: string | null } = {}): Promise<ProfileWorkspaceDto & { dialogue: DialoguePageDto }> {
-  const stored = await readStoredProfilePayload();
+  const stored = await healStoredPortrait(await readStoredProfilePayload());
   const dialogue = await listProfileDialoguePage(input);
   const hasMessages = Boolean(dialogue.threadId) && (await prisma.dialogueMessage.count({ where: { threadId: dialogue.threadId } })) > 0;
   const lastAssistant = [...dialogue.messages].reverse().find((item) => item.role === "assistant");
-  const applyError = lastAssistant?.kind === "error" ? lastAssistant.body : null;
-  const portrait = stored.portrait?.completed ? buildPortrait(stored.fields, true) : stored.portrait;
+  const published = stored.portrait?.completed ? buildPortrait(stored.fields, true) : null;
+  const applyError =
+    lastAssistant?.kind === "error" && !isTechnicalErrorBody(lastAssistant.body) && (!published || stored.supplementing)
+      ? lastAssistant.body
+      : null;
   let phase: ProfileWorkspaceDto["phase"] = "idle";
   if (stored.supplementing) {
     phase = "conversation";
-  } else if (stored.portrait?.completed && (portrait?.sections.length ?? 0) > 0) {
+  } else if (published) {
     phase = "portrait";
   } else if (hasMessages && !stored.skipped) {
     phase = "conversation";
   }
+  const mode: ProfileWorkspaceDto["mode"] =
+    stored.supplementing || stored.pending?.mode === "amend"
+      ? "amend"
+      : published
+        ? "amend"
+        : phase === "conversation"
+          ? "intake"
+          : null;
   return {
     phase,
     skipped: stored.skipped,
     supplementing: stored.supplementing,
-    portrait,
+    pendingChange: Boolean(stored.pending && stored.pending.mode === "amend"),
+    mode,
+    portrait: published,
     applyError,
     profile: await getProfile(),
     dialogue,
@@ -150,19 +243,17 @@ class ProfileApplyConflict extends Error {
 const APPLY_RETRIES = 5;
 
 async function recentStoredText(threadId: string, excludeMessageId?: string): Promise<string> {
+  const stored = await readStoredProfilePayload();
   const rows = await prisma.dialogueMessage.findMany({
     where: {
       threadId,
       kind: { not: "processing" },
       ...(excludeMessageId ? { id: { not: excludeMessageId } } : {}),
     },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: 12,
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
-  return rows
-    .reverse()
-    .map((row) => `${row.role}: ${row.body}`)
-    .join("\n");
+  const visible = visibleDialogueItems(rows, stored.dialogueSessionStartId).slice(-12);
+  return visible.map((row) => `${row.role}: ${row.body}`).join("\n");
 }
 
 async function applyPortraitReply(input: {
@@ -177,24 +268,70 @@ async function applyPortraitReply(input: {
     try {
       await prisma.$transaction(async (tx) => {
         const { stored, revisionId } = await readStoredProfilePayloadTx(tx);
-        const merged = mergeProfileFields(stored.fields, input.parsed.patch);
-        const patchHadText = Object.values(input.parsed.patch).some((item) => (item?.text ?? "").trim().length > 0);
+        const mode = stored.portrait?.completed || stored.supplementing || stored.pending?.mode === "amend" ? "amend" : "intake";
+        const baseFields = mode === "amend" ? (stored.pending?.draftFields ?? stored.fields) : stored.fields;
+        const merged = applyFieldOperations(baseFields, input.parsed.operations, input.parsed.patch);
+        const hasChange =
+          input.parsed.operations.length > 0 ||
+          Object.values(input.parsed.patch).some(
+            (item) => Boolean(item?.clear) || Boolean(item?.text?.trim()) || item?.usage !== undefined,
+          );
         const completed = decidePortraitComplete({
           fields: merged,
           modelComplete: input.parsed.complete,
-          supplementing: stored.supplementing,
-          patchHadText,
+          mode,
+          hasChange,
+          noChange: input.parsed.noChange,
         });
-        const portrait = buildPortrait(merged, completed);
+        const understood = input.parsed.understood || stored.pending?.understood || "";
+        const openQuestions = input.parsed.openQuestions;
+        let nextStored;
+        if (mode === "amend") {
+          if (completed) {
+            nextStored = {
+              fields: merged,
+              skipped: false,
+              supplementing: false,
+              portrait: buildPortrait(merged, true),
+              pending: null,
+              dialogueSessionStartId: stored.dialogueSessionStartId,
+            };
+          } else {
+            nextStored = {
+              fields: stored.fields,
+              skipped: false,
+              supplementing: true,
+              portrait: stored.portrait?.completed ? buildPortrait(stored.fields, true) : stored.portrait,
+              pending: {
+                mode: "amend" as const,
+                understood,
+                openQuestions,
+                draftFields: merged,
+              },
+              dialogueSessionStartId: stored.dialogueSessionStartId,
+            };
+          }
+        } else {
+          nextStored = {
+            fields: merged,
+            skipped: false,
+            supplementing: false,
+            portrait: buildPortrait(merged, completed),
+            pending: completed
+              ? null
+              : {
+                  mode: "intake" as const,
+                  understood,
+                  openQuestions,
+                  draftFields: merged,
+                },
+            dialogueSessionStartId: stored.dialogueSessionStartId,
+          };
+        }
         const revision = await tx.profileRevision.create({
           data: {
             profileId: LOCAL_PROFILE_ID,
-            payloadJson: serializeStoredPayload({
-              fields: merged,
-              skipped: false,
-              supplementing: stored.supplementing && !completed,
-              portrait,
-            }),
+            payloadJson: serializeStoredPayload(nextStored),
           },
         });
         const switched = await tx.creatorProfile.updateMany({
@@ -226,46 +363,65 @@ async function applyPortraitReply(input: {
   throw new ProfileDialogueError("Портрет уже обновился. Повторите ответ — предыдущие смыслы не стёрты.", "STALE", 409);
 }
 
-async function seedAssistant(threadId: string, body: string) {
-  const existing = await prisma.dialogueMessage.count({ where: { threadId } });
-  if (existing > 0) return;
-  await prisma.dialogueMessage.create({
+async function startDialogueSession(body: string): Promise<string> {
+  const thread = await ensureProfileThread();
+  const seed = await prisma.dialogueMessage.create({
     data: {
-      threadId,
+      threadId: thread.id,
       role: "assistant",
       kind: "question",
       body,
       status: "done",
     },
   });
+  return seed.id;
 }
 
 export async function startProfileDialogue(): Promise<ProfileWorkspaceDto & { dialogue: DialoguePageDto }> {
   const stored = await readStoredProfilePayload();
-  await persistProfilePayload({ ...stored, skipped: false, supplementing: false });
-  const thread = await ensureProfileThread();
-  await seedAssistant(thread.id, FIRST_QUESTION);
+  if (stored.portrait?.completed) {
+    return supplementProfileDialogue();
+  }
+  const dialogueSessionStartId = await startDialogueSession(FIRST_QUESTION);
+  await persistProfilePayload({
+    ...stored,
+    skipped: false,
+    supplementing: false,
+    dialogueSessionStartId,
+  });
   return getProfileWorkspace();
 }
 
 export async function skipProfileDialogue(): Promise<ProfileWorkspaceDto & { dialogue: DialoguePageDto }> {
   const stored = await readStoredProfilePayload();
+  if (stored.portrait?.completed) {
+    await persistProfilePayload({
+      ...stored,
+      skipped: false,
+      supplementing: false,
+    });
+    return getProfileWorkspace();
+  }
   await persistProfilePayload({ ...stored, skipped: true, supplementing: false });
   return getProfileWorkspace();
 }
 
 export async function supplementProfileDialogue(): Promise<ProfileWorkspaceDto & { dialogue: DialoguePageDto }> {
   const stored = await readStoredProfilePayload();
-  await persistProfilePayload({ ...stored, skipped: false, supplementing: true });
-  const thread = await ensureProfileThread();
-  await prisma.dialogueMessage.create({
-    data: {
-      threadId: thread.id,
-      role: "assistant",
-      kind: "question",
-      body: SUPPLEMENT_PROMPT,
-      status: "done",
-    },
+  const dialogueSessionStartId = await startDialogueSession(SUPPLEMENT_PROMPT);
+  await persistProfilePayload({
+    ...stored,
+    skipped: false,
+    supplementing: true,
+    dialogueSessionStartId,
+    pending: stored.pending?.mode === "amend"
+      ? stored.pending
+      : {
+          mode: "amend",
+          understood: stored.pending?.understood ?? "",
+          openQuestions: stored.pending?.openQuestions ?? [],
+          draftFields: stored.pending?.draftFields ?? stored.fields,
+        },
   });
   return getProfileWorkspace();
 }
@@ -313,7 +469,13 @@ export async function sendProfileMessage(
     });
 
     const stored = await readStoredProfilePayload();
-    const userPrompt = `${profileChecklistPrompt(stored.fields)}
+    const mode = stored.portrait?.completed || stored.supplementing || stored.pending?.mode === "amend" ? "amend" : "intake";
+    const workingFields = mode === "amend" ? (stored.pending?.draftFields ?? stored.fields) : stored.fields;
+    const userPrompt = `${profileChecklistPrompt(workingFields, {
+      mode,
+      understood: stored.pending?.understood,
+      openQuestions: stored.pending?.openQuestions,
+    })}
 
 Недавняя переписка:
 ${await recentStoredText(thread.id, userMessage.id)}
@@ -328,7 +490,7 @@ ${await recentStoredText(thread.id, userMessage.id)}
         model: LLM_MODEL,
         status: "running",
         promptText: userPrompt,
-        inputSnapshotJson: JSON.stringify({ text, profileId: LOCAL_PROFILE_ID, playbook: false }),
+        inputSnapshotJson: JSON.stringify({ text, profileId: LOCAL_PROFILE_ID, mode, playbook: false }),
       },
     });
 
@@ -339,7 +501,7 @@ ${await recentStoredText(thread.id, userMessage.id)}
         user: userPrompt,
         label: "profile_dialogue",
       });
-      const parsed = parseProfileAiReply(parseJsonObject(raw.text));
+      const parsed = parseProfileAiReply(parseJsonObject(raw.text), mode);
       await applyPortraitReply({
         callId: call.id,
         processingId: processing.id,
@@ -349,10 +511,11 @@ ${await recentStoredText(thread.id, userMessage.id)}
         completionTokens: raw.usage?.completionTokens ?? null,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Не удалось обновить портрет.";
+      const message = assistantErrorBody(error);
+      const technical = error instanceof Error ? error.message.slice(0, 1000) : message;
       await prisma.aiCall.update({
         where: { id: call.id },
-        data: { status: "error", errorMessage: message },
+        data: { status: "error", errorMessage: technical },
       });
       await prisma.dialogueMessage.update({
         where: { id: processing.id },
