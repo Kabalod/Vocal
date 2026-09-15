@@ -134,12 +134,12 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen max-w-full overflow-x-hidden bg-bg text-text">
       <aside
-        className={`hidden border-r border-line bg-bg-elev shell:flex shell:flex-col ${
+        className={`hidden border-r border-line bg-surface shell:flex shell:flex-col ${
           collapsed ? "w-16" : "w-[200px]"
         }`}
       >
         <div className={`flex min-h-11 items-center gap-2 px-3 py-5 ${collapsed ? "justify-center" : ""}`}>
-          <Link href="/reels" className="font-[family-name:var(--font-display)] text-xl tracking-tight">
+          <Link href="/reels" className="inline-flex min-h-11 items-center font-[family-name:var(--font-display)] text-xl tracking-tight">
             {collapsed ? "V" : "Vocal"}
           </Link>
         </div>
@@ -171,7 +171,7 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
           <button
             ref={menuButtonRef}
             type="button"
-            className="vocal-btn shell:!hidden"
+            className="vocal-btn min-h-11 shell:!hidden"
             onClick={() => setSheetOpen(true)}
             aria-expanded={sheetOpen}
             aria-controls="vocal-mobile-sheet"
@@ -187,12 +187,37 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
         </header>
 
         <main
-          className={`mx-auto min-w-0 w-full flex-1 px-4 py-6 shell:px-6 shell:pb-16 ${
+          className={`mx-auto min-w-0 w-full flex-1 px-4 py-6 pb-24 shell:px-6 shell:pb-16 ${
             pathname === "/reels" || pathname.startsWith("/reels/") ? "max-w-6xl" : "max-w-5xl"
           }`}
         >
           {children}
         </main>
+        <nav
+          className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-2 border-t border-line bg-surface shell:!hidden"
+          aria-label="Главные разделы"
+        >
+          <Link
+            href={RECORDINGS_NAV.href}
+            aria-current={isShellNavActive(pathname, RECORDINGS_NAV.href) ? "page" : undefined}
+            className={`flex min-h-12 flex-col items-center justify-center gap-0.5 px-2 text-xs ${
+              isShellNavActive(pathname, RECORDINGS_NAV.href) ? "text-text" : "text-muted"
+            }`}
+          >
+            <IconRecordings />
+            {RECORDINGS_NAV.label}
+          </Link>
+          <Link
+            href={PROFILE_NAV.href}
+            aria-current={isShellNavActive(pathname, PROFILE_NAV.href) ? "page" : undefined}
+            className={`flex min-h-12 flex-col items-center justify-center gap-0.5 px-2 text-xs ${
+              isShellNavActive(pathname, PROFILE_NAV.href) ? "text-text" : "text-muted"
+            }`}
+          >
+            <IconProfile />
+            {PROFILE_NAV.label}
+          </Link>
+        </nav>
       </div>
 
       {sheetOpen ? (
@@ -205,7 +230,7 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
             aria-modal="true"
             aria-labelledby={titleId}
             tabIndex={-1}
-            className="relative flex h-full w-[min(18rem,calc(100vw-1.5rem))] max-w-full flex-col rounded-r-[var(--vocal-radius-modal)] bg-bg-elev"
+            className="relative flex h-full w-[min(18rem,calc(100vw-1.5rem))] max-w-full flex-col rounded-r-[var(--vocal-radius-modal)] bg-surface"
           >
             <div className="flex items-center justify-between gap-3 px-4 py-4">
               <p id={titleId} className="font-[family-name:var(--font-display)] text-xl">

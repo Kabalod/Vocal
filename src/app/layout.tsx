@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
-import { Literata, Manrope } from "next/font/google";
+import { Inter, Literata } from "next/font/google";
 import { VocalAppShell } from "@/components/VocalAppShell";
 import "./globals.css";
 
-const manrope = Manrope({
+const inter = Inter({
   subsets: ["latin", "cyrillic"],
-  variable: "--font-manrope",
+  variable: "--font-inter",
+  display: "swap",
 });
 
 const literata = Literata({
   subsets: ["latin", "cyrillic"],
-  variable: "--font-fraunces",
+  variable: "--font-literata",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -26,7 +28,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru">
-      <body className={`${manrope.variable} ${literata.variable} overflow-x-hidden font-sans antialiased`}>
+      <body className={`${inter.variable} ${literata.variable} overflow-x-hidden font-sans antialiased`}>
         <VocalAppShell>{children}</VocalAppShell>
       </body>
     </html>

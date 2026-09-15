@@ -6,6 +6,8 @@ import { Composer } from "@/components/vocal-ui/Composer";
 import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
 import { DiscreteSlider } from "@/components/vocal-ui/DiscreteSlider";
 import { EmptyState } from "@/components/vocal-ui/EmptyState";
+import { Field, TextArea } from "@/components/vocal-ui/Field";
+import { Panel } from "@/components/vocal-ui/Panel";
 import { FilterControl } from "@/components/vocal-ui/FilterControl";
 import { IconButton } from "@/components/vocal-ui/IconButton";
 import { IconDownload, IconMic, IconPlus, IconSend } from "@/components/vocal-ui/icons";
@@ -96,6 +98,13 @@ export function UiKitCatalog() {
         />
         <ProcessingState label="Разбираю вашу мысль…" hint="Старые сообщения остаются на месте." />
         <InlineError message="Нет связи. Не удалось обновить состояние" action={<ActionButton>Повторить</ActionButton>} />
+      </Section>
+
+      <Section title="Панель и поля">
+        <Panel className="max-w-md space-y-3">
+          <Field aria-label="Короткое поле" placeholder="Название" readOnly />
+          <TextArea aria-label="Длинное поле" placeholder="Цитата или сценарий" className="font-content" readOnly />
+        </Panel>
       </Section>
 
       <Section title="Диалог и ввод">

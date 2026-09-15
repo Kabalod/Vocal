@@ -1,20 +1,37 @@
 @import "tailwindcss";
 
 :root {
-  --vocal-bg: #070707;
-  --vocal-surface: #151410;
-  --vocal-field: #201d18;
-  --vocal-text: #f3efe7;
-  --vocal-muted: #b8b0a3;
-  --vocal-accent: #d4a574;
-  --vocal-on-accent: #241a10;
+  --bg: #0b0714;
+  --surface: #1a1228;
+  --surface-nested: #120a1c;
+  --accent: #8b7cff;
+  --accent-soft: #c4b5fd;
+  --text: #f5f3ff;
+  --text-soft: #ddd6ee;
+  --muted: #9e94ad;
+  --line: rgba(196, 181, 253, 0.18);
+  --line-strong: rgba(196, 181, 253, 0.34);
+  --success: #62dbc6;
+  --on-accent: #0b0714;
+  --focus: #c4b5fd;
+  --radius-panel: 18px;
+  --radius-control: 12px;
+  --shadow-primary: 0 8px 22px rgba(139, 124, 255, 0.28);
+
+  --vocal-bg: var(--bg);
+  --vocal-surface: var(--surface);
+  --vocal-field: var(--surface-nested);
+  --vocal-text: var(--text);
+  --vocal-muted: var(--muted);
+  --vocal-accent: var(--accent);
+  --vocal-on-accent: var(--on-accent);
   --vocal-danger: #f0a39a;
-  --vocal-success: #9cc5a0;
-  --vocal-line: #34312b;
-  --vocal-input-border: #81796c;
-  --vocal-focus: #f0cd9d;
-  --vocal-radius-control: 10px;
-  --vocal-radius-panel: 16px;
+  --vocal-success: var(--success);
+  --vocal-line: var(--line);
+  --vocal-input-border: var(--line-strong);
+  --vocal-focus: var(--focus);
+  --vocal-radius-control: var(--radius-control);
+  --vocal-radius-panel: var(--radius-panel);
   --vocal-radius-modal: 20px;
   --vocal-space-1: 0.25rem;
   --vocal-space-2: 0.5rem;
@@ -27,42 +44,39 @@
   --vocal-text-base: 1rem;
   --vocal-text-lg: 1.125rem;
   --vocal-leading: 1.5;
-  --vocal-shadow-cta: 0 0 24px color-mix(in srgb, var(--vocal-accent) 28%, transparent);
+  --vocal-shadow-cta: var(--shadow-primary);
 
-  --bg: var(--vocal-bg);
-  --bg-elev: var(--vocal-surface);
-  --line: var(--vocal-line);
-  --text: var(--vocal-text);
-  --muted: var(--vocal-muted);
-  --accent: var(--vocal-accent);
-  --accent-dim: color-mix(in srgb, var(--vocal-accent) 14%, transparent);
-  --good: var(--vocal-success);
-  --ok: var(--vocal-accent);
+  --bg-elev: var(--surface);
+  --accent-dim: color-mix(in srgb, var(--accent) 14%, transparent);
+  --good: var(--success);
+  --ok: var(--accent);
   --bad: var(--vocal-danger);
-  --on-accent: var(--vocal-on-accent);
-  --focus: var(--vocal-focus);
+  --font-fraunces: var(--font-literata);
+  --font-manrope: var(--font-inter);
 }
 
 @theme inline {
   --breakpoint-shell: 75rem;
   --color-bg: var(--bg);
   --color-bg-elev: var(--bg-elev);
-  --color-surface: var(--vocal-surface);
-  --color-surface-raised: var(--vocal-field);
-  --color-field: var(--vocal-field);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-nested);
+  --color-field: var(--surface-nested);
   --color-line: var(--line);
   --color-input-border: var(--vocal-input-border);
   --color-text: var(--text);
+  --color-text-soft: var(--text-soft);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
   --color-accent-dim: var(--accent-dim);
   --color-on-accent: var(--on-accent);
   --color-focus: var(--focus);
   --color-good: var(--good);
   --color-ok: var(--ok);
   --color-bad: var(--bad);
-  --font-sans: var(--font-manrope);
-  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-inter), "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  --font-display: var(--font-literata), Georgia, "Times New Roman", serif;
   --radius-control: var(--vocal-radius-control);
   --radius-panel: var(--vocal-radius-panel);
   --radius-modal: var(--vocal-radius-modal);
@@ -70,24 +84,42 @@
 
 html,
 body {
-  background: var(--vocal-bg);
-  color: var(--vocal-text);
+  background: var(--bg);
+  color: var(--text);
 }
 
 body {
   min-height: 100vh;
+  min-width: 320px;
+  font-family: var(--font-inter), "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
   font-size: var(--vocal-text-base);
   line-height: var(--vocal-leading);
 }
 
+.font-content {
+  font-family: var(--font-literata), Georgia, "Times New Roman", serif;
+}
+
 ::selection {
-  background: var(--vocal-accent);
-  color: var(--vocal-on-accent);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 :focus-visible {
-  outline: 2px solid var(--vocal-focus);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 button:disabled,
@@ -100,27 +132,28 @@ a[aria-disabled="true"] {
 }
 
 .vocal-card {
-  background: var(--vocal-surface);
-  border: 1px solid var(--vocal-line);
-  border-radius: var(--vocal-radius-panel);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
 }
 
 .vocal-badge {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  border: 1px solid var(--vocal-line);
+  border: 1px solid var(--line);
   padding: 0.15rem 0.65rem;
   font-size: var(--vocal-text-xs);
-  color: var(--vocal-muted);
+  color: var(--muted);
 }
 
 .vocal-input {
   width: 100%;
-  border: 1px solid var(--vocal-input-border);
-  border-radius: var(--vocal-radius-control);
-  background: var(--vocal-field);
-  color: var(--vocal-text);
+  min-height: 44px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-nested);
+  color: var(--text);
   padding: 0.5rem 0.75rem;
 }
 
@@ -133,19 +166,21 @@ a[aria-disabled="true"] {
   align-items: center;
   justify-content: center;
   min-height: 44px;
-  border-radius: var(--vocal-radius-control);
-  border: 1px solid var(--vocal-line);
+  min-width: 44px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--line);
   padding: 0.5rem 1rem;
   font-size: var(--vocal-text-sm);
-  color: var(--vocal-text);
+  color: var(--text);
   background: transparent;
 }
 
 .vocal-btn-primary {
+  min-height: 48px;
   border-color: transparent;
-  background: var(--vocal-accent);
-  color: var(--vocal-on-accent);
-  box-shadow: var(--vocal-shadow-cta);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--shadow-primary);
 }
 
 .vocal-btn:disabled,

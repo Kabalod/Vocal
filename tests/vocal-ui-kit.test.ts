@@ -81,6 +81,20 @@ test("segmented tabs keep a roving tabindex on the selected tab", () => {
   assert.match(tabs, /nextTabIndex/);
 });
 
+test("field panel and primary action reuse vocal tokens", () => {
+  const field = readFileSync(join(root, "src/components/vocal-ui/Field.tsx"), "utf8");
+  const panel = readFileSync(join(root, "src/components/vocal-ui/Panel.tsx"), "utf8");
+  const action = readFileSync(join(root, "src/components/vocal-ui/ActionButton.tsx"), "utf8");
+  const catalog = readFileSync(join(root, "src/components/vocal-ui/UiKitCatalog.tsx"), "utf8");
+  const profile = readFileSync(join(root, "src/app/profile/page.tsx"), "utf8");
+  assert.match(field, /vocal-input/);
+  assert.match(panel, /vocal-card/);
+  assert.match(action, /min-h-12/);
+  assert.match(catalog, /from "@\/components\/vocal-ui\/Field"/);
+  assert.match(profile, /from "@\/components\/vocal-ui\/Panel"/);
+  assert.match(profile, /font-content/);
+});
+
 test("modal trap reuses sheet helpers and keeps backdrop out of tab order", () => {
   const modal = readFileSync(join(root, "src/components/vocal-ui/VocalModal.tsx"), "utf8");
   assert.match(modal, /trapSheetTab/);
