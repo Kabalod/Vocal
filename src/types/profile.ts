@@ -182,6 +182,7 @@ export interface ProfileWorkspaceDto {
   skipped: boolean;
   supplementing: boolean;
   pendingChange: boolean;
+  pending: ProfilePendingChange | null;
   mode: ProfileDialogueMode | null;
   portrait: PortraitDto | null;
   applyError: string | null;

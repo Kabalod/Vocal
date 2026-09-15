@@ -620,6 +620,95 @@ test("late answer for the same field does not overwrite a newer value", async (t
   assert.equal(workspace.profile.fields.find((field) => field.id === "audience")?.text, "близкие");
 });
 
+test("stale ready reply cannot complete after a newer clarify", async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-stale-complete-"));
+  const url = fileUrl(path.join(dir, "test.db"));
+  process.env.DATABASE_URL = url;
+  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  await resetPrismaClient();
+  resetAiInflightForTests();
+  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+    resetAiInflightForTests();
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* windows lock */
+    }
+  });
+  migrateDeploy(url);
+
+  const { startProfileDialogue, sendProfileMessage, getProfileWorkspace } = await import(
+    "../src/lib/profile-dialogue"
+  );
+  await startProfileDialogue();
+
+  let releaseFirst!: () => void;
+  const holdFirst = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let enteredFirst!: () => void;
+  const firstInModel = new Promise<void>((resolve) => {
+    enteredFirst = resolve;
+  });
+
+  const first = sendProfileMessage({ text: "для коллег, цель говорить", idempotencyKey: "stale-ready" }, async () => {
+    enteredFirst();
+    await holdFirst;
+    return {
+      text: JSON.stringify({
+        reply: "Портрета достаточно.",
+        kind: "ready",
+        complete: true,
+        understood: "старый запрос",
+        openQuestions: [],
+        coveredKeys: ["whyRecord", "audience"],
+        missingKeys: [],
+        patch: {
+          whyRecord: { text: "говорить для коллег", usage: "understanding" },
+          audience: { text: "коллеги", usage: "understanding" },
+        },
+      }),
+      usage: { promptTokens: 2, completionTokens: 2 },
+    };
+  });
+  const second = sendProfileMessage({ text: "для близких, цель говорить своими словами", idempotencyKey: "fresh-clarify" }, async () => {
+    await firstInModel;
+    return {
+      text: JSON.stringify({
+        reply: "Уточните, для кого именно?",
+        kind: "clarify",
+        complete: false,
+        understood: "изменить аудиторию на близких",
+        openQuestions: ["Уточните, для кого именно?"],
+        coveredKeys: ["whyRecord", "audience"],
+        missingKeys: [],
+        patch: {
+          whyRecord: { text: "говорить своими словами", usage: "understanding" },
+          audience: { text: "близкие", usage: "understanding" },
+        },
+      }),
+      usage: { promptTokens: 2, completionTokens: 2 },
+    };
+  });
+
+  await second;
+  releaseFirst();
+  await first;
+
+  const workspace = await getProfileWorkspace();
+  assert.equal(workspace.profile.fields.find((field) => field.id === "audience")?.text, "близкие");
+  assert.equal(workspace.phase, "conversation");
+  assert.equal(workspace.portrait, null);
+  assert.deepEqual(workspace.pending?.openQuestions, ["Уточните, для кого именно?"]);
+  assert.equal(workspace.pending?.understood, "изменить аудиторию на близких");
+  const lastAssistant = [...workspace.dialogue.messages].reverse().find((item) => item.role === "assistant");
+  assert.equal(lastAssistant?.body, "Уточните, для кого именно?");
+  assert.equal(lastAssistant?.kind, "question");
+});
+
 test("incomplete intake resume keeps the current question", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-resume-"));
   const url = fileUrl(path.join(dir, "test.db"));

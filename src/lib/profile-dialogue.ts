@@ -216,6 +216,7 @@ export async function getProfileWorkspace(input: { cursor?: string | null } = {}
     skipped: stored.skipped,
     supplementing: stored.supplementing,
     pendingChange: Boolean(stored.pending && stored.pending.mode === "amend"),
+    pending: stored.pending,
     mode,
     portrait: published,
     applyError,
@@ -250,6 +251,7 @@ async function recentStoredText(threadId: string, excludeMessageId?: string): Pr
 async function applyPortraitReply(input: {
   callId: string;
   processingId: string;
+  userMessageId: string;
   parsed: ProfileAiReply;
   rawText: string;
   promptTokens: number | null;
@@ -260,6 +262,18 @@ async function applyPortraitReply(input: {
     try {
       await prisma.$transaction(async (tx) => {
         const { stored, revisionId } = await readStoredProfilePayloadTx(tx);
+        const userMessage = await tx.dialogueMessage.findUnique({ where: { id: input.userMessageId } });
+        const userIds = userMessage
+          ? (
+              await tx.dialogueMessage.findMany({
+                where: { threadId: userMessage.threadId, role: "user" },
+                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+                select: { id: true },
+              })
+            ).map((row) => row.id)
+          : [];
+        const userIndex = userMessage ? userIds.indexOf(userMessage.id) : -1;
+        const staleDialogue = userIndex >= 0 && userIndex < userIds.length - 1;
         const mode = stored.portrait?.completed || stored.supplementing || stored.pending?.mode === "amend" ? "amend" : "intake";
         const baseFields = mode === "amend" ? (stored.pending?.draftFields ?? stored.fields) : stored.fields;
         const merged = applyUnchangedFieldsOnly(
@@ -272,17 +286,21 @@ async function applyPortraitReply(input: {
           const after = merged.find((field) => field.id === before.id);
           return before.text !== after?.text || before.usage !== after?.usage;
         });
-        const completed = decidePortraitComplete({
-          fields: merged,
-          modelComplete: input.parsed.complete,
-          mode,
-          hasChange,
-          noChange: input.parsed.noChange,
-          kind: input.parsed.kind,
-          openQuestions: input.parsed.openQuestions,
-        });
-        const understood = input.parsed.understood || stored.pending?.understood || "";
-        const openQuestions = input.parsed.openQuestions;
+        const completed = staleDialogue
+          ? false
+          : decidePortraitComplete({
+              fields: merged,
+              modelComplete: input.parsed.complete,
+              mode,
+              hasChange,
+              noChange: input.parsed.noChange,
+              kind: input.parsed.kind,
+              openQuestions: input.parsed.openQuestions,
+            });
+        const understood = staleDialogue
+          ? stored.pending?.understood || ""
+          : input.parsed.understood || stored.pending?.understood || "";
+        const openQuestions = staleDialogue ? (stored.pending?.openQuestions ?? []) : input.parsed.openQuestions;
         let nextStored;
         if (mode === "amend") {
           if (completed) {
@@ -349,7 +367,9 @@ async function applyPortraitReply(input: {
         });
         await tx.dialogueMessage.update({
           where: { id: input.processingId },
-          data: { kind: completed ? "text" : "question", body: input.parsed.reply, status: "done" },
+          data: staleDialogue
+            ? { kind: "text", body: "Учёл предыдущий ответ без смены текущего вопроса.", status: "done" }
+            : { kind: completed ? "text" : "question", body: input.parsed.reply, status: "done" },
         });
       });
       return;
@@ -526,6 +546,7 @@ ${await recentStoredText(thread.id, userMessage.id)}
       await applyPortraitReply({
         callId: call.id,
         processingId: processing.id,
+        userMessageId: userMessage.id,
         parsed,
         rawText: raw.text,
         promptTokens: raw.usage?.promptTokens ?? null,
