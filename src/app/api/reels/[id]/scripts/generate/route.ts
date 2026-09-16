@@ -1,3 +1,4 @@
+import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
 import { generateScriptProposal } from "@/lib/ai/script";
 import { ReelError } from "@/lib/reels";
@@ -10,7 +11,7 @@ function errorResponse(error: unknown) {
   if (error instanceof ReelError || error instanceof ScriptError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
   }
-  console.error(error);
+  console.error(safeAiLog({ kind: "script" }));
   return NextResponse.json({ error: "Не удалось собрать сценарий." }, { status: 500 });
 }
 

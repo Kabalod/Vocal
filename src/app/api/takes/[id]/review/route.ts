@@ -1,3 +1,4 @@
+import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
 import { createTakeReview, listTakeReviews, ReviewError } from "@/lib/ai/review";
 import { ReelError } from "@/lib/reels";
@@ -9,7 +10,7 @@ function errorResponse(error: unknown) {
   if (error instanceof ReelError || error instanceof ReviewError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
   }
-  console.error(error);
+  console.error(safeAiLog({ kind: "review" }));
   return NextResponse.json({ error: "Не удалось обработать разбор." }, { status: 500 });
 }
 

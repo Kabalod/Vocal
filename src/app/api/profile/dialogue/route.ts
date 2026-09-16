@@ -1,3 +1,4 @@
+import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
 import { AiBudgetError } from "@/lib/ai/usage-guard";
 import { ProfileError } from "@/lib/profile";
@@ -18,7 +19,7 @@ function errorResponse(error: unknown) {
   if (error instanceof ProfileDialogueError || error instanceof ProfileError || error instanceof AiBudgetError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
   }
-  console.error(error);
+  console.error(safeAiLog({ kind: "profile-dialogue" }));
   return NextResponse.json({ error: "Не удалось обработать анкету." }, { status: 500 });
 }
 

@@ -8,6 +8,7 @@ import { extractAudio } from "@/lib/ffmpeg";
 import { transcribeAudio } from "@/lib/stt";
 import { assertDailyTokenBudget, withAiInflight } from "@/lib/ai/usage-guard";
 import { pageDialogueItems, decodeDialogueCursor } from "@/lib/dialogue-cursor";
+import { getReelContext } from "@/lib/reel-context";
 import { ReelError } from "@/lib/reels";
 import { replaceScriptDraft } from "@/lib/scripts";
 import { listTranscriptBundle } from "@/lib/transcripts";
@@ -204,19 +205,31 @@ export async function listDialoguePage(
   };
 }
 
-async function materialContext(reelId: string): Promise<string> {
+export async function buildThoughtMaterialContext(reelId: string): Promise<string> {
   const reel = await prisma.reel.findUnique({
     where: { id: reelId },
-    include: { takes: { orderBy: { number: "asc" }, take: 2 }, scripts: { orderBy: { createdAt: "desc" }, take: 1 } },
+    include: {
+      takes: { orderBy: { number: "asc" }, take: 2 },
+      scripts: { orderBy: { createdAt: "desc" }, take: 4 },
+    },
   });
-  const take = reel?.takes[0];
+  if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+  const take = reel.takes.find((row) => row.id === reel.selectedTakeId) ?? reel.takes[0];
   const transcript = take ? await listTranscriptBundle(take.id) : null;
   const selectedText = transcript?.revisions.find((row) => row.id === transcript.selectedId)?.text;
-  const script = reel?.scripts.find((row) => row.kind !== "ai_proposal");
+  const script =
+    reel.scripts.find((row) => row.id === reel.selectedScriptId) ??
+    reel.scripts.find((row) => row.kind !== "ai_proposal" && row.kind !== "draft");
+  const live = (await getReelContext(reelId)).live;
   return [
-    `Название: ${reel?.title ?? ""}`,
+    `Мысль: ${reel.id}`,
+    `Название: ${reel.title ?? ""}`,
     selectedText ? `Материал:\n${selectedText.slice(0, 4000)}` : "Материала пока нет.",
     script?.body ? `Сценарий:\n${script.body.slice(0, 2000)}` : "",
+    `Цель ролика: ${live.reelGoal || "не указана"}`,
+    `Аудитория ролика: ${live.reelAudience || "не указана"}`,
+    `Подтверждённый профиль (можно в текст): ${JSON.stringify(live.publicForScript)}`,
+    `Подтверждённый профиль (только понимание): ${JSON.stringify(live.understandingOnly)}`,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -281,7 +294,7 @@ export async function sendDialogueMessage(
       },
     });
 
-    const userPrompt = `${await materialContext(reelId)}
+    const userPrompt = `${await buildThoughtMaterialContext(reelId)}
 
 Недавняя переписка:
 ${await recentStoredText(thread.id)}

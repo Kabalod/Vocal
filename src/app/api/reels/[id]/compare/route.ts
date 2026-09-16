@@ -1,3 +1,4 @@
+import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
 import { createReelComparison } from "@/lib/ai/compare";
 import { CompareError, listComparisons, previewTextDiff } from "@/lib/compare";
@@ -10,7 +11,7 @@ function errorResponse(error: unknown) {
   if (error instanceof ReelError || error instanceof CompareError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
   }
-  console.error(error);
+  console.error(safeAiLog({ kind: "compare" }));
   return NextResponse.json({ error: "Не удалось сравнить дубли." }, { status: 500 });
 }
 

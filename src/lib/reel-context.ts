@@ -1,5 +1,10 @@
+import {
+  runtimePortraitFields,
+  runtimePortraitRevisionId,
+  selectedKeysForRuntime,
+} from "@/lib/ai-runtime-context";
 import { prisma } from "@/lib/db";
-import { ProfileError, getProfile, parseSelectedKeys } from "@/lib/profile";
+import { ProfileError, getProfile, parseSelectedKeys, readStoredProfilePayload } from "@/lib/profile";
 import { ReelError } from "@/lib/reels";
 import {
   PROFILE_FIELD_IDS,
@@ -90,10 +95,12 @@ export async function getReelContext(reelId: string): Promise<ReelContextDto> {
   const reel = await prisma.reel.findUnique({ where: { id: reelId } });
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
   const profile = await getProfile();
-  const selectedKeys = parseSelectedKeys(reel.contextKeysJson);
+  const stored = await readStoredProfilePayload();
+  const fields = runtimePortraitFields(stored);
+  const selectedKeys = selectedKeysForRuntime(fields, parseSelectedKeys(reel.contextKeysJson));
   const live = assembleReelContext({
-    profileRevisionId: profile.currentRevisionId,
-    fields: profile.fields,
+    profileRevisionId: runtimePortraitRevisionId(stored, profile.currentRevisionId),
+    fields,
     selectedKeys,
     reelGoal: reel.reelGoal,
     reelAudience: reel.reelAudience,
@@ -143,10 +150,13 @@ export async function saveReelContext(
   }
 
   const profile = await getProfile();
+  const stored = await readStoredProfilePayload();
+  const fields = runtimePortraitFields(stored);
+  const runtimeKeys = selectedKeysForRuntime(fields, selectedKeys);
   const live = assembleReelContext({
-    profileRevisionId: profile.currentRevisionId,
-    fields: profile.fields,
-    selectedKeys,
+    profileRevisionId: runtimePortraitRevisionId(stored, profile.currentRevisionId),
+    fields,
+    selectedKeys: runtimeKeys,
     reelGoal,
     reelAudience,
   });

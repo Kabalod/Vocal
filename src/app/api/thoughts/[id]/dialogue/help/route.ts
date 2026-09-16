@@ -1,3 +1,4 @@
+import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
 import { AiBudgetError } from "@/lib/ai/usage-guard";
 import { DialogueError, requestScriptHelp } from "@/lib/dialogue";
@@ -16,7 +17,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (error instanceof ReelError || error instanceof DialogueError || error instanceof AiBudgetError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     }
-    console.error(error);
+    console.error(safeAiLog({ kind: "dialogue-help" }));
     return NextResponse.json({ error: "Не удалось попросить помощь со сценарием." }, { status: 500 });
   }
 }

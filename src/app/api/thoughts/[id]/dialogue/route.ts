@@ -1,3 +1,4 @@
+import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
 import { AiBudgetError } from "@/lib/ai/usage-guard";
 import { DialogueError, listDialoguePage, sendDialogueMessage, sendDialogueVoice } from "@/lib/dialogue";
@@ -10,7 +11,7 @@ function errorResponse(error: unknown) {
   if (error instanceof ReelError || error instanceof DialogueError || error instanceof AiBudgetError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
   }
-  console.error(error);
+  console.error(safeAiLog({ kind: "dialogue" }));
   return NextResponse.json({ error: "Не удалось обработать диалог." }, { status: 500 });
 }
 

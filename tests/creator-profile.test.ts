@@ -130,6 +130,16 @@ test("profile and reel context API: save, skip, snapshot survives profile change
   assert.deepEqual(liveEmptyBody.live.publicForScript, []);
   assert.deepEqual(liveEmptyBody.live.understandingOnly, []);
 
+  const { persistProfilePayload } = await import("../src/lib/profile");
+  const { buildPortrait } = await import("../src/lib/profile-portrait");
+  const { readStoredProfilePayload } = await import("../src/lib/profile");
+  const storedProfile = await readStoredProfilePayload();
+  const published = await persistProfilePayload({
+    ...storedProfile,
+    portrait: buildPortrait(storedProfile.fields, true),
+  });
+  const publishedRevision = published.currentRevisionId;
+
   const stored = await putContext(
     new Request(`http://vocal.local/api/reels/${reel.id}/context`, {
       method: "PUT",
@@ -172,8 +182,8 @@ test("profile and reel context API: save, skip, snapshot survives profile change
   const afterBody = (await after.json()).context;
   assert.equal(afterBody.live.publicForScript[0].text, "новая вымышленная формулировка");
   assert.equal(afterBody.snapshots[0].assembled.publicForScript[0].text, frozenPublic);
-  assert.notEqual(afterBody.live.profileRevisionId, firstRevision);
-  assert.equal(afterBody.snapshots[0].profileRevisionId, firstRevision);
+  assert.notEqual(afterBody.live.profileRevisionId, publishedRevision);
+  assert.equal(afterBody.snapshots[0].profileRevisionId, publishedRevision);
 
   const same = await putContext(
     new Request(`http://vocal.local/api/reels/${reel.id}/context`, {
