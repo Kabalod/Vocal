@@ -1,16 +1,16 @@
 import type { VocalUserStatusId } from "@/components/vocal-ui/kit";
 import type { ReelStatus, ReelStatusGroup } from "@/types/reel";
-import { reelStatusGroup } from "@/types/reel";
+import { normalizeReelStatus, reelStatusGroup } from "@/types/reel";
 import { isHeadKind } from "@/types/script";
 
-export function thoughtUserStatus(statusOrGroup: ReelStatus | ReelStatusGroup): VocalUserStatusId {
-  const group =
+export function thoughtUserStatus(statusOrGroup: ReelStatus | ReelStatusGroup | string): VocalUserStatusId {
+  const group: ReelStatusGroup =
     statusOrGroup === "open" ||
     statusOrGroup === "in_progress" ||
     statusOrGroup === "completed" ||
     statusOrGroup === "archived"
       ? statusOrGroup
-      : reelStatusGroup(statusOrGroup);
+      : reelStatusGroup(normalizeReelStatus(statusOrGroup));
   if (group === "completed") return "completed";
   if (group === "in_progress") return "in_progress";
   return "open";

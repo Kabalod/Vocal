@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NewThoughtSheet } from "@/components/NewThoughtSheet";
 import { ReelCard } from "@/components/ReelCard";
@@ -8,25 +7,11 @@ import { RECORDING_FILTERS, isRecordingFilterId, type RecordingFilterId } from "
 import { ShellError, ShellLoading } from "@/components/shell-status";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { EmptyState } from "@/components/vocal-ui/EmptyState";
+import { Field } from "@/components/vocal-ui/Field";
 import { FilterControl } from "@/components/vocal-ui/FilterControl";
-import { StatusBadge } from "@/components/vocal-ui/StatusBadge";
 import { GenerationGuard } from "@/lib/generation-guard";
-import { formatDate } from "@/lib/format";
-import {
-  pickThoughtPreviewFragment,
-  resetThoughtListQuery,
-  thoughtUserStatus,
-  type ThoughtPreviewSource,
-} from "@/lib/thought-preview";
-import {
-  REEL_LIST_PAGE,
-  REEL_STATUS_GROUP_LABELS,
-  reelStatusGroup,
-  type ReelDto,
-  type ReelListItemDto,
-  type ReelListResult,
-} from "@/types/reel";
-import type { ScriptBundleDto } from "@/types/script";
+import { resetThoughtListQuery } from "@/lib/thought-preview";
+import { REEL_LIST_PAGE, type ReelListItemDto, type ReelListResult } from "@/types/reel";
 
 const SORTS: Array<{ id: "updated" | "created" | "title"; label: string }> = [
   { id: "updated", label: "По обновлению" },
@@ -34,21 +19,15 @@ const SORTS: Array<{ id: "updated" | "created" | "title"; label: string }> = [
   { id: "title", label: "По названию" },
 ];
 
-function badgeStatus(group: ReturnType<typeof reelStatusGroup>): "open" | "in_progress" | "completed" {
-  return thoughtUserStatus(group);
-}
-
 function NewThoughtButton({
   className = "",
-  disabled = false,
   onClick,
 }: {
   className?: string;
-  disabled?: boolean;
   onClick?: () => void;
 }) {
   return (
-    <ActionButton variant="primary" className={className} disabled={disabled} onClick={onClick}>
+    <ActionButton variant="primary" className={className} onClick={onClick}>
       Новая мысль
     </ActionButton>
   );
@@ -67,11 +46,6 @@ export function ReelList() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<ReelDto | null>(null);
-  const [previewFragment, setPreviewFragment] = useState<{ text: string; source: ThoughtPreviewSource } | null>(null);
-  const [detailError, setDetailError] = useState<string | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
@@ -89,7 +63,6 @@ export function ReelList() {
   }, [debouncedQ, status, sort]);
 
   const loadGen = useRef(new GenerationGuard());
-  const detailGen = useRef(new GenerationGuard());
   const listEpoch = useRef(0);
 
   const applyPage = useCallback((data: ReelListResult, append: boolean) => {
@@ -153,56 +126,6 @@ export function ReelList() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    if (!selectedId) {
-      setDetail(null);
-      setPreviewFragment(null);
-      setDetailError(null);
-      setDetailLoading(false);
-      return;
-    }
-    if (!reels.some((row) => row.id === selectedId)) {
-      setSelectedId(null);
-      return;
-    }
-    const req = detailGen.current.begin();
-    setDetailLoading(true);
-    setDetailError(null);
-    void (async () => {
-      try {
-        const [reelRes, scriptRes] = await Promise.all([
-          fetch(`/api/reels/${selectedId}`, { cache: "no-store" }),
-          fetch(`/api/reels/${selectedId}/scripts`, { cache: "no-store" }),
-        ]);
-        const data = (await reelRes.json()) as { reel?: ReelDto; error?: string };
-        if (!req.isCurrent()) return;
-        if (!reelRes.ok || !data.reel) throw new Error(data.error ?? "Не удалось открыть превью.");
-        let bundle: ScriptBundleDto | null = null;
-        if (scriptRes.ok) {
-          bundle = (await scriptRes.json()) as ScriptBundleDto;
-        }
-        if (!req.isCurrent()) return;
-        setDetail(data.reel);
-        setPreviewFragment(
-          pickThoughtPreviewFragment({
-            initialNote: data.reel.initialNote,
-            finalScriptId: bundle?.finalScriptId ?? null,
-            selectedScriptId: bundle?.selectedScriptId ?? null,
-            versions: bundle?.versions ?? [],
-          }),
-        );
-      } catch (err) {
-        if (!req.isCurrent()) return;
-        setDetail(null);
-        setPreviewFragment(null);
-        setDetailError(err instanceof Error ? err.message : "Ошибка.");
-      } finally {
-        if (req.isCurrent()) setDetailLoading(false);
-      }
-    })();
-  }, [reels, selectedId]);
-
-  const hasThoughts = totalCount > 0;
   const emptyKind =
     !loading && !error && reels.length === 0
       ? debouncedQ
@@ -213,8 +136,6 @@ export function ReelList() {
             ? "none"
             : null
       : null;
-
-  const previewGroup = detail ? reelStatusGroup(detail.status) : null;
 
   function resetSearchAndFilters() {
     const next = resetThoughtListQuery();
@@ -235,21 +156,18 @@ export function ReelList() {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="font-[family-name:var(--font-display)] text-4xl">Мысли</h1>
-          <p className="mt-2 text-muted">Поиск и фильтры не вызывают ИИ.</p>
         </div>
-        <div className={hasThoughts ? "" : "invisible"} aria-hidden={!hasThoughts}>
-          <NewThoughtButton disabled={!hasThoughts} onClick={() => setCreateOpen(true)} />
-        </div>
+        <NewThoughtButton onClick={() => setCreateOpen(true)} />
       </div>
 
       <div className="flex flex-col gap-3">
         <div className="relative">
-          <input
+          <Field
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Найти мысль"
             aria-label="Найти мысль"
-            className="vocal-input pr-12"
+            className="pr-12"
           />
           {q ? (
             <button
@@ -294,7 +212,7 @@ export function ReelList() {
         </div>
       </div>
 
-      {hasThoughts && !error ? (
+      {!error && !loading && reels.length > 0 ? (
         <p className="text-sm text-muted">
           Всего мыслей: {totalCount}. Найдено: {matchCount}.
         </p>
@@ -306,7 +224,7 @@ export function ReelList() {
       {!loading && emptyKind === "none" ? (
         <EmptyState
           title="Пока нет мыслей"
-          description="Когда появятся мысли, они будут здесь. Поиск и фильтры не вызывают ИИ."
+          description="Создайте первую мысль — профиль для этого не нужен."
           action={<NewThoughtButton onClick={() => setCreateOpen(true)} />}
         />
       ) : null}
@@ -325,52 +243,20 @@ export function ReelList() {
         />
       ) : null}
 
-      {!loading && reels.length > 0 ? (
-        <div className="grid grid-cols-1 gap-4 shell:grid-cols-[minmax(0,58%)_minmax(0,42%)] shell:items-start">
-          <div className="space-y-4">
-            <ul className="grid grid-cols-1 gap-4">
-              {reels.map((reel) => (
-                <li key={reel.id}>
-                  <ReelCard reel={reel} selected={selectedId === reel.id} onSelect={setSelectedId} />
-                </li>
-              ))}
-            </ul>
-            {hasMore ? (
-              <ActionButton variant="secondary" loading={loadingMore} onClick={() => void loadMore()}>
-                Загрузить ещё
-              </ActionButton>
-            ) : null}
-          </div>
-          <aside className="hidden shell:block">
-            <div className="vocal-card sticky top-4 space-y-4 p-5">
-              {!selectedId ? (
-                <p className="text-sm text-muted">Выберите мысль, чтобы увидеть превью. Открытие не закрывает список.</p>
-              ) : null}
-              {selectedId && detailLoading ? <p className="text-sm text-muted">Загрузка превью…</p> : null}
-              {selectedId && detailError ? <p className="text-sm text-bad">{detailError}</p> : null}
-              {selectedId && detail && previewGroup ? (
-                <>
-                  <p className="font-[family-name:var(--font-display)] text-2xl leading-snug">{detail.title}</p>
-                  <StatusBadge status={badgeStatus(previewGroup)} label={REEL_STATUS_GROUP_LABELS[previewGroup]} />
-                  <p className="text-sm text-muted">Обновлено {formatDate(detail.updatedAt)}</p>
-                  {previewFragment?.source === "script" ? (
-                    <p className="line-clamp-6 text-sm text-text/85">{previewFragment.text}</p>
-                  ) : previewFragment?.source === "note" ? (
-                    <p className="line-clamp-6 text-sm text-text/85">{previewFragment.text}</p>
-                  ) : (
-                    <p className="text-sm text-muted">Нет сценария и заметки.</p>
-                  )}
-                  <p className="text-sm text-muted">
-                    дублей: {detail.takeCount}
-                    {detail.hasScript ? " · есть сценарий" : ""}
-                  </p>
-                  <Link href={`/reels/${detail.id}`} className="vocal-btn vocal-btn-primary inline-flex min-h-11 items-center">
-                    Открыть мысль
-                  </Link>
-                </>
-              ) : null}
-            </div>
-          </aside>
+      {!loading && !error && reels.length > 0 ? (
+        <div className="space-y-4">
+          <ul className="grid grid-cols-1 gap-4">
+            {reels.map((reel) => (
+              <li key={reel.id} className="min-w-0">
+                <ReelCard reel={reel} />
+              </li>
+            ))}
+          </ul>
+          {hasMore ? (
+            <ActionButton variant="secondary" loading={loadingMore} onClick={() => void loadMore()}>
+              Загрузить ещё
+            </ActionButton>
+          ) : null}
         </div>
       ) : null}
       <NewThoughtSheet open={createOpen} onClose={() => setCreateOpen(false)} />
