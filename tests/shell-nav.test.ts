@@ -14,7 +14,7 @@ test("shell nav is only thoughts and profile", () => {
   assert.equal(shellBack("/reels/cmexample")?.href, "/reels");
   assert.equal(shellBack("/reels/cmexample")?.label, "Мысли");
   assert.deepEqual(shellBack("/"), { href: "/reels", label: "Мысли" });
-  assert.deepEqual(shellBack("/jobs/cmexample"), { href: "/history", label: "История" });
+  assert.deepEqual(shellBack("/jobs/cmexample"), { href: "/reels", label: "Мысли" });
   assert.equal(shellHeaderTitle("/reels"), "Мысли");
   assert.equal(shellHeaderTitle("/reels/abc"), "Мысль");
   assert.equal(shellHeaderTitle("/profile"), "Профиль");

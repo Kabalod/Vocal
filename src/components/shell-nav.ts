@@ -13,7 +13,7 @@ export function shellBack(pathname: string): { href: string; label: string } | n
     return { href: "/reels", label: "Мысли" };
   }
   if (pathname.startsWith("/jobs/")) {
-    return { href: "/history", label: "История" };
+    return { href: "/reels", label: "Мысли" };
   }
   if (pathname === "/" || pathname === "/history" || pathname === "/settings") {
     return { href: "/reels", label: "Мысли" };
