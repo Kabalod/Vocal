@@ -11,6 +11,12 @@ export function abortDialogueRequest(controller: AbortController | null | undefi
   controller?.abort();
 }
 
+export function isDialogueAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException || error instanceof Error) && error.name === "AbortError"
+  );
+}
+
 export type DialogueVoiceGate = {
   recording: boolean;
   finalizing: boolean;

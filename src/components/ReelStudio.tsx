@@ -4,12 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RecordingView } from "@/components/RecordingView";
 import { StudioJobWatch } from "@/components/StudioJobWatch";
-import { ReelContextForm } from "@/components/ReelContextForm";
 import { ReelStudioFrame } from "@/components/ReelStudioFrame";
 import { ReelTakes } from "@/components/ReelTakes";
 import { ScriptEditor } from "@/components/ScriptEditor";
-import { TakeComparison } from "@/components/TakeComparison";
-import { CompletionSummary } from "@/components/CompletionSummary";
 import { ThoughtDialogue } from "@/components/ThoughtDialogue";
 import { ThoughtStudioHeader } from "@/components/ThoughtStudioHeader";
 import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
@@ -142,26 +139,17 @@ export function ReelStudio({ reelId }: { reelId: string }) {
     return <ShellError message={loadError ?? "Не удалось открыть мысль."} onRetry={() => void loadThought()} />;
   }
 
+  const showTakes = recording || tab === "takes";
+
   return (
     <>
-    <ReelTakes
-      reelId={reelId}
-      reloadToken={takesTick}
-      canRecord={hasReadyScript}
-      recordBlockedReason="Сначала нужна готовая версия сценария"
-      recordScriptId={selectedScriptId}
-      onTakeJobStarted={setWatchJobId}
-      onStartVoiceRecord={requestRecording}
-      thoughtCompleted={thoughtStatus === "completed"}
-      onChanged={() => setTakesTick((value) => value + 1)}
-    >
-      {({ media }) => (
         <ReelStudioFrame
           header={<ThoughtStudioHeader title={thoughtTitle} status={thoughtStatus} />}
-          tab={tab}
+          tab={recording ? "takes" : tab}
           onTab={changeTab}
           hideTabs={recording}
           takes={
+            showTakes ? (
             recording && selectedScriptId ? (
               <RecordingView
                 reelId={reelId}
@@ -176,22 +164,29 @@ export function ReelStudio({ reelId }: { reelId: string }) {
                 }}
               />
             ) : (
-              <div className="space-y-8">
-                {watchJobId ? <StudioJobWatch jobId={watchJobId} onSettled={refreshStudioAfterJob} /> : null}
-                {media}
-                <CompletionSummary
-                  reelId={reelId}
-                  reloadToken={takesTick + scriptTick}
-                  onPickTake={() => changeTab("takes")}
-                  onPickScript={() => changeTab("script")}
-                  onStatusChange={setThoughtStatus}
-                />
-                <ReelContextForm reelId={reelId} />
-                <TakeComparison reelId={reelId} />
-              </div>
+              <ReelTakes
+                reelId={reelId}
+                reloadToken={takesTick}
+                canRecord={hasReadyScript}
+                recordBlockedReason="Сначала нужна готовая версия сценария"
+                recordScriptId={selectedScriptId}
+                onTakeJobStarted={setWatchJobId}
+                onStartVoiceRecord={requestRecording}
+                thoughtCompleted={thoughtStatus === "completed"}
+                onChanged={() => setTakesTick((value) => value + 1)}
+              >
+                {({ media }) => (
+                  <div className="space-y-8">
+                    {watchJobId ? <StudioJobWatch jobId={watchJobId} onSettled={refreshStudioAfterJob} /> : null}
+                    {media}
+                  </div>
+                )}
+              </ReelTakes>
             )
+            ) : null
           }
           script={
+            tab === "script" && !recording ? (
             <ScriptEditor
               reelId={reelId}
               reloadToken={scriptTick}
@@ -199,8 +194,10 @@ export function ReelStudio({ reelId }: { reelId: string }) {
               onHelpWithScript={helpWithScript}
               onChanged={() => setScriptTick((value) => value + 1)}
             />
+            ) : null
           }
           dialog={
+            tab === "dialog" && !recording ? (
             <ThoughtDialogue
               key={`${reelId}:${dialogTick}`}
               reelId={reelId}
@@ -226,10 +223,9 @@ export function ReelStudio({ reelId }: { reelId: string }) {
                 });
               }}
             />
+            ) : null
           }
         />
-      )}
-    </ReelTakes>
       <VocalModal
         open={draftPrompt}
         title="Сначала закройте черновик"

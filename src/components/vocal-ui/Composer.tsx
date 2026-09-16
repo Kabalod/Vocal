@@ -11,6 +11,7 @@ export function Composer({
   onChange,
   onSend,
   onMic,
+  micLabel = "Записать голос",
   clearOnSend = true,
 }: {
   placeholder?: string;
@@ -20,6 +21,7 @@ export function Composer({
   onChange?: (value: string) => void;
   onSend?: (text: string) => void;
   onMic?: () => void;
+  micLabel?: string;
   clearOnSend?: boolean;
 }) {
   const fieldId = useId();
@@ -59,7 +61,7 @@ export function Composer({
         }}
       />
       <div className="flex items-center justify-end gap-2">
-        <IconButton variant="microphone" label="Записать голос" disabled={disabled} onClick={onMic}>
+        <IconButton variant="microphone" label={micLabel} disabled={disabled} onClick={onMic}>
           <IconMic />
         </IconButton>
         <ActionButton type="submit" variant="primary" disabled={!canSend} disabledReason={!canSend ? "Введите текст" : undefined}>

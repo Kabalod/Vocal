@@ -37,15 +37,13 @@ export function ReelStudioFrame({
       )}
 
       <div className="min-w-0">
-        <section hidden={tab !== "takes"} aria-label="Дубли">
-          {takes}
-        </section>
-        <section hidden={tab !== "dialog"} aria-label="Диалог с Vocal">
-          {dialog}
-        </section>
-        <section hidden={tab !== "script"} aria-label="Сценарий">
-          {script}
-        </section>
+        {tab === "takes" ? (
+          <section aria-label="Дубли">{takes}</section>
+        ) : tab === "dialog" ? (
+          <section aria-label="Диалог с Vocal">{dialog}</section>
+        ) : (
+          <section aria-label="Сценарий">{script}</section>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,7 @@ import {
   canSendDialogueText,
   canStartDialogueRecording,
   dialogueComposerLocked,
+  isDialogueAbortError,
   retainDialogueSendKey,
 } from "../src/lib/dialogue-client";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
@@ -273,4 +274,24 @@ test("leaving a dialogue fetch aborts the controller", () => {
   abortDialogueRequest(controller);
   assert.equal(aborted, true);
   abortDialogueRequest(null);
+  assert.equal(isDialogueAbortError(new DOMException("Aborted", "AbortError")), true);
+  assert.equal(isDialogueAbortError(new Error("network")), false);
+});
+
+test("composer voice reply posts to dialogue, never takes, and abort is not an error", () => {
+  const ui = readFileSync(path.join(repoRoot, "src/components/ThoughtDialogue.tsx"), "utf8");
+  const studio = readFileSync(path.join(repoRoot, "src/components/ReelStudio.tsx"), "utf8");
+  const voice = readFileSync(path.join(repoRoot, "src/lib/dialogue.ts"), "utf8");
+  assert.match(ui, /\/api\/thoughts\/\$\{reelId\}\/dialogue/);
+  assert.match(ui, /isDialogueAbortError/);
+  assert.match(ui, /micLabel="Ответить голосом"/);
+  assert.match(ui, /Повторить/);
+  assert.equal(ui.includes("/api/reels/${reelId}/takes"), false);
+  assert.equal(ui.includes("/api/takes/"), false);
+  assert.match(voice, /return sendDialogueMessage/);
+  assert.equal(voice.includes("createTake"), false);
+  assert.match(studio, /tab === "dialog" && !recording/);
+  assert.equal(studio.includes("TakeComparison"), false);
+  assert.equal(studio.includes("ReelContextForm"), false);
+  assert.equal(studio.includes("CompletionSummary"), false);
 });

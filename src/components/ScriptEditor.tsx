@@ -204,7 +204,7 @@ export function ScriptEditor({
             : "Готовые версии только для чтения. Правка начинается отдельной командой."}
         </p>
       </div>
-      {error ? <ShellError message={error} /> : null}
+      {error ? <ShellError message={error} onRetry={() => void load()} /> : null}
       {snap.status && !snap.saving ? <p className="text-sm text-muted">{snap.status}</p> : null}
       {workspace ? (
         <ScriptVersionTimeline

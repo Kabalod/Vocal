@@ -17,10 +17,12 @@ import {
   stopRecorderIfActive,
   type VoiceCaptureSession,
 } from "@/lib/media-session";
+import { ShellError, ShellLoading } from "@/components/shell-status";
 import {
   abortDialogueRequest,
   canSendDialogueText,
   canStartDialogueRecording,
+  isDialogueAbortError,
   retainDialogueSendKey,
 } from "@/lib/dialogue-client";
 import type { DialogueMessageDto, DialoguePageDto } from "@/types/dialogue";
@@ -126,6 +128,7 @@ export function ThoughtDialogue({
         cache: "no-store",
         signal: controller.signal,
       });
+      if (controller.signal.aborted) return;
       const data = (await res.json()) as DialoguePageDto & { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить диалог.");
       applyPage(data, cursor ? "prepend" : "replace");
@@ -133,8 +136,18 @@ export function ThoughtDialogue({
     [applyPage, reelId],
   );
 
+  const refreshHistory = useCallback(async () => {
+    setError(null);
+    try {
+      await load();
+    } catch (err) {
+      if (isDialogueAbortError(err)) return;
+      setError(err instanceof Error ? err.message : "Ошибка.");
+    }
+  }, [load]);
+
   useEffect(() => {
-    void load().catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."));
+    void refreshHistory();
     return () => {
       abortDialogueRequest(fetchRef.current);
       cancelVoiceCaptureSession(sessionRef.current);
@@ -143,7 +156,7 @@ export function ThoughtDialogue({
       stopMediaStream(streamRef.current);
       if (timerRef.current) window.clearInterval(timerRef.current);
     };
-  }, [load]);
+  }, [refreshHistory]);
 
   useEffect(() => {
     const node = scrollerRef.current;
@@ -185,7 +198,7 @@ export function ThoughtDialogue({
       textKeyRef.current = null;
       onDraftChange("");
     } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return;
+      if (isDialogueAbortError(err)) return;
       setError(err instanceof Error ? err.message : "Ошибка.");
     } finally {
       setSending(false);
@@ -307,7 +320,7 @@ export function ThoughtDialogue({
       voiceKeyRef.current = null;
       applyPage(data, "replace");
     } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return;
+      if (isDialogueAbortError(err)) return;
       setError(err instanceof Error ? err.message : "Ошибка.");
       setVoiceError(true);
     } finally {
@@ -316,7 +329,7 @@ export function ThoughtDialogue({
   }
 
   const messages = page?.messages ?? [];
-  const empty = messages.length === 0 && !page?.analyzing;
+  const empty = Boolean(page) && messages.length === 0 && !page?.analyzing;
 
   return (
     <section className="flex min-h-[28rem] flex-col" aria-label="Диалог с Vocal">
@@ -342,7 +355,10 @@ export function ThoughtDialogue({
                   .then(() => {
                     if (node) node.scrollTop = node.scrollHeight - before;
                   })
-                  .catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."))
+                  .catch((err: unknown) => {
+                    if (isDialogueAbortError(err)) return;
+                    setError(err instanceof Error ? err.message : "Ошибка.");
+                  })
                   .finally(() => setLoadingOlder(false));
               }}
             >
@@ -350,6 +366,7 @@ export function ThoughtDialogue({
             </ActionButton>
           </div>
         ) : null}
+        {page === null && !error ? <ShellLoading label="Загрузка диалога…" /> : null}
         {empty ? (
           <EmptyState title="Пока нет переписки" description="Напишите или скажите мысль — Vocal ответит здесь." />
         ) : null}
@@ -379,8 +396,23 @@ export function ThoughtDialogue({
         </div>
       ) : null}
       {error ? (
-        <div className="mt-2 space-y-1">
-          <InlineError message={error} />
+        <div className="mt-2 space-y-2">
+          {page === null ? (
+            <ShellError message={error} onRetry={() => void refreshHistory()} />
+          ) : (
+            <>
+              <InlineError message={error} />
+              <ActionButton
+                variant="compact"
+                onClick={() => {
+                  if (draft.trim()) void sendText(draft);
+                  else void refreshHistory();
+                }}
+              >
+                Повторить
+              </ActionButton>
+            </>
+          )}
           {voiceError ? (
             <p className="text-sm text-muted">Можно записать голос заново или отправить ту же мысль текстом.</p>
           ) : null}
@@ -425,6 +457,7 @@ export function ThoughtDialogue({
             clearOnSend={false}
             onSend={(text) => void sendText(text)}
             onMic={() => void startMic()}
+            micLabel="Ответить голосом"
           />
         )}
       </div>
