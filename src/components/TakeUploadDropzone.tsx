@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { MAX_UPLOAD_MB } from "@/lib/constants";
+import { clientThoughtMediaError } from "@/lib/media-session";
 import {
   ABORT_TAKE_UPLOAD_LEAVE_TEXT,
   settleStudioTakeUpload,
@@ -43,6 +45,12 @@ export function TakeUploadDropzone({
 
   async function onFile(file: File | null) {
     if (!file || busy || disabled) return;
+    const inputType = videoOnly ? "video" : kind;
+    const local = clientThoughtMediaError(file, inputType, MAX_UPLOAD_MB);
+    if (local) {
+      setError(local);
+      return;
+    }
     setBusy(true);
     setError(null);
     const key = crypto.randomUUID();

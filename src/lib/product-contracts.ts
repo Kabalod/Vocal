@@ -1,6 +1,6 @@
 import { VOCAL_USER_STATUSES } from "@/components/vocal-ui/kit";
 import { decidePortraitComplete } from "@/lib/profile-portrait";
-import { studioRecordGate } from "@/lib/recording-session";
+import { studioRecordGate, takeProcessRequiresScript } from "@/lib/recording-session";
 import type { ProfileFieldValue } from "@/types/profile";
 
 /** Canon P13–P16 map onto later R phases. This file is only R1 data contracts. */
@@ -38,4 +38,8 @@ export function unfinishedAmendPublishesPortrait(fields: ProfileFieldValue[]): b
 
 export function scriptlessRecordingAllowed(): boolean {
   return studioRecordGate({ hasReadyScript: false, hasDraft: false }) === "ok";
+}
+
+export function scriptlessTakeProcessAllowed(): boolean {
+  return !takeProcessRequiresScript() && scriptlessRecordingAllowed();
 }

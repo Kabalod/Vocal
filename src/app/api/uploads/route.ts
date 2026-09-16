@@ -8,6 +8,7 @@ import { ReelError, createReel, createTake } from "@/lib/reels";
 import { toJobDto } from "@/lib/serialize";
 import { ensureStorageDirs, videoPathFor } from "@/lib/storage";
 import { saveUploadedTake } from "@/lib/takes";
+import { canProcessSavedTake } from "@/lib/recording-session";
 import { isTakeInputType } from "@/types/reel";
 
 export const runtime = "nodejs";
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
         scriptVersionId: scriptVersionId || undefined,
       });
       let job = null;
-      if (shouldProcess && take.mediaStatus === "ready" && take.hasFile) {
+      if (shouldProcess && canProcessSavedTake(take)) {
         const { ensureJobForTake } = await import("@/lib/thought-media");
         job = await ensureJobForTake(take.id, file.name);
         enqueueJob(job.id);

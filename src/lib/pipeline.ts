@@ -75,12 +75,19 @@ async function drain() {
   }
 }
 
-function classifyError(error: unknown, stage: string) {
+export function classifyPipelineError(error: unknown, stage: string) {
   const err = error as { code?: string; message?: string; status?: number };
   let code = err.code ?? "PIPELINE";
   let message = err.message ?? "Неизвестная ошибка обработки.";
 
-  if (isGroqTokenLimitError(error) || err.status === 429) {
+  if (err.code === "TOO_LONG") {
+    code = "TOO_LONG";
+  } else if (err.code === "VIDEO_MISSING") {
+    code = "VIDEO_MISSING";
+  } else if (/Таймаут/i.test(message)) {
+    code = "MEDIA_TIMEOUT";
+    message = "Обработка файла слишком долго. Нажмите «Повторить».";
+  } else if (isGroqTokenLimitError(error) || err.status === 429) {
     code = "GROQ_RATE_LIMIT";
     message = "Лимит Groq (токены или частота). Подождите минуту и нажмите «Повторить».";
   } else if (err.status === 413) {
@@ -110,7 +117,7 @@ function classifyError(error: unknown, stage: string) {
 }
 
 async function fail(jobId: string, error: unknown, stage: string) {
-  const { code, message } = classifyError(error, stage);
+  const { code, message } = classifyPipelineError(error, stage);
   await prisma.job.update({
     where: { id: jobId },
     data: {
@@ -290,7 +297,7 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
     await completeJob(jobId);
     return claimed;
   } catch (error) {
-    console.error("Job failed", jobId, classifyError(error, stage).code);
+    console.error("Job failed", jobId, classifyPipelineError(error, stage).code);
     await fail(jobId, error, stage);
     await releaseJobLease(jobId);
     return claimed;

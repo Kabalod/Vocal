@@ -11,6 +11,7 @@ import {
   ALLOWED_EXTENSIONS,
   MAX_UPLOAD_MB,
 } from "@/lib/config";
+import { JOB_LEASE_MS } from "@/lib/jobs";
 import {
   TAKE_NOTE_MAX,
   TAKE_TEXT_MAX,
@@ -145,6 +146,20 @@ const defaultUploadIo: TakeUploadIo = {
   unlink: (dest) => unlink(dest),
 };
 
+export const TAKE_UPLOAD_STALE_MS = JOB_LEASE_MS;
+
+export function takeUploadClaimable(
+  take: { mediaStatus: string; storedPath: string | null; createdAt: Date },
+  now: Date,
+  staleMs = TAKE_UPLOAD_STALE_MS,
+): boolean {
+  if (take.mediaStatus === "ready") return false;
+  if (take.mediaStatus === "failed") return true;
+  if (take.mediaStatus !== "pending") return false;
+  if (!take.storedPath) return true;
+  return now.getTime() - take.createdAt.getTime() >= staleMs;
+}
+
 async function waitForSettledUpload(takeId: string): Promise<TakeDto> {
   for (let attempt = 0; attempt < 80; attempt++) {
     const row = await prisma.take.findUnique({ where: { id: takeId }, include: takeInclude });
@@ -166,6 +181,7 @@ export async function saveUploadedTake(
     authorNote?: string;
     idempotencyKey?: string;
     scriptVersionId?: string;
+    now?: Date;
   },
   io: TakeUploadIo = defaultUploadIo,
 ): Promise<TakeDto> {
@@ -199,18 +215,25 @@ export async function saveUploadedTake(
     scriptVersionId: options.scriptVersionId,
   });
 
-  if (take.mediaStatus === "ready" && take.storedPath) {
+  const now = options.now ?? new Date();
+  const current = await prisma.take.findUnique({ where: { id: take.id } });
+  if (!current) throw new ReelError("Дубль не найден.", "TAKE_NOT_FOUND", 404);
+  if (current.mediaStatus === "ready" && current.storedPath) {
     const dto = await getTakeDto(take.id);
     if (!dto) throw new ReelError("Дубль не найден.", "TAKE_NOT_FOUND", 404);
     return dto;
   }
+  if (!takeUploadClaimable(current, now)) {
+    return waitForSettledUpload(take.id);
+  }
 
   const dest = takeMediaPathFor(take.id, take.originalName || options.file.name, options.inputType);
+  const staleBefore = new Date(now.getTime() - TAKE_UPLOAD_STALE_MS);
   const claimed = await prisma.take.updateMany({
     where: {
       id: take.id,
       mediaStatus: { in: ["pending", "failed"] },
-      storedPath: null,
+      OR: [{ storedPath: null }, { mediaStatus: "failed" }, { createdAt: { lte: staleBefore } }],
     },
     data: {
       mediaStatus: "pending",

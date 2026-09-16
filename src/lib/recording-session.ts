@@ -50,6 +50,14 @@ export function studioRecordGate(input: { hasReadyScript: boolean; hasDraft: boo
   return "ok";
 }
 
+export function takeProcessRequiresScript(): boolean {
+  return false;
+}
+
+export function canProcessSavedTake(take: { mediaStatus: string; hasFile: boolean }): boolean {
+  return take.mediaStatus === "ready" && take.hasFile;
+}
+
 export function studioJobPhase(job: { status: string; stage?: string | null } | null): "saved" | "stt" | "analysis" | "done" | "error" {
   if (!job) return "saved";
   if (job.status === "done") return "done";

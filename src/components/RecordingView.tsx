@@ -12,12 +12,14 @@ import {
   detachRecorderHandlers,
   formatRecordingDuration,
   microphonePermissionMessage,
+  clientThoughtMediaError,
   previewUrlIfSessionActive,
   revokePreviewUrl,
   stopMediaStream,
   stopRecorderIfActive,
   type VoiceCaptureSession,
 } from "@/lib/media-session";
+import { MAX_UPLOAD_MB } from "@/lib/constants";
 import {
   ABORT_TAKE_UPLOAD_LEAVE_TEXT,
   applyLateTakeUploadResult,
@@ -215,6 +217,12 @@ export function RecordingView({
     setError(null);
     const ext = blob.type.includes("mp4") ? "m4a" : "webm";
     const file = new File([blob], `take.${ext}`, { type: blob.type || "audio/webm" });
+    const local = clientThoughtMediaError(file, "audio", MAX_UPLOAD_MB);
+    if (local) {
+      setPhase("preview");
+      setError(local);
+      return;
+    }
     const key = crypto.randomUUID();
     const form = new FormData();
     form.set("file", file);
