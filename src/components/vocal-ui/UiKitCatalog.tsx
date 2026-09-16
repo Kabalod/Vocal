@@ -20,8 +20,8 @@ import { StatusBadge } from "@/components/vocal-ui/StatusBadge";
 
 const STUDIO_TABS = [
   { id: "takes", label: "Дубли" },
-  { id: "script", label: "Сценарий" },
   { id: "dialog", label: "Диалог" },
+  { id: "script", label: "Сценарий" },
 ] as const;
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

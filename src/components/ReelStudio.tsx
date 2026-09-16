@@ -1,24 +1,35 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { RecordingView } from "@/components/RecordingView";
 import { StudioJobWatch } from "@/components/StudioJobWatch";
 import { ReelContextForm } from "@/components/ReelContextForm";
 import { ReelStudioFrame } from "@/components/ReelStudioFrame";
 import { ReelTakes } from "@/components/ReelTakes";
-import { ReelWorkspace } from "@/components/ReelWorkspace";
 import { ScriptEditor } from "@/components/ScriptEditor";
 import { TakeComparison } from "@/components/TakeComparison";
 import { CompletionSummary } from "@/components/CompletionSummary";
 import { ThoughtDialogue } from "@/components/ThoughtDialogue";
+import { ThoughtStudioHeader } from "@/components/ThoughtStudioHeader";
 import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
+import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
 import { newDialogueIdempotencyKey } from "@/lib/dialogue-client";
-import { readStudioTab, writeStudioTab, type StudioMobileTab } from "@/components/reel-studio";
+import {
+  parseStudioTab,
+  studioThoughtHref,
+  writeStudioTab,
+  type StudioMobileTab,
+} from "@/components/reel-studio";
 import type { ReelStatus } from "@/types/reel";
 import type { ScriptWorkspaceDto } from "@/types/script";
 
 export function ReelStudio({ reelId }: { reelId: string }) {
-  const [tab, setTab] = useState<StudioMobileTab>("script");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab = parseStudioTab(searchParams.get("tab"));
+  const [load, setLoad] = useState<"loading" | "missing" | "error" | "ok">("loading");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [scriptTick, setScriptTick] = useState(0);
   const [dialogTick, setDialogTick] = useState(0);
@@ -50,25 +61,44 @@ export function ReelStudio({ reelId }: { reelId: string }) {
     setScriptNumber(selected?.number ?? null);
   }
 
+  const loadThought = useCallback(async () => {
+    setLoad("loading");
+    setLoadError(null);
+    try {
+      const res = await fetch(`/api/reels/${reelId}`, { cache: "no-store" });
+      const data = (await res.json()) as {
+        reel?: { title?: string; status?: ReelStatus };
+        error?: string;
+        code?: string;
+      };
+      if (res.status === 404 || data.code === "REEL_NOT_FOUND") {
+        setLoad("missing");
+        return;
+      }
+      if (!res.ok || !data.reel) throw new Error(data.error ?? "Не удалось открыть мысль.");
+      setThoughtTitle(data.reel.title ?? "Мысль");
+      if (data.reel.status) setThoughtStatus(data.reel.status);
+      setLoad("ok");
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Ошибка.");
+      setLoad("error");
+    }
+  }, [reelId]);
+
   useEffect(() => {
-    const wide = window.matchMedia("(min-width: 75rem)").matches;
-    setTab(readStudioTab(reelId, wide ? "script" : "dialog"));
+    void loadThought();
+  }, [loadThought]);
+
+  useEffect(() => {
     void fetch(`/api/reels/${reelId}/scripts`, { cache: "no-store" })
       .then((res) => res.json())
       .then((data: ScriptWorkspaceDto) => applyWorkspace(data))
       .catch(() => undefined);
-    void fetch(`/api/reels/${reelId}`, { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data: { reel?: { title?: string; status?: ReelStatus } }) => {
-        if (data.reel?.title) setThoughtTitle(data.reel.title);
-        if (data.reel?.status) setThoughtStatus(data.reel.status);
-      })
-      .catch(() => undefined);
   }, [reelId, scriptTick]);
 
   function changeTab(next: StudioMobileTab) {
-    setTab(next);
     writeStudioTab(reelId, next);
+    router.replace(studioThoughtHref(reelId, next), { scroll: false });
   }
 
   function openRecording() {
@@ -96,7 +126,20 @@ export function ReelStudio({ reelId }: { reelId: string }) {
     const data = (await res.json()) as { error?: string };
     if (!res.ok) throw new Error(data.error ?? "Не удалось попросить помощь.");
     setDialogTick((value) => value + 1);
-    if (!window.matchMedia("(min-width: 75rem)").matches) changeTab("dialog");
+    changeTab("dialog");
+  }
+
+  if (load === "loading") return <ShellLoading label="Загрузка мысли…" />;
+  if (load === "missing") {
+    return (
+      <ShellEmpty
+        title="Мысль не найдена"
+        description="Проверьте ссылку или вернитесь к списку. Это не сохранённая мысль."
+      />
+    );
+  }
+  if (load === "error") {
+    return <ShellError message={loadError ?? "Не удалось открыть мысль."} onRetry={() => void loadThought()} />;
   }
 
   return (
@@ -114,7 +157,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
     >
       {({ media }) => (
         <ReelStudioFrame
-          header={<ReelWorkspace key={`${reelId}:${thoughtStatus}`} id={reelId} />}
+          header={<ThoughtStudioHeader title={thoughtTitle} status={thoughtStatus} />}
           tab={tab}
           onTab={changeTab}
           hideTabs={recording}
@@ -166,7 +209,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
               hasReadyScript={hasReadyScript}
               onTransferred={() => {
                 setScriptTick((value) => value + 1);
-                if (!window.matchMedia("(min-width: 75rem)").matches) changeTab("script");
+                changeTab("script");
               }}
               thoughtCompleted={thoughtStatus === "completed"}
               onGoRecord={requestRecording}
