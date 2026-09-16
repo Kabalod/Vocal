@@ -71,7 +71,7 @@ test("release routes: thought, dialogue, draft, finals, profile context, usage, 
     await import("../src/lib/dialogue");
   const { patchScriptDraft, finalizeScriptDraft, setFinalScript, listScriptWorkspace } =
     await import("../src/lib/scripts");
-  const { skipProfileDialogue, startProfileDialogue, sendProfileMessage, getProfileWorkspace } =
+  const { skipProfileDialogue, startProfileDialogue, sendProfileMessage, confirmProfilePortrait } =
     await import("../src/lib/profile-dialogue");
   const { saveReelContext, getReelContext } = await import("../src/lib/reel-context");
   const { buildAiUsageReport } = await import("../src/lib/ai/usage-report");
@@ -169,7 +169,7 @@ test("release routes: thought, dialogue, draft, finals, profile context, usage, 
       usage: { promptTokens: 3, completionTokens: 2 },
     }),
   );
-  const portrait = await getProfileWorkspace();
+  const portrait = await confirmProfilePortrait();
   assert.equal(portrait.phase, "portrait");
 
   const { reel: second } = await createThoughtFromText({

@@ -63,6 +63,7 @@ test("R6 keeps confirmed portrait in runtime and drops amend drafts", () => {
       understood: "хочу другое",
       openQuestions: [],
       draftFields: draft,
+      readyToConfirm: false,
     },
     dialogueSessionStartId: null,
   };
@@ -131,6 +132,7 @@ test("thought A prompt does not include thought B or amend draft", async (t) => 
       understood: "другое",
       openQuestions: [],
       draftFields: draft,
+      readyToConfirm: false,
     },
     dialogueSessionStartId: null,
   });

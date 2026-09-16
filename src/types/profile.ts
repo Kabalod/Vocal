@@ -175,6 +175,7 @@ export interface ProfilePendingChange {
   understood: string;
   openQuestions: string[];
   draftFields: ProfileFieldValue[];
+  readyToConfirm: boolean;
 }
 
 export interface ProfileWorkspaceDto {
@@ -182,9 +183,12 @@ export interface ProfileWorkspaceDto {
   skipped: boolean;
   supplementing: boolean;
   pendingChange: boolean;
+  awaitingConfirm: boolean;
   pending: ProfilePendingChange | null;
   mode: ProfileDialogueMode | null;
   portrait: PortraitDto | null;
+  draftPortrait: PortraitDto | null;
+  currentQuestion: string | null;
   applyError: string | null;
   profile: ProfileDto;
 }

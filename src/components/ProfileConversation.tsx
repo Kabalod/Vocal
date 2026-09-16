@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Portrait } from "@/components/Portrait";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
@@ -39,7 +40,7 @@ function MessageBubble({ message }: { message: DialogueMessageDto }) {
       <p className="mb-1 text-xs text-muted">{mine ? "Вы" : "Vocal"}</p>
       <div
         className={`break-words rounded-2xl border px-3 py-2 text-sm leading-relaxed ${
-          mine ? "border-line bg-[#201D18]" : "border-line bg-surface"
+          mine ? "border-line bg-surface-raised" : "border-line bg-surface"
         }`}
       >
         {message.voice ? (
@@ -54,7 +55,9 @@ function MessageBubble({ message }: { message: DialogueMessageDto }) {
 export function ProfileConversation() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [stuck, setStuck] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -86,7 +89,7 @@ export function ProfileConversation() {
       cache: "no-store",
       signal: controller.signal,
     });
-    const data = (await res.json()) as Workspace & { error?: string };
+    const data = (await res.json()) as Workspace & { error?: string; code?: string };
     if (!res.ok) throw new Error(data.error ?? "Не удалось открыть профиль.");
     if (cursor) {
       setWorkspace((prev) => {
@@ -108,7 +111,10 @@ export function ProfileConversation() {
   }, [applyWorkspace]);
 
   useEffect(() => {
-    void load().catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."));
+    void load().catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : "Ошибка.");
+      setErrorCode("NETWORK");
+    });
     return () => {
       abortDialogueRequest(fetchRef.current);
       cancelVoiceCaptureSession(sessionRef.current);
@@ -143,8 +149,10 @@ export function ProfileConversation() {
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    const data = (await res.json()) as Workspace & { error?: string };
-    if (!res.ok) throw new Error(data.error ?? "Не удалось отправить.");
+    const data = (await res.json()) as Workspace & { error?: string; code?: string };
+    if (!res.ok) {
+      throw Object.assign(new Error(data.error ?? "Не удалось отправить."), { code: data.code ?? "SAVE" });
+    }
     applyWorkspace(data);
   }
 
@@ -152,6 +160,7 @@ export function ProfileConversation() {
     if (!canSendDialogueText({ recording, finalizing, sending })) return;
     setSending(true);
     setError(null);
+    setErrorCode(null);
     setVoiceError(false);
     textKeyRef.current = retainDialogueSendKey(textKeyRef.current);
     try {
@@ -161,6 +170,7 @@ export function ProfileConversation() {
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Ошибка.");
+      setErrorCode(err && typeof err === "object" && "code" in err && typeof err.code === "string" ? err.code : "SAVE");
     } finally {
       setSending(false);
     }
@@ -267,109 +277,139 @@ export function ProfileConversation() {
       form.set("idempotencyKey", voiceKeyRef.current);
       form.set("voiceDurationLabel", payload.duration);
       const res = await fetch("/api/profile/dialogue", { method: "POST", body: form, signal: controller.signal });
-      const data = (await res.json()) as Workspace & { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Не удалось отправить голос.");
+      const data = (await res.json()) as Workspace & { error?: string; code?: string };
+      if (!res.ok) throw Object.assign(new Error(data.error ?? "Не удалось отправить голос."), { code: data.code ?? "VOICE" });
       voiceKeyRef.current = null;
       lastVoiceRef.current = null;
       applyWorkspace(data);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Ошибка.");
+      setErrorCode(err && typeof err === "object" && "code" in err && typeof err.code === "string" ? err.code : "VOICE");
       setVoiceError(true);
     } finally {
       setSending(false);
     }
   }
 
+  async function runAction(action: "start" | "skip" | "supplement" | "confirm") {
+    if (action === "confirm" && confirming) return;
+    if (action === "confirm") setConfirming(true);
+    setError(null);
+    setErrorCode(null);
+    try {
+      await postJson({ action });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      setError(err instanceof Error ? err.message : "Ошибка.");
+      setErrorCode(err && typeof err === "object" && "code" in err && typeof err.code === "string" ? err.code : "SAVE");
+    } finally {
+      if (action === "confirm") setConfirming(false);
+    }
+  }
+
+  if (!workspace && !error) {
+    return <ProcessingState label="Открываем профиль…" />;
+  }
+
   const phase: ProfilePhase = workspace?.phase ?? "idle";
   const portrait: PortraitDto | null = workspace?.portrait ?? null;
+  const draftPortrait = workspace?.draftPortrait ?? null;
   const messages = workspace?.dialogue.messages ?? [];
   const amending = workspace?.mode === "amend" && phase === "conversation";
+  const awaitingConfirm = Boolean(workspace?.awaitingConfirm);
   const showChat = phase === "conversation";
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6 overflow-x-hidden">
       {phase === "idle" ? (
         <EmptyState
-          title="Портрет для сценариев"
-          description="Ответы нужны, чтобы в вопросах и сценариях учитывать ваши цели, аудиторию, интересы, манеру речи и границы — без чужих догадок. Анкету можно отложить: мысль создать уже можно."
+          title="Портрет автора"
+          description="Короткие ответы помогают Vocal держать тон, аудиторию и границы — чтобы сценарии звучали как вы, а не «для всех»."
           action={
             <div className="flex flex-wrap justify-center gap-2">
-              <ActionButton
-                variant="primary"
-                onClick={() => {
-                  setError(null);
-                  void postJson({ action: "start" }).catch((err: unknown) =>
-                    setError(err instanceof Error ? err.message : "Ошибка."),
-                  );
-                }}
-              >
-                {messages.length > 0 ? "Продолжить разговор" : "Начать разговор"}
+              <ActionButton variant="primary" onClick={() => void runAction("start")}>
+                Начать
               </ActionButton>
-              {messages.length > 0 ? null : (
-                <ActionButton
-                  variant="secondary"
-                  onClick={() => {
-                    setError(null);
-                    void postJson({ action: "skip" }).catch((err: unknown) =>
-                      setError(err instanceof Error ? err.message : "Ошибка."),
-                    );
-                  }}
-                >
-                  Позже
-                </ActionButton>
-              )}
+              <ActionButton variant="secondary" onClick={() => void runAction("skip")}>
+                Позже
+              </ActionButton>
             </div>
           }
         />
       ) : null}
 
-      {phase === "idle" && workspace?.skipped ? (
-        <p className="text-sm text-muted">Можно вернуться к разговору в любой момент. Мысль создавать уже можно.</p>
+      {phase === "idle" ? (
+        <p className="text-center text-sm text-muted">Мысль можно создать и без анкеты — портрет дополните, когда будет удобно.</p>
       ) : null}
 
       {phase === "portrait" ? (
         <div className="space-y-4">
-          {portrait ? <Portrait portrait={portrait} /> : null}
-          {workspace?.pendingChange ? (
-            <p className="text-sm text-muted">Есть незавершённые уточнения. Действующий портрет пока прежний.</p>
+          {portrait ? (
+            <Portrait
+              portrait={portrait}
+              heading="Портрет автора"
+              badge={workspace?.pendingChange ? "Уточняем · портрет пока прежний" : undefined}
+            />
+          ) : (
+            <EmptyState title="Портрет ещё не подтверждён" description="Действующего портрета нет." />
+          )}
+          {awaitingConfirm && draftPortrait ? (
+            <div className="space-y-3">
+              <Portrait portrait={draftPortrait} heading="Черновик" badge="Не действует, пока не подтвердите." />
+              <ActionButton
+                variant="primary"
+                loading={confirming}
+                loadingLabel="Подтверждаем…"
+                onClick={() => void runAction("confirm")}
+              >
+                Подтвердить портрет
+              </ActionButton>
+            </div>
           ) : null}
-          <ActionButton
-            variant="secondary"
-            onClick={() => {
-              setError(null);
-              void postJson({ action: "supplement" }).catch((err: unknown) =>
-                setError(err instanceof Error ? err.message : "Ошибка."),
-              );
-            }}
-          >
-            {workspace?.pendingChange ? "Продолжить изменения" : "Внести изменения"}
+          <ActionButton variant="primary" onClick={() => void runAction("supplement")}>
+            {workspace?.pendingChange ? "Продолжить изменения" : "Дополнить о себе"}
           </ActionButton>
         </div>
       ) : null}
 
       {showChat ? (
-        <section className="flex min-h-[28rem] flex-col" aria-label="Диалог анкеты">
-          {workspace?.skipped === false && messages.some((item) => item.role === "user") === false && !amending ? (
-            <p className="mb-3 text-sm text-muted">Можно прервать и продолжить позже.</p>
+        <section className="flex min-h-[28rem] min-w-0 flex-col" aria-label="Диалог анкеты">
+          {amending && portrait ? (
+            <div className="mb-4 space-y-2">
+              <Portrait portrait={portrait} heading="Действующий портрет" badge="Уточняем · портрет пока прежний" />
+            </div>
           ) : null}
           {workspace?.applyError ? (
             <div className="mb-4">
-              <InlineError message="Новое изменение не применено. Предыдущий портрет сохранён." />
+              <InlineError message="Новое изменение не применено. Предыдущий портрет сохранён." code="APPLY" />
             </div>
           ) : null}
-          {messages.length > 0 && !workspace?.dialogue.analyzing && (!portrait?.completed || amending) ? (
-            <div className="mb-3">
-              <ActionButton
-                variant="compact"
-                onClick={() => {
-                  setError(null);
-                  void postJson({ action: "skip" }).catch((err: unknown) =>
-                    setError(err instanceof Error ? err.message : "Ошибка."),
-                  );
-                }}
+          <div className="mb-3">
+            {amending ? (
+              <ActionButton variant="secondary" onClick={() => void runAction("skip")}>
+                К текущему портрету
+              </ActionButton>
+            ) : (
+              <Link
+                href="/reels"
+                className="vocal-btn inline-flex min-h-11 min-w-11 items-center"
+                aria-label="К мыслям, разговор сохранится"
               >
-                {amending ? "К портрету" : "Продолжить позже"}
+                К мыслям
+              </Link>
+            )}
+          </div>
+          {awaitingConfirm && draftPortrait ? (
+            <div className="mb-4 space-y-3">
+              <Portrait portrait={draftPortrait} heading="Черновик нового портрета" badge="Не действует, пока не подтвердите." />
+              <ActionButton
+                variant="primary"
+                loading={confirming}
+                loadingLabel="Подтверждаем…"
+                onClick={() => void runAction("confirm")}
+              >
+                Подтвердить портрет
               </ActionButton>
             </div>
           ) : null}
@@ -417,7 +457,9 @@ export function ProfileConversation() {
             </div>
           ) : null}
           <div className="mt-3 space-y-2 border-t border-line pt-3">
-            {recording || finalizing ? (
+            {awaitingConfirm ? (
+              <p className="text-sm text-muted">Чтобы сделать черновик действующим, подтвердите портрет.</p>
+            ) : recording || finalizing ? (
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <p className="mr-auto text-sm text-muted">
                   {finalizing ? "Собираем запись…" : `Запись · ${formatRecordingDuration(seconds)}`}
@@ -450,24 +492,30 @@ export function ProfileConversation() {
 
       {error ? (
         <div className="space-y-2">
-          <InlineError message={error} />
-          {voiceError ? (
-            <p className="text-sm text-muted">Можно записать голос заново или отправить ту же мысль текстом.</p>
-          ) : null}
-          <ActionButton
-            variant="compact"
-            onClick={() => {
-              const target = voiceReplyRetryTarget({
-                voiceError,
-                hasVoicePayload: Boolean(lastVoiceRef.current),
-                hasDraft: Boolean(draft.trim()),
-              });
-              if (target === "voice" && lastVoiceRef.current) void postVoiceReply(lastVoiceRef.current);
-              else if (target === "text") void sendText(draft);
-            }}
-          >
-            Повторить
-          </ActionButton>
+          <InlineError
+            message={error}
+            code={errorCode}
+            action={
+              <ActionButton
+                variant="secondary"
+                onClick={() => {
+                  const target = voiceReplyRetryTarget({
+                    voiceError,
+                    hasVoicePayload: Boolean(lastVoiceRef.current),
+                    hasDraft: Boolean(draft.trim()),
+                  });
+                  if (target === "voice" && lastVoiceRef.current) void postVoiceReply(lastVoiceRef.current);
+                  else if (target === "text") void sendText(draft);
+                  else void load().catch((err: unknown) => {
+                    setError(err instanceof Error ? err.message : "Ошибка.");
+                    setErrorCode("NETWORK");
+                  });
+                }}
+              >
+                Повторить
+              </ActionButton>
+            }
+          />
         </div>
       ) : null}
     </div>

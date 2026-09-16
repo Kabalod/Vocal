@@ -38,7 +38,7 @@ export class ProfileDialogueError extends Error {
 }
 
 const FIRST_QUESTION =
-  "Ответы нужны, чтобы в вопросах и сценариях учитывать ваши цели, аудиторию, интересы, манеру речи и границы — без чужих догадок.\n\nМожно пропускать то, о чём не хотите говорить. Если факт можно использовать в тексте ролика — скажите об этом обычными словами.\n\nС чего начнём: зачем вы хотите записывать ролики?";
+  "Короткие ответы помогают Vocal держать тон, аудиторию и границы.\n\nС чего начнём: зачем вы хотите записывать ролики?";
 
 const SUPPLEMENT_PROMPT =
   "Что изменить в портрете? Можно назвать цель, аудиторию, темы, подачу или границы. Если формулировка неоднозначная, я уточню, прежде чем что-то менять.";
@@ -190,8 +190,8 @@ async function healStoredPortrait(stored: Awaited<ReturnType<typeof readStoredPr
 export async function getProfileWorkspace(input: { cursor?: string | null } = {}): Promise<ProfileWorkspaceDto & { dialogue: DialoguePageDto }> {
   const stored = await healStoredPortrait(await readStoredProfilePayload());
   const dialogue = await listProfileDialoguePage(input);
-  const hasMessages = Boolean(dialogue.threadId) && (await prisma.dialogueMessage.count({ where: { threadId: dialogue.threadId } })) > 0;
   const lastAssistant = [...dialogue.messages].reverse().find((item) => item.role === "assistant");
+  const lastQuestion = [...dialogue.messages].reverse().find((item) => item.role === "assistant" && item.kind === "question");
   const published = stored.portrait?.completed ? buildPortrait(stored.fields, true) : null;
   const applyError =
     lastAssistant?.kind === "error" && !isTechnicalErrorBody(lastAssistant.body) && (!published || stored.supplementing)
@@ -202,9 +202,10 @@ export async function getProfileWorkspace(input: { cursor?: string | null } = {}
     phase = "conversation";
   } else if (published) {
     phase = "portrait";
-  } else if (hasMessages && !stored.skipped) {
+  } else if (stored.dialogueSessionStartId) {
     phase = "conversation";
   }
+  const awaitingConfirm = Boolean(stored.pending?.readyToConfirm);
   const mode: ProfileWorkspaceDto["mode"] =
     stored.supplementing || stored.pending?.mode === "amend"
       ? "amend"
@@ -218,9 +219,14 @@ export async function getProfileWorkspace(input: { cursor?: string | null } = {}
     skipped: stored.skipped,
     supplementing: stored.supplementing,
     pendingChange: Boolean(stored.pending && stored.pending.mode === "amend"),
+    awaitingConfirm,
     pending: stored.pending,
     mode,
     portrait: published,
+    draftPortrait: stored.pending?.draftFields
+      ? buildPortrait(stored.pending.draftFields, awaitingConfirm)
+      : null,
+    currentQuestion: lastQuestion?.body ?? null,
     applyError,
     profile: await getProfile(),
     dialogue,
@@ -307,11 +313,17 @@ async function applyPortraitReply(input: {
         if (mode === "amend") {
           if (completed) {
             nextStored = {
-              fields: merged,
+              fields: stored.fields,
               skipped: false,
-              supplementing: false,
-              portrait: buildPortrait(merged, true),
-              pending: null,
+              supplementing: true,
+              portrait: stored.portrait?.completed ? buildPortrait(stored.fields, true) : stored.portrait,
+              pending: {
+                mode: "amend" as const,
+                understood,
+                openQuestions,
+                draftFields: merged,
+                readyToConfirm: true,
+              },
               dialogueSessionStartId: stored.dialogueSessionStartId,
             };
           } else {
@@ -325,6 +337,7 @@ async function applyPortraitReply(input: {
                 understood,
                 openQuestions,
                 draftFields: merged,
+                readyToConfirm: false,
               },
               dialogueSessionStartId: stored.dialogueSessionStartId,
             };
@@ -334,15 +347,14 @@ async function applyPortraitReply(input: {
             fields: merged,
             skipped: false,
             supplementing: false,
-            portrait: buildPortrait(merged, completed),
-            pending: completed
-              ? null
-              : {
-                  mode: "intake" as const,
-                  understood,
-                  openQuestions,
-                  draftFields: merged,
-                },
+            portrait: buildPortrait(merged, false),
+            pending: {
+              mode: "intake" as const,
+              understood,
+              openQuestions,
+              draftFields: merged,
+              readyToConfirm: completed,
+            },
             dialogueSessionStartId: stored.dialogueSessionStartId,
           };
         }
@@ -430,8 +442,51 @@ export async function skipProfileDialogue(): Promise<ProfileWorkspaceDto & { dia
     });
     return getProfileWorkspace();
   }
-  await persistProfilePayload({ ...stored, skipped: true, supplementing: false });
+  await persistProfilePayload({
+    ...stored,
+    skipped: true,
+    supplementing: false,
+  });
   return getProfileWorkspace();
+}
+
+export async function confirmProfilePortrait(): Promise<ProfileWorkspaceDto & { dialogue: DialoguePageDto }> {
+  for (let attempt = 0; attempt < APPLY_RETRIES; attempt++) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        const { stored, revisionId } = await readStoredProfilePayloadTx(tx);
+        if (!stored.pending?.readyToConfirm) {
+          if (stored.portrait?.completed) return;
+          throw new ProfileDialogueError("Пока нечего подтверждать. Продолжите разговор.", "CONFIRM_NOT_READY");
+        }
+        const fields = stored.pending.draftFields;
+        const nextStored = {
+          fields,
+          skipped: false,
+          supplementing: false,
+          portrait: buildPortrait(fields, true),
+          pending: null,
+          dialogueSessionStartId: stored.dialogueSessionStartId,
+        };
+        const revision = await tx.profileRevision.create({
+          data: {
+            profileId: LOCAL_PROFILE_ID,
+            payloadJson: serializeStoredPayload(nextStored),
+          },
+        });
+        const switched = await tx.creatorProfile.updateMany({
+          where: { id: LOCAL_PROFILE_ID, currentRevisionId: revisionId },
+          data: { currentRevisionId: revision.id },
+        });
+        if (switched.count !== 1) throw new ProfileApplyConflict();
+      });
+      return getProfileWorkspace();
+    } catch (error) {
+      if (error instanceof ProfileApplyConflict) continue;
+      throw error;
+    }
+  }
+  throw new ProfileDialogueError("Портрет уже обновился. Повторите подтверждение.", "STALE", 409);
 }
 
 export async function supplementProfileDialogue(): Promise<ProfileWorkspaceDto & { dialogue: DialoguePageDto }> {
@@ -453,12 +508,13 @@ export async function supplementProfileDialogue(): Promise<ProfileWorkspaceDto &
     dialogueSessionStartId,
     pending: stored.pending?.mode === "amend"
       ? stored.pending
-      : {
-          mode: "amend",
-          understood: stored.pending?.understood ?? "",
-          openQuestions: stored.pending?.openQuestions ?? [],
-          draftFields: stored.pending?.draftFields ?? stored.fields,
-        },
+          : {
+              mode: "amend",
+              understood: stored.pending?.understood ?? "",
+              openQuestions: stored.pending?.openQuestions ?? [],
+              draftFields: stored.pending?.draftFields ?? stored.fields,
+              readyToConfirm: stored.pending?.readyToConfirm === true,
+            },
   });
   return getProfileWorkspace();
 }

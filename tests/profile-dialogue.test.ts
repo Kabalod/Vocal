@@ -184,6 +184,7 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
     sendProfileVoice,
     getProfileWorkspace,
     supplementProfileDialogue,
+    confirmProfilePortrait,
   } = await import("../src/lib/profile-dialogue");
   const { GET: getProfile, PUT: putProfile } = await import("../src/app/api/profile/route");
 
@@ -242,7 +243,11 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
     }
   }
   assert.equal(completeCalls, 3);
-  const done = await getProfileWorkspace();
+  const ready = await getProfileWorkspace();
+  assert.equal(ready.awaitingConfirm, true);
+  assert.equal(ready.phase, "conversation");
+  assert.equal(ready.portrait, null);
+  const done = await confirmProfilePortrait();
   assert.equal(done.phase, "portrait");
   assert.equal(done.pendingChange, false);
   assert.ok(done.portrait);
@@ -343,11 +348,15 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
       usage: { promptTokens: 2, completionTokens: 1 },
     }),
   );
-  assert.equal(afterBoundary.phase, "portrait");
-  assert.equal(afterBoundary.pendingChange, false);
-  assert.equal(afterBoundary.profile.fields.find((field) => field.id === "whyRecord")?.text, beforeBoundary);
-  assert.equal(afterBoundary.profile.fields.find((field) => field.id === "boundaries")?.text, "не хочу говорить о теме работы");
-  assert.ok(afterBoundary.portrait?.sections.some((section) => section.id === "boundaries"));
+  assert.equal(afterBoundary.awaitingConfirm, true);
+  assert.equal(afterBoundary.pendingChange, true);
+  assert.equal(afterBoundary.portrait?.sections.find((section) => section.id === "goals")?.text, keptGoals);
+  const confirmedBoundary = await confirmProfilePortrait();
+  assert.equal(confirmedBoundary.phase, "portrait");
+  assert.equal(confirmedBoundary.pendingChange, false);
+  assert.equal(confirmedBoundary.profile.fields.find((field) => field.id === "whyRecord")?.text, beforeBoundary);
+  assert.equal(confirmedBoundary.profile.fields.find((field) => field.id === "boundaries")?.text, "не хочу говорить о теме работы");
+  assert.ok(confirmedBoundary.portrait?.sections.some((section) => section.id === "boundaries"));
 
   const afterClear = await sendProfileMessage(
     { text: "убери границу про работу", idempotencyKey: "clear-bound-1" },
@@ -362,9 +371,10 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
       usage: { promptTokens: 1, completionTokens: 1 },
     }),
   );
-  assert.equal(afterClear.profile.fields.find((field) => field.id === "boundaries")?.text, "");
+  const confirmedClear = await confirmProfilePortrait();
+  assert.equal(confirmedClear.profile.fields.find((field) => field.id === "boundaries")?.text, "");
   assert.equal(
-    afterClear.portrait?.sections.some((section) => section.id === "boundaries"),
+    confirmedClear.portrait?.sections.some((section) => section.id === "boundaries"),
     false,
   );
 
@@ -373,7 +383,7 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
   assert.ok(calls.every((row) => row.reelId === null && row.profileId === LOCAL_PROFILE_ID));
   assert.ok(calls.some((row) => (row.promptTokens ?? 0) + (row.completionTokens ?? 0) > 0));
 
-  const firstRevision = afterClear.profile.currentRevisionId;
+  const firstRevision = confirmedClear.profile.currentRevisionId;
   const { GET: getContext, PUT: putContext } = await import("../src/app/api/reels/[id]/context/route");
   const { createThoughtFromText } = await import("../src/lib/thought-create");
   const { reel } = await createThoughtFromText({
@@ -409,6 +419,7 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
       usage: { promptTokens: 1, completionTokens: 1 },
     }),
   );
+  await confirmProfilePortrait();
   const afterLive = await getContext(new Request("http://vocal.local/api/reels/x/context"), {
     params: Promise.resolve({ id: reel.id }),
   });
@@ -735,6 +746,7 @@ test("incomplete intake resume keeps the current question", async (t) => {
     sendProfileMessage,
     supplementProfileDialogue,
     getProfileWorkspace,
+    confirmProfilePortrait,
   } = await import("../src/lib/profile-dialogue");
   await startProfileDialogue();
   const afterFirst = await sendProfileMessage(
@@ -753,6 +765,9 @@ test("incomplete intake resume keeps the current question", async (t) => {
   );
   assert.ok(afterFirst.dialogue.messages.some((item) => item.body === "Для кого это?"));
   await skipProfileDialogue();
+  const resumedWithoutStart = await getProfileWorkspace();
+  assert.equal(resumedWithoutStart.phase, "conversation");
+  assert.ok(resumedWithoutStart.dialogue.messages.some((item) => item.body === "Для кого это?"));
   const resumed = await startProfileDialogue();
   assert.equal(resumed.phase, "conversation");
   assert.ok(resumed.dialogue.messages.some((item) => item.body === "Записываю, чтобы говорить своими словами."));
@@ -773,7 +788,7 @@ test("incomplete intake resume keeps the current question", async (t) => {
       usage: { promptTokens: 2, completionTokens: 2 },
     }),
   );
-  const portrait = await getProfileWorkspace();
+  const portrait = await confirmProfilePortrait();
   assert.equal(portrait.phase, "portrait");
 
   const amending = await supplementProfileDialogue();

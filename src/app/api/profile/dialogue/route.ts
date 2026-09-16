@@ -10,6 +10,7 @@ import {
   skipProfileDialogue,
   startProfileDialogue,
   supplementProfileDialogue,
+  confirmProfilePortrait,
 } from "@/lib/profile-dialogue";
 
 export const dynamic = "force-dynamic";
@@ -63,6 +64,9 @@ export async function POST(request: Request) {
     }
     if (body.action === "supplement") {
       return NextResponse.json(await supplementProfileDialogue());
+    }
+    if (body.action === "confirm") {
+      return NextResponse.json(await confirmProfilePortrait());
     }
     const workspace = await sendProfileMessage({
       text: body.text ?? "",

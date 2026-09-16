@@ -236,7 +236,7 @@ test("R2 profile amend retry with the same key does not publish twice", async (t
   });
   migrateDeploy(url);
 
-  const { startProfileDialogue, sendProfileMessage, supplementProfileDialogue, getProfileWorkspace } = await import(
+  const { startProfileDialogue, sendProfileMessage, supplementProfileDialogue, getProfileWorkspace, confirmProfilePortrait } = await import(
     "../src/lib/profile-dialogue"
   );
   await startProfileDialogue();
@@ -271,7 +271,12 @@ test("R2 profile amend retry with the same key does not publish twice", async (t
   assert.equal(first.dialogue.messages.filter((item) => item.role === "user").length, 1);
   assert.equal(parallel.dialogue.messages.filter((item) => item.role === "user").length, 1);
   assert.equal(await prisma.dialogueMessage.count({ where: { idempotencyKey: "prof-r2" } }), 1);
-  assert.equal((await getProfileWorkspace()).portrait?.completed, true);
+  assert.equal((await getProfileWorkspace()).awaitingConfirm, true);
+  const published = await confirmProfilePortrait();
+  assert.equal(published.portrait?.completed, true);
+  const againConfirm = await confirmProfilePortrait();
+  assert.equal(againConfirm.portrait?.completed, true);
+  assert.equal(againConfirm.profile.currentRevisionId, published.profile.currentRevisionId);
 
   await supplementProfileDialogue();
   const amend = await sendProfileMessage(

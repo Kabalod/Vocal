@@ -211,6 +211,7 @@ export function parsePending(raw: unknown): ProfilePendingChange | null {
     understood?: unknown;
     openQuestions?: unknown;
     draftFields?: unknown;
+    readyToConfirm?: unknown;
   };
   const mode: ProfileDialogueMode = row.mode === "amend" ? "amend" : "intake";
   const understood = typeof row.understood === "string" ? row.understood : "";
@@ -221,7 +222,7 @@ export function parsePending(raw: unknown): ProfilePendingChange | null {
     Array.isArray(row.draftFields) || (row.draftFields && typeof row.draftFields === "object")
       ? mergeProfileFields(emptyProfileFields(), sanitizePortraitPatch(asFieldPatch(row.draftFields)))
       : emptyProfileFields();
-  return { mode, understood, openQuestions, draftFields };
+  return { mode, understood, openQuestions, draftFields, readyToConfirm: row.readyToConfirm === true };
 }
 
 export function parseStoredPayload(raw: string): StoredProfilePayload {

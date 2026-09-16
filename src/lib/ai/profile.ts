@@ -14,7 +14,9 @@ export const PROFILE_DIALOGUE_SYSTEM = `Ты Vocal. Собираешь или у
 Поля checklist: ${PROFILE_FIELD_IDS.join(", ")}.
 Операции: {"field":"audience","op":"set","text":"…","usage":"understanding"} | {"field":"audience","op":"clear"} | {"field":"audience","op":"usage","usage":"in_text"}.
 Неоднозначное «убери это» не очищай: спроси, что именно убрать, complete=false.
-kind: "clarify" если нужен ещё вопрос, "ready" если можно сохранить результат режима.`;
+Задавай только один смысловой вопрос в reply. Не объединяй аудиторию, темы и границы в одной реплике.
+complete=true и kind=ready означают черновик к явному подтверждению автора, а не уже действующий портрет.
+kind: "clarify" если нужен ещё вопрос, "ready" если можно показать черновик к подтверждению.`;
 
 export const profileReplySchema = z.object({
   reply: z.string().optional(),

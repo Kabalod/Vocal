@@ -3,15 +3,11 @@ import { Panel } from "@/components/vocal-ui/Panel";
 
 export default function ProfilePage() {
   return (
-    <div className="space-y-8">
-      <Panel>
-        <h1 className="font-[family-name:var(--font-display)] text-4xl">Портрет автора</h1>
-        <p className="mt-2 max-w-2xl font-content text-sm text-muted">
-          Один локальный профиль. Vocal собирает портрет в разговоре и применяет изменения сам. Истории и кнопки
-          сохранения нет. Анкета не обязательна, чтобы начать мысль.
-        </p>
+    <div className="min-w-0 max-w-full overflow-x-hidden break-words">
+      <p className="sr-only font-content">Профиль автора</p>
+      <Panel className="min-w-0 overflow-x-hidden border-0 bg-transparent p-0">
+        <ProfileConversation />
       </Panel>
-      <ProfileConversation />
     </div>
   );
 }
