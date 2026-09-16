@@ -41,7 +41,7 @@ export function Composer({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-2">
+    <form onSubmit={submit} className="min-w-0 space-y-2">
       <label className="sr-only" htmlFor={fieldId}>
         Сообщение
       </label>

@@ -165,7 +165,7 @@ model AiCall {
   reviewId           String?
   model              String
   status             String          @default("queued")
-  promptText         String
+  promptText         String // R8: stored for replay; logs/metrics must not print this. Dropping the column is a separate decision.
   inputSnapshotJson  String
   responseText       String?
   resultJson         String?

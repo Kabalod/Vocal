@@ -8,6 +8,7 @@ import { ReelError, createReel, createTake } from "@/lib/reels";
 import { toJobDto } from "@/lib/serialize";
 import { ensureStorageDirs, videoPathFor } from "@/lib/storage";
 import { saveUploadedTake } from "@/lib/takes";
+import { logApiError } from "@/lib/safe-log";
 import { canProcessSavedTake } from "@/lib/recording-session";
 import { isTakeInputType } from "@/types/reel";
 
@@ -96,9 +97,9 @@ export async function POST(request: Request) {
     if (error instanceof ReelError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     }
-    console.error(error);
+    logApiError("uploads", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Не удалось загрузить файл." },
+      { error: "Не удалось загрузить файл.", code: "INTERNAL" },
       { status: 500 },
     );
   }

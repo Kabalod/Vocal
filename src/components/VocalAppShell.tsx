@@ -58,7 +58,7 @@ function NavItem({
       onClick={onNavigate}
       title={collapsed ? label : undefined}
       aria-current={active ? "page" : undefined}
-      className={`relative flex min-h-11 items-center gap-3 rounded-[var(--vocal-radius-control)] px-3 text-sm ${
+      className={`relative flex min-h-11 min-w-11 items-center gap-3 rounded-[var(--vocal-radius-control)] px-3 text-sm ${
         active ? "bg-bg text-text" : "text-muted hover:bg-field hover:text-text"
       } ${collapsed ? "justify-center px-2" : ""}`}
     >
@@ -179,7 +179,11 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
             Меню
           </button>
           {back ? (
-            <Link href={back.href} className="inline-flex min-h-11 shrink-0 items-center text-sm text-muted hover:text-text">
+            <Link
+              href={back.href}
+              aria-label={`Назад: ${back.label}`}
+              className="inline-flex min-h-11 min-w-11 shrink-0 items-center text-sm text-muted hover:text-text"
+            >
               ← {back.label}
             </Link>
           ) : null}

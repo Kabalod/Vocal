@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ReelError } from "@/lib/reels";
+import { logApiError } from "@/lib/safe-log";
 import {
   createEditedRevision,
   listTranscriptBundle,
@@ -12,8 +13,8 @@ function errorResponse(error: unknown) {
   if (error instanceof ReelError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
   }
-  console.error(error);
-  return NextResponse.json({ error: "Не удалось обработать расшифровку." }, { status: 500 });
+  logApiError("takes/transcript", error);
+  return NextResponse.json({ error: "Не удалось обработать расшифровку.", code: "INTERNAL" }, { status: 500 });
 }
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {

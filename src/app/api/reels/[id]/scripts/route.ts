@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ReelError } from "@/lib/reels";
+import { logApiError } from "@/lib/safe-log";
 import {
   acceptScriptProposal,
   listScriptWorkspace,
@@ -18,8 +19,8 @@ function errorResponse(error: unknown) {
   if (error instanceof ReelError || error instanceof ScriptError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
   }
-  console.error(error);
-  return NextResponse.json({ error: "Не удалось обработать сценарий." }, { status: 500 });
+  logApiError("reels/scripts", error);
+  return NextResponse.json({ error: "Не удалось обработать сценарий.", code: "INTERNAL" }, { status: 500 });
 }
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ReelError } from "@/lib/reels";
+import { logApiError } from "@/lib/safe-log";
 import { finalizeScriptDraft, ScriptError } from "@/lib/scripts";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (error instanceof ReelError || error instanceof ScriptError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     }
-    console.error(error);
-    return NextResponse.json({ error: "Не удалось завершить версию." }, { status: 500 });
+    logApiError("reels/scripts/draft/finalize", error);
+    return NextResponse.json({ error: "Не удалось завершить версию.", code: "INTERNAL" }, { status: 500 });
   }
 }

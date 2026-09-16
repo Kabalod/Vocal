@@ -6,6 +6,7 @@ import { extractAudio, probeDuration } from "@/lib/ffmpeg";
 import { isGroqConnectionError, isGroqTokenLimitError } from "@/lib/groq";
 import { claimJob, completeJob, heartbeatJob, listRecoverableJobIds, releaseJobLease, failExhaustedRunningJobs, markJobFailed, EXHAUSTED_JOB_USER_MESSAGE } from "@/lib/jobs";
 import { computeMetrics } from "@/lib/metrics";
+import { safeServerLog } from "@/lib/safe-log";
 import { toCriterionDto } from "@/lib/serialize";
 import { audioPathFor } from "@/lib/storage";
 import { transcribeAudio } from "@/lib/stt";
@@ -297,7 +298,7 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
     await completeJob(jobId);
     return claimed;
   } catch (error) {
-    console.error("Job failed", jobId, classifyPipelineError(error, stage).code);
+    console.error(safeServerLog({ route: "pipeline", jobId, code: classifyPipelineError(error, stage).code }));
     await fail(jobId, error, stage);
     await releaseJobLease(jobId);
     return claimed;

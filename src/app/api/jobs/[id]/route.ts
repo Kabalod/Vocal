@@ -15,7 +15,7 @@ export async function GET(
   });
 
   if (!job) {
-    return NextResponse.json({ error: "Запись не найдена." }, { status: 404 });
+    return NextResponse.json({ error: "Запись не найдена.", code: "JOB_NOT_FOUND" }, { status: 404 });
   }
 
   const { recoverJobIfStale } = await import("@/lib/pipeline");
@@ -26,7 +26,7 @@ export async function GET(
     include: { analysis: true },
   });
   if (!fresh) {
-    return NextResponse.json({ error: "Запись не найдена." }, { status: 404 });
+    return NextResponse.json({ error: "Запись не найдена.", code: "JOB_NOT_FOUND" }, { status: 404 });
   }
 
   return NextResponse.json({ job: toJobWithAnalysis(fresh) });

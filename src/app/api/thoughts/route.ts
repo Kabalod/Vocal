@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ReelError } from "@/lib/reels";
+import { logApiError } from "@/lib/safe-log";
 import { createThoughtFromText } from "@/lib/thought-create";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +10,8 @@ function errorResponse(error: unknown) {
   if (error instanceof ReelError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
   }
-  console.error(error);
-  return NextResponse.json({ error: "Не удалось создать мысль." }, { status: 500 });
+  logApiError("thoughts", error);
+  return NextResponse.json({ error: "Не удалось создать мысль.", code: "INTERNAL" }, { status: 500 });
 }
 
 export async function POST(request: Request) {

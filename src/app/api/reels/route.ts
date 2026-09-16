@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ReelError, createReel, listReels } from "@/lib/reels";
+import { logApiError } from "@/lib/safe-log";
 import { parseReelStatusInput, type ReelListQuery } from "@/types/reel";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +10,8 @@ function errorResponse(error: unknown) {
   if (error instanceof ReelError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
   }
-  console.error(error);
-  return NextResponse.json({ error: "Не удалось обработать запрос." }, { status: 500 });
+  logApiError("reels", error);
+  return NextResponse.json({ error: "Не удалось обработать запрос.", code: "INTERNAL" }, { status: 500 });
 }
 
 export async function GET(request: Request) {

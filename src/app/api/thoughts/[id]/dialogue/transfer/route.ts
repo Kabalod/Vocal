@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { DialogueError, transferDialogueProposal } from "@/lib/dialogue";
 import { ReelError } from "@/lib/reels";
+import { logApiError } from "@/lib/safe-log";
 import { ScriptError } from "@/lib/scripts";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (error instanceof ReelError || error instanceof DialogueError || error instanceof ScriptError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     }
-    console.error(error);
-    return NextResponse.json({ error: "Не удалось перенести предложение." }, { status: 500 });
+    logApiError("thoughts/dialogue/transfer", error);
+    return NextResponse.json({ error: "Не удалось перенести предложение.", code: "INTERNAL" }, { status: 500 });
   }
 }

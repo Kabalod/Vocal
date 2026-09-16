@@ -31,7 +31,7 @@ export function ActionButton({
     <span className="inline-flex max-w-full flex-col items-start gap-1">
       <button
         type={type}
-        className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-[var(--vocal-radius-control)] border px-4 text-sm ${
+        className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-[var(--vocal-radius-control)] border px-4 text-sm ${
           variant === "primary" ? "min-h-12" : ""
         } ${VARIANTS[variant]} ${className}`}
         {...props}

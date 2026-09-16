@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ProfileError } from "@/lib/profile";
 import { getReelContext, saveReelContext } from "@/lib/reel-context";
 import { ReelError } from "@/lib/reels";
+import { logApiError } from "@/lib/safe-log";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,8 +11,8 @@ function errorResponse(error: unknown) {
   if (error instanceof ReelError || error instanceof ProfileError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
   }
-  console.error(error);
-  return NextResponse.json({ error: "Не удалось обработать контекст." }, { status: 500 });
+  logApiError("reels/context", error);
+  return NextResponse.json({ error: "Не удалось обработать контекст.", code: "INTERNAL" }, { status: 500 });
 }
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {

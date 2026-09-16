@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ProfileError, getProfile, saveProfile } from "@/lib/profile";
+import { logApiError } from "@/lib/safe-log";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -8,8 +9,8 @@ function errorResponse(error: unknown) {
   if (error instanceof ProfileError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
   }
-  console.error(error);
-  return NextResponse.json({ error: "Не удалось обработать анкету." }, { status: 500 });
+  logApiError("profile", error);
+  return NextResponse.json({ error: "Не удалось обработать анкету.", code: "INTERNAL" }, { status: 500 });
 }
 
 export async function GET() {

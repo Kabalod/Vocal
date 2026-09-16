@@ -26,7 +26,7 @@ export function ReelStudioFrame({
       {header}
 
       {hideTabs ? null : (
-        <div className="min-w-0 overflow-x-auto">
+        <div className="min-w-0 overflow-x-hidden">
           <SegmentedTabs
             items={STUDIO_TABS}
             value={tab}

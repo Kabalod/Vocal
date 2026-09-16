@@ -13,7 +13,7 @@ export async function POST(
   const { id } = await context.params;
   const job = await prisma.job.findUnique({ where: { id } });
   if (!job) {
-    return NextResponse.json({ error: "Запись не найдена." }, { status: 404 });
+    return NextResponse.json({ error: "Запись не найдена.", code: "JOB_NOT_FOUND" }, { status: 404 });
   }
   if (job.status === "done") {
     return NextResponse.json({ error: "Задача уже выполнена.", code: "JOB_DONE" }, { status: 400 });

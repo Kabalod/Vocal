@@ -25,6 +25,7 @@ export function ThoughtMediaProcessing({
 }) {
   const [phase, setPhase] = useState<Phase>(reelId ? "saved" : "upload");
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [retryKind, setRetryKind] = useState<"stt" | "analysis" | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const opened = useRef(false);
@@ -42,7 +43,7 @@ export function ThoughtMediaProcessing({
           phase?: Phase;
           scriptReady?: boolean;
           job?: { id: string };
-          error?: { message: string; retry: "upload" | "stt" | "analysis" };
+          error?: { message: string; code?: string; retry: "upload" | "stt" | "analysis" };
         };
         if (controller.signal.aborted) return;
         if (!res.ok) throw new Error("Нет связи. Не удалось обновить состояние.");
@@ -51,10 +52,12 @@ export function ThoughtMediaProcessing({
         setPhase(next);
         if (data.error) {
           setError(data.error.message);
+          setErrorCode(data.error.code ?? "PIPELINE");
           setRetryKind(data.error.retry === "analysis" || data.error.retry === "stt" ? data.error.retry : "stt");
           return;
         }
         setError(null);
+        setErrorCode(null);
         if ((data.scriptReady || next === "done" || next === "analysis") && reelId && !opened.current) {
           opened.current = true;
           onReady(reelId);
@@ -62,6 +65,7 @@ export function ThoughtMediaProcessing({
       } catch (err) {
         if (controller.signal.aborted || (err instanceof DOMException && err.name === "AbortError")) return;
         setError(err instanceof Error ? err.message : "Нет связи. Не удалось обновить состояние.");
+        setErrorCode("NETWORK");
       }
     }
     void poll();
@@ -75,9 +79,13 @@ export function ThoughtMediaProcessing({
   async function retry() {
     if (!jobId) return;
     setError(null);
+    setErrorCode(null);
     const res = await fetch(`/api/jobs/${jobId}/retry`, { method: "POST" });
-    const data = (await res.json()) as { error?: string };
-    if (!res.ok) setError(data.error ?? "Не удалось повторить обработку.");
+    const data = (await res.json()) as { error?: string; code?: string };
+    if (!res.ok) {
+      setError(data.error ?? "Не удалось повторить обработку.");
+      setErrorCode(data.code ?? "RETRY");
+    }
   }
 
   if (uploadPercent !== null && !reelId) {
@@ -87,12 +95,17 @@ export function ThoughtMediaProcessing({
   if (phase === "error" || error) {
     return (
       <div className="space-y-3">
-        <InlineError message={error ?? "Не удалось обработать материал."} />
-        {retryKind ? (
-          <ActionButton variant="secondary" onClick={() => void retry()}>
-            {retryKind === "analysis" ? "Повторить анализ" : "Повторить расшифровку"}
-          </ActionButton>
-        ) : null}
+        <InlineError
+          message={error ?? "Не удалось обработать материал."}
+          code={errorCode}
+          action={
+            retryKind ? (
+              <ActionButton variant="secondary" onClick={() => void retry()}>
+                {retryKind === "analysis" ? "Повторить анализ" : "Повторить расшифровку"}
+              </ActionButton>
+            ) : undefined
+          }
+        />
       </div>
     );
   }

@@ -31,7 +31,7 @@ export function SegmentedTabs({
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className="flex min-h-11 rounded-[var(--vocal-radius-control)] bg-bg p-1"
+      className="flex min-h-11 min-w-0 flex-wrap rounded-[var(--vocal-radius-control)] bg-bg p-1"
       onKeyDown={(event) => {
         const next = nextTabIndex(selectedIndex, items.length, event.key);
         if (next == null) return;

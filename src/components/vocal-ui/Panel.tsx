@@ -6,7 +6,7 @@ export function Panel({
   ...props
 }: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
   return (
-    <div className={`vocal-card p-4 ${className}`} {...props}>
+    <div className={`vocal-card min-w-0 overflow-x-hidden p-4 ${className}`} {...props}>
       {children}
     </div>
   );
