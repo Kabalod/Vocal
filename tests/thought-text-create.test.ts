@@ -8,6 +8,7 @@ import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { emptyThoughtDraft, newThoughtIdempotencyKey } from "../src/lib/thought-draft";
+import { thoughtUserStatus } from "../src/lib/thought-preview";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -87,6 +88,8 @@ test("text thought create is one transaction, idempotent, and keeps draft on err
   const createdBody = await created.json();
   const reelId = createdBody.reel.id as string;
   assert.equal(createdBody.reel.title, "Моя мысль");
+  assert.equal(createdBody.reel.status, "idea");
+  assert.equal(thoughtUserStatus(createdBody.reel.status), "open");
 
   const again = await POST(
     new Request("http://vocal.local/api/thoughts", {
