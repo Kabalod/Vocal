@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RecordingView } from "@/components/RecordingView";
 import { StudioJobWatch } from "@/components/StudioJobWatch";
+import { AutoTakeCompare } from "@/components/AutoTakeCompare";
+import { CompletionSummary } from "@/components/CompletionSummary";
 import { ReelStudioFrame } from "@/components/ReelStudioFrame";
 import { ReelTakes } from "@/components/ReelTakes";
 import { ScriptEditor } from "@/components/ScriptEditor";
@@ -12,12 +14,8 @@ import { ThoughtStudioHeader } from "@/components/ThoughtStudioHeader";
 import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
 import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
 import { newDialogueIdempotencyKey } from "@/lib/dialogue-client";
-import {
-  parseStudioTab,
-  studioThoughtHref,
-  writeStudioTab,
-  type StudioMobileTab,
-} from "@/components/reel-studio";
+import { parseStudioTab, studioThoughtHref, writeStudioTab, type StudioMobileTab } from "@/components/reel-studio";
+import { studioRecordGate } from "@/lib/recording-session";
 import type { ReelStatus } from "@/types/reel";
 import type { ScriptWorkspaceDto } from "@/types/script";
 
@@ -99,15 +97,13 @@ export function ReelStudio({ reelId }: { reelId: string }) {
   }
 
   function openRecording() {
-    if (!selectedScriptId) return;
     setDraftPrompt(false);
     setRecording(true);
     changeTab("takes");
   }
 
   function requestRecording() {
-    if (!hasReadyScript || !selectedScriptId) return;
-    if (hasManualDraft) {
+    if (studioRecordGate({ hasReadyScript, hasDraft: hasManualDraft }) === "draft-open") {
       setDraftPrompt(true);
       return;
     }
@@ -150,7 +146,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
           hideTabs={recording}
           takes={
             showTakes ? (
-            recording && selectedScriptId ? (
+            recording ? (
               <RecordingView
                 reelId={reelId}
                 thoughtTitle={thoughtTitle}
@@ -167,8 +163,8 @@ export function ReelStudio({ reelId }: { reelId: string }) {
               <ReelTakes
                 reelId={reelId}
                 reloadToken={takesTick}
-                canRecord={hasReadyScript}
-                recordBlockedReason="Сначала нужна готовая версия сценария"
+                canRecord={studioRecordGate({ hasReadyScript, hasDraft: hasManualDraft }) === "ok"}
+                recordBlockedReason="Сначала закройте черновик сценария"
                 recordScriptId={selectedScriptId}
                 onTakeJobStarted={setWatchJobId}
                 onStartVoiceRecord={requestRecording}
@@ -179,6 +175,14 @@ export function ReelStudio({ reelId }: { reelId: string }) {
                   <div className="space-y-8">
                     {watchJobId ? <StudioJobWatch jobId={watchJobId} onSettled={refreshStudioAfterJob} /> : null}
                     {media}
+                    <AutoTakeCompare reelId={reelId} reloadToken={takesTick} />
+                    <CompletionSummary
+                      reelId={reelId}
+                      reloadToken={takesTick + scriptTick}
+                      onPickTake={() => changeTab("takes")}
+                      onPickScript={() => changeTab("script")}
+                      onStatusChange={setThoughtStatus}
+                    />
                   </div>
                 )}
               </ReelTakes>

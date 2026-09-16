@@ -29,9 +29,6 @@ export async function POST(request: Request) {
       const scriptVersionId =
         typeof form.get("scriptVersionId") === "string" ? String(form.get("scriptVersionId")).trim() : "";
       const shouldProcess = String(form.get("process") ?? "") === "1";
-      if (shouldProcess && !scriptVersionId) {
-        throw new ReelError("Нужна готовая версия сценария.", "SCRIPT_REQUIRED");
-      }
       const take = await saveUploadedTake({
         reelId,
         file,

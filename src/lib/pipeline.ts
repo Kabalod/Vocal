@@ -215,6 +215,15 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
     if (job.takeId && transcript.trim()) {
       const { applyThoughtMediaFromTranscript } = await import("@/lib/thought-media");
       await applyThoughtMediaFromTranscript(job.takeId, transcript, deps.suggestTitle);
+      try {
+        const take = await prisma.take.findUnique({ where: { id: job.takeId }, select: { reelId: true } });
+        if (take) {
+          const { ensureAutomaticTakeComparison } = await import("@/lib/ai/compare");
+          await ensureAutomaticTakeComparison(take.reelId, deps.suggestTitle);
+        }
+      } catch {
+        /* comparison is best-effort after processing */
+      }
     }
 
     stage = "analyze";

@@ -173,3 +173,34 @@ JSON:
   if (!found) throw new CompareError("Не удалось сохранить сравнение.", "COMPARE_SAVE");
   return found;
 }
+
+export async function ensureAutomaticTakeComparison(
+  reelId: string,
+  complete: CompleteJsonFn = defaultCompleteJson,
+): Promise<CompareDto | null> {
+  const takes = await prisma.take.findMany({
+    where: { reelId, selectedTranscriptId: { not: null } },
+    orderBy: { number: "asc" },
+    select: { id: true },
+  });
+  if (takes.length < 2) return null;
+  const leftTakeId = takes[takes.length - 2]!.id;
+  const rightTakeId = takes[takes.length - 1]!.id;
+  const existing = await prisma.compareResult.findFirst({
+    where: { reelId, leftTakeId, rightTakeId },
+    orderBy: { createdAt: "desc" },
+  });
+  if (existing) {
+    const listed = await listComparisons(reelId);
+    return listed.find((item) => item.id === existing.id) ?? null;
+  }
+  try {
+    return await createReelComparison(reelId, { leftTakeId, rightTakeId, runAi: true }, complete);
+  } catch {
+    try {
+      return await createReelComparison(reelId, { leftTakeId, rightTakeId, runAi: false }, complete);
+    } catch {
+      return null;
+    }
+  }
+}

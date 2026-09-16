@@ -20,9 +20,9 @@ test("studio IA is three thought tabs with a URL tab param", () => {
   assert.equal(studioThoughtHref("abc", "dialog"), "/reels/abc?tab=dialog");
 });
 
-test("перейти к записи opens a new voice take only with a ready script", () => {
+test("record opens a new voice take even without a ready script", () => {
   assert.equal(studioRecordGate({ hasReadyScript: true, hasDraft: false }), "ok");
-  assert.equal(studioRecordGate({ hasReadyScript: false, hasDraft: false }), "no-script");
+  assert.equal(studioRecordGate({ hasReadyScript: false, hasDraft: false }), "ok");
 });
 
 test("thought studio shell loads by id with back, tabs and honest missing/error", () => {

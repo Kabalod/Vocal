@@ -73,7 +73,6 @@ export function ThoughtDialogue({
   reelId,
   draft,
   onDraftChange,
-  hasReadyScript,
   onTransferred,
   onGoRecord,
   thoughtCompleted = false,
@@ -82,7 +81,7 @@ export function ThoughtDialogue({
   reelId: string;
   draft: string;
   onDraftChange: (value: string) => void;
-  hasReadyScript: boolean;
+  hasReadyScript?: boolean;
   onTransferred: () => void;
   onGoRecord: () => void;
   thoughtCompleted?: boolean;
@@ -426,11 +425,9 @@ export function ThoughtDialogue({
         ) : (
         <ActionButton
           variant="secondary"
-          disabled={!hasReadyScript}
-          disabledReason={!hasReadyScript ? "Сначала нужна готовая версия сценария" : undefined}
           onClick={onGoRecord}
         >
-          Перейти к записи
+          Записать дубль
         </ActionButton>
         )}
         {thoughtCompleted ? null : recording || finalizing ? (

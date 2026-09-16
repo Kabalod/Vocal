@@ -496,7 +496,10 @@ test("voice upload stores scriptVersionId and does not auto-select final take", 
   noScript.set("inputType", "video");
   noScript.set("process", "1");
   const blocked = await upload(new Request("http://vocal.local/api/uploads", { method: "POST", body: noScript }));
-  assert.equal(blocked.status, 400);
+  assert.equal(blocked.status, 201);
+  const scriptless = await blocked.json();
+  assert.equal(scriptless.take.scriptVersionId, null);
+  assert.ok(scriptless.job?.id);
 
   const videoForm = new FormData();
   videoForm.set("file", new File([bytes], "clip.mp4", { type: "video/mp4" }));
@@ -520,7 +523,7 @@ test("voice upload stores scriptVersionId and does not auto-select final take", 
   form2.set("idempotencyKey", "voice-2");
   const second = await upload(new Request("http://vocal.local/api/uploads", { method: "POST", body: form2 }));
   const takeB = (await second.json()).take;
-  assert.equal(takeB.number, 4);
+  assert.equal(takeB.number, 5);
   assert.notEqual(takeA.id, takeB.id);
 
   const listed = await (
@@ -529,7 +532,7 @@ test("voice upload stores scriptVersionId and does not auto-select final take", 
     })
   ).json();
   assert.equal(listed.reel.selectedTakeId, null);
-  assert.equal(listed.reel.takeCount, 4);
+  assert.equal(listed.reel.takeCount, 5);
   assert.equal(await prisma.job.count({ where: { takeId: takeA.id } }), 1);
   assert.equal(await prisma.job.count({ where: { takeId: videoBody.take.id } }), 1);
 });

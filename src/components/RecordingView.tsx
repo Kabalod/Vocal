@@ -34,7 +34,7 @@ export function RecordingView({
 }: {
   reelId: string;
   thoughtTitle: string;
-  scriptVersionId: string;
+  scriptVersionId?: string | null;
   scriptNumber: number | null;
   onClose: () => void;
   onSaved: (info: { jobId: string | null }) => void;
@@ -95,6 +95,10 @@ export function RecordingView({
   }, []);
 
   useEffect(() => {
+    if (!scriptVersionId) {
+      setScriptBody("");
+      return;
+    }
     let cancelled = false;
     void fetch(`/api/reels/${reelId}/scripts/${scriptVersionId}`, { cache: "no-store" })
       .then((res) => res.json())
@@ -215,7 +219,7 @@ export function RecordingView({
     form.set("file", file);
     form.set("reelId", reelId);
     form.set("inputType", "audio");
-    form.set("scriptVersionId", scriptVersionId);
+    if (scriptVersionId) form.set("scriptVersionId", scriptVersionId);
     form.set("process", "1");
     form.set("idempotencyKey", key);
     const controller = new AbortController();
@@ -246,20 +250,23 @@ export function RecordingView({
     }
   }
 
-  const versionLabel = scriptNumber != null ? `версия ${scriptNumber}` : "готовая версия";
+  const versionLabel =
+    scriptNumber != null ? `версия ${scriptNumber}` : scriptVersionId ? "готовая версия" : "без сценария";
 
   return (
     <section className="flex min-h-[28rem] flex-col" aria-label="Запись дубля">
       <header className="space-y-1 border-b border-line pb-3">
         <p className="font-[family-name:var(--font-display)] text-xl">{thoughtTitle || "Мысль"}</p>
-        <p className="text-sm text-muted">По сценарию · {versionLabel}</p>
+        <p className="text-sm text-muted">{scriptVersionId ? `По сценарию · ${versionLabel}` : "Запись без готового сценария"}</p>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto py-4">
         {scriptBody ? (
           <p className="whitespace-pre-wrap text-base leading-relaxed">{scriptBody}</p>
         ) : (
-          <p className="text-sm text-muted">Загружаем сценарий…</p>
+          <p className="text-sm text-muted">
+            {scriptVersionId ? "Загружаем сценарий…" : "Можно говорить без готового сценария. Текст дубля появится после расшифровки."}
+          </p>
         )}
       </div>
 

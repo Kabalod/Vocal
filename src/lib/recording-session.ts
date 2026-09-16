@@ -45,8 +45,7 @@ export function takeListOmitsMediaUrl(take: { mediaUrl: string | null; downloadU
   return take.mediaUrl == null && take.downloadUrl == null;
 }
 
-export function studioRecordGate(input: { hasReadyScript: boolean; hasDraft: boolean }): "ok" | "no-script" | "draft-open" {
-  if (!input.hasReadyScript) return "no-script";
+export function studioRecordGate(input: { hasReadyScript: boolean; hasDraft: boolean }): "ok" | "draft-open" {
   if (input.hasDraft) return "draft-open";
   return "ok";
 }

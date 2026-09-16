@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import {
   ABORT_TAKE_UPLOAD_LEAVE_TEXT,
@@ -68,8 +71,8 @@ test("unfinished studio video upload abort ignores a late success callback", asy
   assert.equal(uploaded, 0);
 });
 
-test("go to record stays blocked without a ready script or while a draft is open", () => {
-  assert.equal(studioRecordGate({ hasReadyScript: false, hasDraft: false }), "no-script");
+test("go to record allows scriptless takes and only waits on an open draft", () => {
+  assert.equal(studioRecordGate({ hasReadyScript: false, hasDraft: false }), "ok");
   assert.equal(studioRecordGate({ hasReadyScript: true, hasDraft: true }), "draft-open");
   assert.equal(studioRecordGate({ hasReadyScript: true, hasDraft: false }), "ok");
 });
@@ -120,4 +123,23 @@ test("late mic grant after leave does not keep the stream", () => {
   } as unknown as MediaStream;
   assert.equal(adoptGrantedMicrophone(session, stream), false);
   assert.deepEqual(stops, ["late"]);
+});
+
+test("scriptless recording waits for explicit start and upload no longer requires a script", () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const rec = readFileSync(join(root, "src/components/RecordingView.tsx"), "utf8");
+  const uploads = readFileSync(join(root, "src/app/api/uploads/route.ts"), "utf8");
+  const studio = readFileSync(join(root, "src/components/ReelStudio.tsx"), "utf8");
+  const compare = readFileSync(join(root, "src/components/AutoTakeCompare.tsx"), "utf8");
+  assert.match(rec, /Начать запись/);
+  assert.match(rec, /scriptVersionId\?: string \| null/);
+  assert.match(rec, /Запись без готового сценария/);
+  assert.equal(rec.includes("getUserMedia"), true);
+  assert.match(rec, /phase === "idle"/);
+  assert.equal(uploads.includes("SCRIPT_REQUIRED"), false);
+  assert.match(studio, /AutoTakeCompare/);
+  assert.match(studio, /CompletionSummary/);
+  assert.equal(studio.includes("TakeComparison"), false);
+  assert.match(compare, /без выбора пары/);
+  assert.equal(compare.includes("leftTakeId"), false);
 });

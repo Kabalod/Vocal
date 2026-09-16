@@ -293,5 +293,4 @@ test("composer voice reply posts to dialogue, never takes, and abort is not an e
   assert.match(studio, /tab === "dialog" && !recording/);
   assert.equal(studio.includes("TakeComparison"), false);
   assert.equal(studio.includes("ReelContextForm"), false);
-  assert.equal(studio.includes("CompletionSummary"), false);
 });

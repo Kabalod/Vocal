@@ -242,7 +242,7 @@ export function ReelTakes({
           }
           onClick={onStartVoiceRecord}
         >
-          Записать голос
+          Записать дубль
         </ActionButton>
         <TakeUploadDropzone
           reelId={reelId}
