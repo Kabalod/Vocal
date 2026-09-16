@@ -1,25 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { CanonicalExportActions } from "@/components/CanonicalExportActions";
 import { ScriptDraftComposer } from "@/components/ScriptDraftComposer";
 import { ScriptVersionTimeline } from "@/components/ScriptVersionTimeline";
 import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
 import { GenerationGuard } from "@/lib/generation-guard";
 import { DraftSaveError, ScriptDraftSaveSession } from "@/lib/script-draft-save";
 import { isHeadKind, type ScriptVersionDto, type ScriptWorkspaceDto } from "@/types/script";
+import { buildCanonicalExportTxt, sanitizeExportFilename } from "@/lib/canonical-export";
 
 function readyVersions(workspace: ScriptWorkspaceDto) {
   return workspace.versions.filter((row) => isHeadKind(row.kind));
-}
-
-function downloadText(filename: string, text: string) {
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 function createDraftSession(reelIdRef: { current: string }) {
@@ -244,14 +236,18 @@ export function ScriptEditor({
             >
               {helping ? "Просим…" : "Помочь со сценарием"}
             </button>
-            <button
-              type="button"
-              className="vocal-btn text-sm"
-              disabled={!viewing?.body}
-              onClick={() => viewing?.body && downloadText("scenario.txt", viewing.body)}
-            >
-              Скачать
-            </button>
+            <CanonicalExportActions
+              disabled={!viewing?.body || !isHeadKind(viewing.kind)}
+              filename={sanitizeExportFilename("сценарий")}
+              text={
+                viewing?.body && isHeadKind(viewing.kind)
+                  ? buildCanonicalExportTxt({
+                      title: currentMeta?.number ? `Версия ${currentMeta.number}` : "Сценарий",
+                      scriptBody: viewing.body,
+                    })
+                  : ""
+              }
+            />
             <button
               type="button"
               className="vocal-btn text-sm"

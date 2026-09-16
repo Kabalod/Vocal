@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { CanonicalExportActions } from "@/components/CanonicalExportActions";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
+import { sanitizeExportFilename } from "@/lib/canonical-export";
 import { thoughtCompletionGate } from "@/lib/thought-completion";
 import { TAKE_INPUT_TYPE_LABELS, type ReelDto } from "@/types/reel";
 import { isHeadKind, type ScriptWorkspaceDto } from "@/types/script";
@@ -23,6 +25,8 @@ export function CompletionSummary({
   const [workspace, setWorkspace] = useState<ScriptWorkspaceDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [exportText, setExportText] = useState("");
+  const [exportName, setExportName] = useState("mysl.txt");
 
   const load = useCallback(async () => {
     const [reelRes, scriptRes] = await Promise.all([
@@ -36,6 +40,13 @@ export function CompletionSummary({
     setReel(reelData.reel);
     setWorkspace(scriptData);
     onStatusChange?.(reelData.reel.status);
+    if (reelData.reel.finalScriptId) {
+      const exportRes = await fetch(`/api/reels/${reelId}/export?format=txt`, { cache: "no-store" });
+      if (exportRes.ok) {
+        setExportText(await exportRes.text());
+        setExportName(sanitizeExportFilename(reelData.reel.title));
+      }
+    }
   }, [onStatusChange, reelId]);
 
   useEffect(() => {
@@ -97,6 +108,9 @@ export function CompletionSummary({
       </p>
       <p className="text-sm text-muted">Завершить мысль — закончить работу в Vocal, не публикация ролика.</p>
       {error ? <p className="text-sm text-bad">{error}</p> : null}
+      {exportText ? (
+        <CanonicalExportActions filename={exportName} text={exportText} />
+      ) : null}
       {gate.isCompleted ? (
         <div className="space-y-2">
           <p className="text-sm">Мысль успешно завершена. Итоги сохранены.</p>

@@ -4,9 +4,19 @@ import { ReelError } from "@/lib/reels";
 import { getReel } from "@/lib/reels";
 import { listReelQuestions } from "@/lib/ai/questions";
 import { listTakeReviews } from "@/lib/ai/review";
+import {
+  assertCanonicalScriptExportable,
+  buildCanonicalExportTxt,
+  canonicalExportLooksSafe,
+  ExportError,
+  resolveCanonicalExportScriptId,
+  sanitizeExportFilename,
+} from "@/lib/canonical-export";
 import { listComparisons } from "@/lib/compare";
 import { listScriptBundle } from "@/lib/scripts";
 import { listTranscriptBundle } from "@/lib/transcripts";
+import { TAKE_INPUT_TYPE_LABELS } from "@/types/reel";
+import { isHeadKind } from "@/types/script";
 
 export interface ReelExportDto {
   exportedAt: string;
@@ -194,12 +204,57 @@ export async function exportReel(
   return payload;
 }
 
-export function assertExportSafe(payload: unknown) {
-  const raw = JSON.stringify(payload);
-  if (/GROQ_API_KEY|DATABASE_URL/.test(raw)) {
-    throw new Error("EXPORT_LEAK");
+export async function exportCanonicalTxt(
+  reelId: string,
+  input: { scriptId?: string | null } = {},
+): Promise<{ filename: string; text: string; scriptId: string }> {
+  const reel = await getReel(reelId);
+  if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+  const row = await prisma.reel.findUnique({ where: { id: reelId } });
+  if (!row) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+  const scripts = await listScriptBundle(reelId);
+  const scriptId = resolveCanonicalExportScriptId({
+    requestedId: input.scriptId,
+    finalScriptId: row.finalScriptId,
+    selectedScriptId: row.selectedScriptId,
+  });
+  if (!scriptId) {
+    throw new ExportError("Нет готового сценария для экспорта.", "EXPORT_EMPTY");
   }
-  if (/[A-Za-z]:\\\\|\/Users\/|\/home\//.test(raw)) {
-    throw new Error("EXPORT_ABS_PATH");
+  const version = scripts.versions.find((item) => item.id === scriptId);
+  if (!version || version.reelId !== reelId) {
+    throw new ExportError("Версия сценария не найдена в этой мысли.", "EXPORT_NOT_IN_REEL", 404);
+  }
+  assertCanonicalScriptExportable(version.kind);
+
+  const take = reel.takes.find((item) => item.id === row.finalTakeId) ?? null;
+  let takeText = take?.bodyText?.trim() || "";
+  if (take && !takeText) {
+    const bundle = await listTranscriptBundle(take.id);
+    takeText =
+      bundle.revisions.find((item) => item.id === bundle.selectedId)?.text ??
+      bundle.revisions[0]?.text ??
+      "";
+  }
+
+  const text = buildCanonicalExportTxt({
+    title: reel.title,
+    scriptLabel: isHeadKind(version.kind) ? "Сценарий" : null,
+    scriptBody: version.body,
+    takeLabel: take
+      ? `Итоговый дубль №${take.number} · ${TAKE_INPUT_TYPE_LABELS[take.inputType]}`
+      : null,
+    takeText,
+  });
+  if (!canonicalExportLooksSafe(text)) {
+    throw new ExportError("Экспорт содержит служебные данные и не сохранён.", "EXPORT_LEAK");
+  }
+  return { filename: sanitizeExportFilename(reel.title), text, scriptId };
+}
+
+export function assertExportSafe(payload: unknown) {
+  const raw = typeof payload === "string" ? payload : JSON.stringify(payload);
+  if (!canonicalExportLooksSafe(raw)) {
+    throw new Error("EXPORT_LEAK");
   }
 }
