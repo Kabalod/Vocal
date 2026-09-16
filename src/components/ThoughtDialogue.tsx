@@ -45,7 +45,7 @@ function MessageBubble({
       <p className="mb-1 text-xs text-muted">{mine ? "Вы" : "Vocal"}</p>
       <div
         className={`break-words rounded-2xl border px-3 py-2 text-sm leading-relaxed ${
-          mine ? "border-line bg-[#201D18]" : "border-line bg-surface"
+          mine ? "border-line bg-surface-raised" : "border-line bg-surface"
         }`}
       >
         {message.voice ? (
@@ -76,6 +76,7 @@ export function ThoughtDialogue({
   reelId,
   draft,
   onDraftChange,
+  hasReadyScript = false,
   onTransferred,
   onGoRecord,
   thoughtCompleted = false,
@@ -100,6 +101,7 @@ export function ThoughtDialogue({
   const [seconds, setSeconds] = useState(0);
   const [voiceError, setVoiceError] = useState(false);
   const [transferringId, setTransferringId] = useState<string | null>(null);
+  const [scriptPreview, setScriptPreview] = useState("");
   const scrollerRef = useRef<HTMLDivElement>(null);
   const stickBottom = useRef(true);
   const fetchRef = useRef<AbortController | null>(null);
@@ -112,6 +114,32 @@ export function ThoughtDialogue({
   const voiceKeyRef = useRef<string | null>(null);
   const lastVoiceRef = useRef<{ blob: Blob; duration: string } | null>(null);
   const transferLockRef = useRef(false);
+
+  useEffect(() => {
+    if (!hasReadyScript) {
+      setScriptPreview("");
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/reels/${reelId}/scripts`, { cache: "no-store" })
+      .then((res) => res.json())
+      .then(async (data: { selectedScriptId?: string | null; viewing?: { body?: string }; headId?: string | null }) => {
+        if (cancelled) return;
+        if (data.viewing?.body) {
+          setScriptPreview(data.viewing.body);
+          return;
+        }
+        const id = data.selectedScriptId ?? data.headId;
+        if (!id) return;
+        const version = await fetch(`/api/reels/${reelId}/scripts/${id}`, { cache: "no-store" });
+        const body = (await version.json()) as { body?: string };
+        if (!cancelled && typeof body.body === "string") setScriptPreview(body.body);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [hasReadyScript, reelId]);
 
   const applyPage = useCallback((next: DialoguePageDto, mode: "replace" | "prepend") => {
     setPage((prev) => {
@@ -343,7 +371,15 @@ export function ThoughtDialogue({
   const empty = Boolean(page) && messages.length === 0 && !page?.analyzing;
 
   return (
-    <section className="flex min-h-[28rem] flex-col" aria-label="Диалог с Vocal">
+    <section className="flex min-h-[28rem] flex-col gap-4 shell:flex-row shell:items-stretch" aria-label="Диалог с Vocal">
+      <div className="hidden min-w-0 flex-1 overflow-y-auto pr-1 shell:block">
+        {scriptPreview ? (
+          <p className="dialogue-script whitespace-pre-wrap">{scriptPreview}</p>
+        ) : (
+          <p className="text-sm text-muted">Сценарий появится здесь, когда сохраните готовую версию. Чат справа — не запись дубля.</p>
+        )}
+      </div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col shell:w-[min(100%,23.75rem)] shell:flex-none">
       <div className="mb-3">
         <h2 className="font-[family-name:var(--font-display)] text-xl">Диалог с Vocal</h2>
       </div>
@@ -475,6 +511,7 @@ export function ThoughtDialogue({
             micLabel="Ответить голосом"
           />
         )}
+      </div>
       </div>
     </section>
   );

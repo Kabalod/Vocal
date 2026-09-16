@@ -1,0 +1,258 @@
+
+===== tests/creator-profile.test.ts =====
+TAP version 13
+# Subtest: assembleReelContext is deterministic and respects selection and usage
+ok 1 - assembleReelContext is deterministic and respects selection and usage
+  ---
+  duration_ms: 2.6696
+  type: 'test'
+  ...
+# Subtest: profile and reel context API: save, skip, snapshot survives profile change
+ok 2 - profile and reel context API: save, skip, snapshot survives profile change
+  ---
+  duration_ms: 14554.5631
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 15024.9856
+exit=0
+
+===== tests/p10-p12-profile.test.ts =====
+TAP version 13
+# Subtest: P10–P12 UI keeps labels, 44px targets, and no profile guard on thoughts
+ok 1 - P10–P12 UI keeps labels, 44px targets, and no profile guard on thoughts
+  ---
+  duration_ms: 2.4725
+  type: 'test'
+  ...
+# Subtest: P11 resume, explicit confirm, voice≠take, unfinished amend stays off AI
+ok 2 - P11 resume, explicit confirm, voice≠take, unfinished amend stays off AI
+  ---
+  duration_ms: 5089.2695
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5583.0292
+exit=0
+
+===== tests/p17-e2e-matrix.test.ts =====
+TAP version 13
+# Subtest: P17 matrix: history/jobs redirects, record gate, no A/B studio UI
+ok 1 - P17 matrix: history/jobs redirects, record gate, no A/B studio UI
+  ---
+  duration_ms: 2.7689
+  type: 'test'
+  ...
+# Subtest: P17 matrix: thought without profile through finals, upload, compare, export, portrait
+ok 2 - P17 matrix: thought without profile through finals, upload, compare, export, portrait
+  ---
+  duration_ms: 4726.3135
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5152.103
+exit=0
+
+===== tests/personal-mvp.test.ts =====
+TAP version 13
+# Subtest: personal MVP cycle, export, compare, backup restore, failures
+ok 1 - personal MVP cycle, export, compare, backup restore, failures
+  ---
+  duration_ms: 4106.8172
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4605.7255
+exit=0
+
+===== tests/pipeline-recovery.test.ts =====
+TAP version 13
+# api pipeline job=cmu4aevr60001gnyo4xo1phyo LLM_SCHEMA|analyze
+# api pipeline job=cmu4aew29000kgnyow0cppc0u GROQ_NETWORK|stt
+# Subtest: pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versions
+ok 1 - pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versions
+  ---
+  duration_ms: 6490.1398
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6958.6853
+exit=0
+
+===== tests/profile-dialogue.test.ts =====
+TAP version 13
+# Subtest: merge keeps confirmed meanings and empty patch does not wipe
+ok 1 - merge keeps confirmed meanings and empty patch does not wipe
+  ---
+  duration_ms: 3.5349
+  type: 'test'
+  ...
+# Subtest: sanitize and parse accept live Groq value patch and empty reply
+ok 2 - sanitize and parse accept live Groq value patch and empty reply
+  ---
+  duration_ms: 12.2885
+  type: 'test'
+  ...
+# Subtest: profile dialogue covers keys, voice skips confirm, reload and snapshots stay
+ok 3 - profile dialogue covers keys, voice skips confirm, reload and snapshots stay
+  ---
+  duration_ms: 7397.9957
+  type: 'test'
+  ...
+# Subtest: parallel profile answers rematch onto the latest portrait
+ok 4 - parallel profile answers rematch onto the latest portrait
+  ---
+  duration_ms: 6363.1314
+  type: 'test'
+  ...
+# Subtest: late answer for the same field does not overwrite a newer value
+ok 5 - late answer for the same field does not overwrite a newer value
+  ---
+  duration_ms: 5099.8065
+  type: 'test'
+  ...
+# Subtest: stale ready reply cannot complete after a newer clarify
+ok 6 - stale ready reply cannot complete after a newer clarify
+  ---
+  duration_ms: 7170.1872
+  type: 'test'
+  ...
+# Subtest: incomplete intake resume keeps the current question
+ok 7 - incomplete intake resume keeps the current question
+  ---
+  duration_ms: 7632.814
+  type: 'test'
+  ...
+# Subtest: unresolved contradiction does not publish a portrait
+ok 8 - unresolved contradiction does not publish a portrait
+  ---
+  duration_ms: 6326.7445
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 40681.2121
+exit=0
+
+===== tests/r1-contracts.test.ts =====
+TAP version 13
+# Subtest: R1 maps P13–P16 later and locks user statuses, scriptless record and amend
+ok 1 - R1 maps P13–P16 later and locks user statuses, scriptless record and amend
+  ---
+  duration_ms: 12.0598
+  type: 'test'
+  ...
+# Subtest: API keeps final take and final script on separate writes
+ok 2 - API keeps final take and final script on separate writes
+  ---
+  duration_ms: 9190.1395
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 9924.9183
+exit=0
+
+===== tests/r2-idempotency.test.ts =====
+TAP version 13
+# Subtest: R2 keeps R1 mapping and product invariants
+ok 1 - R2 keeps R1 mapping and product invariants
+  ---
+  duration_ms: 4.5051
+  type: 'test'
+  ...
+# Subtest: R2 retries do not duplicate thought, take, message, finals or export rows
+ok 2 - R2 retries do not duplicate thought, take, message, finals or export rows
+  ---
+  duration_ms: 5709.2124
+  type: 'test'
+  ...
+# Subtest: R2 profile amend retry with the same key does not publish twice
+ok 3 - R2 profile amend retry with the same key does not publish twice
+  ---
+  duration_ms: 4190.2919
+  type: 'test'
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 10464.0013
+exit=0
+
+===== tests/r5-media.test.ts =====
+TAP version 13
+# Subtest: R5 classifies take limits, stale pending reclaim, and scriptless process
+ok 1 - R5 classifies take limits, stale pending reclaim, and scriptless process
+  ---
+  duration_ms: 2.5179
+  type: 'test'
+  ...
+# Subtest: stale pending take upload is reclaimed on retry
+ok 2 - stale pending take upload is reclaimed on retry
+  ---
+  duration_ms: 4425.211
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5024.0282
+exit=0
+

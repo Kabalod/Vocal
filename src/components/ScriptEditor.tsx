@@ -220,7 +220,7 @@ export function ScriptEditor({
               className="vocal-btn"
               onClick={() => void openDraft().catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))}
             >
-              {workspace?.draft ? "Продолжить черновик" : "Создать новую версию"}
+              {workspace?.draft ? "Продолжить черновик" : "Редактировать"}
             </button>
             <button
               type="button"

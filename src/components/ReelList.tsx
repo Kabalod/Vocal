@@ -160,7 +160,8 @@ export function ReelList() {
         <NewThoughtButton onClick={() => setCreateOpen(true)} />
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="grid gap-6 shell:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)] shell:items-start">
+      <aside className="flex flex-col gap-3" aria-label="Поиск и фильтры">
         <div className="relative">
           <Field
             value={q}
@@ -210,8 +211,9 @@ export function ReelList() {
             </button>
           ))}
         </div>
-      </div>
+      </aside>
 
+      <div className="min-w-0 space-y-4">
       {!error && !loading && reels.length > 0 ? (
         <p className="text-sm text-muted">
           Всего мыслей: {totalCount}. Найдено: {matchCount}.
@@ -260,6 +262,8 @@ export function ReelList() {
         </div>
       ) : null}
       <NewThoughtSheet open={createOpen} onClose={() => setCreateOpen(false)} />
+      </div>
+      </div>
     </div>
   );
 }

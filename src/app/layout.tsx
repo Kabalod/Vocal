@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Literata } from "next/font/google";
+import { Caveat, Inter, Literata } from "next/font/google";
 import { VocalAppShell } from "@/components/VocalAppShell";
 import "./globals.css";
 
@@ -12,6 +12,12 @@ const inter = Inter({
 const literata = Literata({
   subsets: ["latin", "cyrillic"],
   variable: "--font-literata",
+  display: "swap",
+});
+
+const caveat = Caveat({
+  subsets: ["latin", "cyrillic"],
+  variable: "--font-caveat",
   display: "swap",
 });
 
@@ -28,7 +34,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru">
-      <body className={`${inter.variable} ${literata.variable} overflow-x-hidden font-sans antialiased`}>
+      <body className={`${inter.variable} ${literata.variable} ${caveat.variable} overflow-x-hidden font-sans antialiased`}>
         <VocalAppShell>{children}</VocalAppShell>
       </body>
     </html>

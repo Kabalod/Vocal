@@ -48,6 +48,7 @@ export function RecordingView({
   const [seconds, setSeconds] = useState(0);
   const [level, setLevel] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [showScript, setShowScript] = useState(true);
   const sessionRef = useRef<VoiceCaptureSession>(createVoiceCaptureSession());
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -261,26 +262,9 @@ export function RecordingView({
 
   const versionLabel =
     scriptNumber != null ? `версия ${scriptNumber}` : scriptVersionId ? "готовая версия" : "без сценария";
-
-  return (
-    <section className="flex min-h-[28rem] flex-col" aria-label="Запись дубля">
-      <header className="space-y-1 border-b border-line pb-3">
-        <p className="font-[family-name:var(--font-display)] text-xl">{thoughtTitle || "Мысль"}</p>
-        <p className="text-sm text-muted">{scriptVersionId ? `По сценарию · ${versionLabel}` : "Запись без готового сценария"}</p>
-      </header>
-
-      <div className="min-h-0 flex-1 overflow-y-auto py-4">
-        {scriptBody ? (
-          <p className="whitespace-pre-wrap text-base leading-relaxed">{scriptBody}</p>
-        ) : (
-          <p className="text-sm text-muted">
-            {scriptVersionId ? "Загружаем сценарий…" : "Можно говорить без готового сценария. Текст дубля появится после расшифровки."}
-          </p>
-        )}
-      </div>
-
+  const stage = (
       <div
-        className="sticky bottom-0 space-y-3 border-t border-line bg-bg pt-3"
+        className="space-y-3 border-t border-line bg-bg pt-3 shell:border-t-0 shell:border-l shell:border-line shell:pl-4 shell:pt-0"
         style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
       >
         {phase === "idle" || phase === "permission" ? (
@@ -354,6 +338,34 @@ export function RecordingView({
         ) : null}
 
         {error ? <InlineError message={error} /> : null}
+      </div>
+  );
+
+  return (
+    <section className="flex min-h-[28rem] flex-col" aria-label="Запись дубля">
+      <header className="space-y-1 border-b border-line pb-3">
+        <p className="font-[family-name:var(--font-display)] text-xl">{thoughtTitle || "Мысль"}</p>
+        <p className="text-sm text-muted">{scriptVersionId ? `По сценарию · ${versionLabel}` : "Запись без готового сценария"}</p>
+        {scriptVersionId ? (
+          <ActionButton variant="compact" onClick={() => setShowScript((value) => !value)}>
+            {showScript ? "Скрыть сценарий" : "Показать сценарий"}
+          </ActionButton>
+        ) : null}
+      </header>
+
+      <div className={`min-h-0 flex-1 gap-4 overflow-hidden py-4 ${showScript ? "shell:grid shell:grid-cols-[minmax(0,1.7fr)_minmax(15rem,20rem)]" : ""}`}>
+        {showScript ? (
+          <div className="min-h-0 overflow-y-auto pr-1">
+            {scriptBody ? (
+              <p className="recording-script whitespace-pre-wrap">{scriptBody}</p>
+            ) : (
+              <p className="text-sm text-muted">
+                {scriptVersionId ? "Загружаем сценарий…" : "Можно говорить без готового сценария. Текст дубля появится после расшифровки."}
+              </p>
+            )}
+          </div>
+        ) : null}
+        <div className={showScript ? "mt-4 shrink-0 shell:mt-0" : ""}>{stage}</div>
       </div>
 
       <VocalModal

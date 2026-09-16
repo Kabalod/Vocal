@@ -86,6 +86,7 @@ html,
 body {
   background: var(--bg);
   color: var(--text);
+  overflow-x: hidden;
 }
 
 body {
@@ -187,4 +188,71 @@ a[aria-disabled="true"] {
 .vocal-btn-primary:disabled {
   opacity: 0.5;
   box-shadow: none;
+}
+
+.polaroid {
+  background: #efe8dc;
+  color: #1a1424;
+  border-radius: 6px;
+  padding: 0.75rem 0.75rem 1.15rem;
+  box-shadow: 0 12px 28px rgba(11, 7, 20, 0.35);
+  transform: rotate(var(--polaroid-tilt, 0deg));
+}
+
+.polaroid-active {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.polaroid-caption {
+  font-family: var(--font-caveat), "Segoe Script", cursive;
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.take-path {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem 2rem;
+  align-items: start;
+}
+
+.take-path-item:nth-child(4n + 2),
+.take-path-item:nth-child(4n + 3) {
+  margin-top: 2.5rem;
+}
+
+.take-path-item:nth-child(odd) .polaroid {
+  margin-right: auto;
+}
+
+.take-path-item:nth-child(even) .polaroid {
+  margin-left: auto;
+}
+
+.dialogue-script {
+  font-family: var(--font-literata), Georgia, "Times New Roman", serif;
+  font-size: clamp(1.25rem, 2.2vw, 1.75rem);
+  line-height: 1.45;
+}
+
+.recording-script {
+  font-family: var(--font-literata), Georgia, "Times New Roman", serif;
+  font-size: clamp(1.35rem, 2.4vw, 1.75rem);
+  line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .polaroid,
+  .take-path-item .polaroid {
+    transform: none;
+  }
 }
