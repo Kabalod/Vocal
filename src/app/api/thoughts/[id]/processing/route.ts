@@ -25,8 +25,21 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({ error: "Карточка не найдена." }, { status: 404 });
   }
   const take = reel.takes[0] ?? null;
-  const jobRow = take
-    ? await prisma.job.findFirst({ where: { takeId: take.id }, orderBy: { createdAt: "desc" } })
+  const jobId = take
+    ? (
+        await prisma.job.findFirst({
+          where: { takeId: take.id },
+          orderBy: { createdAt: "desc" },
+          select: { id: true },
+        })
+      )?.id ?? null
+    : null;
+  if (jobId) {
+    const { recoverJobIfStale } = await import("@/lib/pipeline");
+    await recoverJobIfStale(jobId);
+  }
+  const jobRow = jobId
+    ? await prisma.job.findUnique({ where: { id: jobId } })
     : null;
   const job = jobRow ? toJobDto(jobRow) : null;
   const phase = thoughtProcessingPhase(job);

@@ -4,7 +4,7 @@ import { MAX_VIDEO_SECONDS } from "@/lib/config";
 import { ensureCriteria, prisma } from "@/lib/db";
 import { extractAudio, probeDuration } from "@/lib/ffmpeg";
 import { isGroqConnectionError, isGroqTokenLimitError } from "@/lib/groq";
-import { claimJob, completeJob, heartbeatJob, listRecoverableJobIds, releaseJobLease } from "@/lib/jobs";
+import { claimJob, completeJob, heartbeatJob, listRecoverableJobIds, releaseJobLease, failExhaustedRunningJobs, markJobFailed, EXHAUSTED_JOB_USER_MESSAGE } from "@/lib/jobs";
 import { computeMetrics } from "@/lib/metrics";
 import { toCriterionDto } from "@/lib/serialize";
 import { audioPathFor } from "@/lib/storage";
@@ -38,9 +38,27 @@ export function enqueueJob(jobId: string) {
 }
 
 export async function recoverUnfinishedJobs(now = new Date()) {
+  await failExhaustedRunningJobs();
   const ids = await listRecoverableJobIds(now);
   for (const id of ids) enqueueJob(id);
   return ids;
+}
+
+export async function recoverJobIfStale(jobId: string, now = new Date()): Promise<boolean> {
+  const job = await prisma.job.findUnique({
+    where: { id: jobId },
+    select: { id: true, status: true, attempts: true, maxAttempts: true },
+  });
+  if (!job) return false;
+  if (job.status === "done" || job.status === "error") return false;
+  if (job.attempts >= job.maxAttempts) {
+    await markJobFailed(job.id, "RETRY_EXHAUSTED", EXHAUSTED_JOB_USER_MESSAGE);
+    return false;
+  }
+  const ids = await listRecoverableJobIds(now);
+  if (!ids.includes(jobId)) return false;
+  enqueueJob(jobId);
+  return true;
 }
 
 async function drain() {
@@ -128,7 +146,17 @@ async function setStage(
 export async function processJob(jobId: string, deps: PipelineDeps = {}) {
   const now = deps.now?.() ?? new Date();
   const claimed = await claimJob(jobId, now);
-  if (!claimed.ok) return claimed;
+  if (!claimed.ok) {
+    if (
+      claimed.reason === "exhausted" &&
+      claimed.job &&
+      claimed.job.status !== "done" &&
+      claimed.job.status !== "error"
+    ) {
+      await markJobFailed(claimed.job.id, "RETRY_EXHAUSTED", EXHAUSTED_JOB_USER_MESSAGE);
+    }
+    return claimed;
+  }
 
   const transcribe = deps.transcribeAudio ?? transcribeAudio;
   const analyze = deps.analyzeSpeech ?? analyzeSpeech;
@@ -262,7 +290,7 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
     await completeJob(jobId);
     return claimed;
   } catch (error) {
-    console.error(`Job ${jobId} failed`, error);
+    console.error("Job failed", jobId, classifyError(error, stage).code);
     await fail(jobId, error, stage);
     await releaseJobLease(jobId);
     return claimed;

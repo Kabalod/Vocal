@@ -148,7 +148,7 @@ export function ReelTakes({
   }
 
   if (!reel) {
-    const pending = error ? <ShellError message={error} /> : <ShellLoading label="Загрузка попыток…" />;
+    const pending = error ? <ShellError message={error} onRetry={() => void load()} /> : <ShellLoading label="Загрузка попыток…" />;
     if (children) return <>{children({ media: pending, vocal: pending })}</>;
     return pending;
   }

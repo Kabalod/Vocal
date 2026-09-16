@@ -124,6 +124,8 @@ export async function listProfileDialoguePage(input: { cursor?: string | null; l
   if (!thread) {
     return { threadId: "", messages: [], nextCursor: null, analyzing: false };
   }
+  const { failStaleProcessingMessages } = await import("@/lib/recovery");
+  await failStaleProcessingMessages(thread.id);
   const stored = await readStoredProfilePayload();
   const rows = await prisma.dialogueMessage.findMany({
     where: { threadId: thread.id },

@@ -179,6 +179,8 @@ export async function listDialoguePage(
   input: { cursor?: string | null; limit?: number } = {},
 ): Promise<DialoguePageDto> {
   const thread = await ensureReelThread(reelId);
+  const { failStaleProcessingMessages } = await import("@/lib/recovery");
+  await failStaleProcessingMessages(thread.id);
   const stored = await prisma.dialogueMessage.findMany({
     where: { threadId: thread.id },
     orderBy: { createdAt: "asc" },

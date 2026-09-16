@@ -16,6 +16,7 @@ import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status"
 import { newDialogueIdempotencyKey } from "@/lib/dialogue-client";
 import { parseStudioTab, studioThoughtHref, writeStudioTab, type StudioMobileTab } from "@/components/reel-studio";
 import { studioRecordGate } from "@/lib/recording-session";
+import { studioShouldSilentRefetch } from "@/lib/recovery";
 import type { ReelStatus } from "@/types/reel";
 import type { ScriptWorkspaceDto } from "@/types/script";
 
@@ -56,9 +57,11 @@ export function ReelStudio({ reelId }: { reelId: string }) {
     setScriptNumber(selected?.number ?? null);
   }
 
-  const loadThought = useCallback(async () => {
-    setLoad("loading");
-    setLoadError(null);
+  const loadThought = useCallback(async (mode: "full" | "silent" = "full") => {
+    if (mode === "full") {
+      setLoad("loading");
+      setLoadError(null);
+    }
     try {
       const res = await fetch(`/api/reels/${reelId}`, { cache: "no-store" });
       const data = (await res.json()) as {
@@ -75,6 +78,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
       if (data.reel.status) setThoughtStatus(data.reel.status);
       setLoad("ok");
     } catch (err) {
+      if (mode === "silent") return;
       setLoadError(err instanceof Error ? err.message : "Ошибка.");
       setLoad("error");
     }
@@ -82,6 +86,28 @@ export function ReelStudio({ reelId }: { reelId: string }) {
 
   useEffect(() => {
     void loadThought();
+  }, [loadThought]);
+
+  useEffect(() => {
+    function resume(type: "online" | "visibilitychange") {
+      if (!studioShouldSilentRefetch({ type, visibilityState: document.visibilityState })) return;
+      void loadThought("silent");
+      setTakesTick((value) => value + 1);
+      setScriptTick((value) => value + 1);
+      setDialogTick((value) => value + 1);
+    }
+    function onOnline() {
+      resume("online");
+    }
+    function onVisibility() {
+      resume("visibilitychange");
+    }
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [loadThought]);
 
   useEffect(() => {

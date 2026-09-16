@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 
 export const JOB_MAX_ATTEMPTS = 3;
 export const JOB_LEASE_MS = 120_000;
+export const EXHAUSTED_JOB_USER_MESSAGE =
+  "Обработка остановилась после нескольких попыток. Если лимит не исчерпан, нажмите «Повторить».";
 
 const RUNNING_STATUSES = ["converting", "transcribing", "analyzing"] as const;
 
@@ -89,11 +91,12 @@ export async function completeJob(jobId: string) {
 export async function listRecoverableJobIds(now = new Date()): Promise<string[]> {
   const rows = await prisma.job.findMany({
     where: { status: { in: ["queued", ...RUNNING_STATUSES] } },
-    select: { id: true, leaseUntil: true, leaseOwner: true, status: true },
+    select: { id: true, leaseUntil: true, leaseOwner: true, status: true, attempts: true, maxAttempts: true },
   });
   const nowMs = now.getTime();
   return rows
     .filter((row) => {
+      if (row.attempts >= row.maxAttempts) return false;
       if (row.status === "queued") {
         return !row.leaseOwner || !row.leaseUntil || row.leaseUntil.getTime() <= nowMs;
       }
@@ -101,4 +104,29 @@ export async function listRecoverableJobIds(now = new Date()): Promise<string[]>
       return row.leaseUntil.getTime() <= nowMs;
     })
     .map((row) => row.id);
+}
+
+export async function markJobFailed(jobId: string, code: string, message: string) {
+  await prisma.job.updateMany({
+    where: { id: jobId, status: { notIn: ["done", "error"] } },
+    data: {
+      status: "error",
+      errorCode: code.slice(0, 64),
+      errorMessage: message.slice(0, 1000),
+      leaseUntil: null,
+      leaseOwner: null,
+    },
+  });
+}
+
+export async function failExhaustedRunningJobs(): Promise<string[]> {
+  const rows = await prisma.job.findMany({
+    where: { status: { in: ["queued", ...RUNNING_STATUSES] } },
+    select: { id: true, attempts: true, maxAttempts: true },
+  });
+  const ids = rows.filter((row) => row.attempts >= row.maxAttempts).map((row) => row.id);
+  for (const id of ids) {
+    await markJobFailed(id, "RETRY_EXHAUSTED", EXHAUSTED_JOB_USER_MESSAGE);
+  }
+  return ids;
 }
