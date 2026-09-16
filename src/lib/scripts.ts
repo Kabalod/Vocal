@@ -1,8 +1,9 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { ReelError } from "@/lib/reels";
+import { enqueueByKey } from "@/lib/write-queue";
 
 type ScriptDb = PrismaClient | Prisma.TransactionClient;
-import { ReelError } from "@/lib/reels";
 import {
   SCRIPT_BODY_MAX,
   emptyRecording,
@@ -594,26 +595,34 @@ export async function setFinalScript(reelId: string, scriptId: string | null): P
       );
     }
   }
-  const updated = await prisma.$transaction(async (tx) => {
-    const reel = await tx.reel.findUnique({ where: { id: reelId } });
-    if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
-    if (reel.status === "completed") {
-      throw new ScriptError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
-    }
-    return tx.reel.updateMany({
-      where: { id: reelId, status: { not: "completed" } },
-      data: { finalScriptId: scriptId },
-    });
-  });
-  if (updated.count !== 1) {
+
+  const snapshot = await prisma.reel.findUnique({ where: { id: reelId } });
+  if (!snapshot) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+  if (snapshot.status === "completed") {
+    throw new ScriptError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
+  }
+  if (snapshot.finalScriptId === scriptId) {
+    return listScriptBundle(reelId);
+  }
+
+  return enqueueByKey(`reel:${reelId}`, async () => {
     const reel = await prisma.reel.findUnique({ where: { id: reelId } });
     if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
     if (reel.status === "completed") {
       throw new ScriptError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
     }
-    throw new ScriptError("Карточка уже изменилась. Обновите данные и повторите.", "STALE", 409);
-  }
-  return listScriptBundle(reelId);
+    if (reel.finalScriptId === scriptId) {
+      return listScriptBundle(reelId);
+    }
+    if (reel.finalScriptId !== snapshot.finalScriptId) {
+      throw new ScriptError("Карточка уже изменилась. Обновите данные и повторите.", "STALE", 409);
+    }
+    await prisma.reel.update({
+      where: { id: reelId },
+      data: { finalScriptId: scriptId, updatedAt: reel.updatedAt },
+    });
+    return listScriptBundle(reelId);
+  });
 }
 
 export async function acceptScriptProposal(

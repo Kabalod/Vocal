@@ -20,6 +20,7 @@ import {
 } from "@/types/reel";
 import { toReelDto, toReelListItemDto } from "@/lib/serialize";
 import { thoughtCompletionGate } from "@/lib/thought-completion";
+import { enqueueByKey } from "@/lib/write-queue";
 import { isHeadKind } from "@/types/script";
 
 const reelInclude = {
@@ -217,6 +218,10 @@ async function assertFinalScriptReady(reelId: string, scriptId: string): Promise
 }
 
 export async function updateReel(id: string, input: UpdateReelInput): Promise<ReelDto> {
+  return enqueueByKey(`reel:${id}`, () => applyReelUpdate(id, input));
+}
+
+async function applyReelUpdate(id: string, input: UpdateReelInput): Promise<ReelDto> {
   const current = await prisma.reel.findUnique({ where: { id } });
   if (!current) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
 
@@ -289,6 +294,26 @@ export async function updateReel(id: string, input: UpdateReelInput): Promise<Re
     throw new ReelError("Нет полей для сохранения.", "EMPTY_PATCH");
   }
 
+  const takeOnlyPatch =
+    changingFinalTake &&
+    input.title === undefined &&
+    input.initialNote === undefined &&
+    input.status === undefined &&
+    input.selectedTakeId === undefined;
+  const statusOnlyPatch =
+    input.status !== undefined &&
+    input.title === undefined &&
+    input.initialNote === undefined &&
+    input.selectedTakeId === undefined &&
+    input.finalTakeId === undefined;
+
+  if (takeOnlyPatch && current.finalTakeId === (input.finalTakeId ?? null)) {
+    return loadReelDto(id);
+  }
+  if (statusOnlyPatch && currentStatus === nextStatus) {
+    return loadReelDto(id);
+  }
+
   const where: Prisma.ReelWhereInput = { id };
   if (input.expectedUpdatedAt) {
     const expected = new Date(input.expectedUpdatedAt);
@@ -337,6 +362,12 @@ export async function updateReel(id: string, input: UpdateReelInput): Promise<Re
   if (updated.count !== 1) {
     const exists = await prisma.reel.findUnique({ where: { id } });
     if (!exists) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+    if (takeOnlyPatch && exists.finalTakeId === (input.finalTakeId ?? null)) {
+      return loadReelDto(id);
+    }
+    if (statusOnlyPatch && normalizeReelStatus(exists.status) === nextStatus) {
+      return loadReelDto(id);
+    }
     if (changingFinalTake && normalizeReelStatus(exists.status) === "completed") {
       throw new ReelError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
     }
@@ -353,6 +384,10 @@ export async function updateReel(id: string, input: UpdateReelInput): Promise<Re
     throw new ReelError("Карточка уже изменилась. Обновите данные и повторите.", "STALE", 409);
   }
 
+  return loadReelDto(id);
+}
+
+async function loadReelDto(id: string): Promise<ReelDto> {
   const row = await prisma.reel.findUnique({ where: { id }, include: reelInclude });
   if (!row) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
   return asReelDto(row);

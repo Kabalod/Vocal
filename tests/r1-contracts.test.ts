@@ -67,7 +67,7 @@ test("R1 maps P13–P16 later and locks user statuses, scriptless record and ame
   const patchShape = reelType.slice(start, end);
   assert.match(patchShape, /finalTakeId\?: string \| null/);
   assert.equal(patchShape.includes("finalScriptId"), false);
-  assert.match(scripts, /data: \{ finalScriptId: scriptId \}/);
+  assert.match(scripts, /finalScriptId: scriptId/);
   assert.match(schema, /finalTakeId/);
   assert.match(schema, /finalScriptId/);
   assert.match(schema, /currentRevisionId/);
