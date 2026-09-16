@@ -1,0 +1,8 @@
+P17 live 2026-09-16
+next: http://localhost:3000  (single `npm run dev`, .next rebuilt)
+GET 200 /reels
+GET 200 /reels/cmu3u673w0000gnx0zeoqun36
+GET 200 /profile
+GET 200 /reels/missing-id-p17 (shell 200, client empty — not HTTP 500)
+POST 201 /api/thoughts → cmu4aff8u0000gngoxcl5bmcr (P17 smoke)
+isolated test files: all exit=0 (see isolated-tests.txt)

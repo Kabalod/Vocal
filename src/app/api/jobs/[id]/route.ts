@@ -15,8 +15,19 @@ export async function GET(
   });
 
   if (!job) {
-    return NextResponse.json({ error: "Запись не найдена." }, { status: 404 });
+    return NextResponse.json({ error: "Запись не найдена.", code: "JOB_NOT_FOUND" }, { status: 404 });
   }
 
-  return NextResponse.json({ job: toJobWithAnalysis(job) });
+  const { recoverJobIfStale } = await import("@/lib/pipeline");
+  await recoverJobIfStale(job.id);
+
+  const fresh = await prisma.job.findUnique({
+    where: { id },
+    include: { analysis: true },
+  });
+  if (!fresh) {
+    return NextResponse.json({ error: "Запись не найдена.", code: "JOB_NOT_FOUND" }, { status: 404 });
+  }
+
+  return NextResponse.json({ job: toJobWithAnalysis(fresh) });
 }

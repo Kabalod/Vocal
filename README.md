@@ -1,30 +1,100 @@
 # Vocal
 
-Разбор публичных выступлений: видео → FFmpeg → Groq Whisper → оценка ораторства.
+Личный помощник автора: мысль → разговор с Vocal → сценарий → дубли → итоговый выбор. Анкета собирается разговором и даёт один актуальный портрет для сценариев.
 
-## Что нужно
+Целевые требования актуального ядра (Stage 11): [docs/PERSONAL_MVP.md](docs/PERSONAL_MVP.md).  
+Статус этапов: [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).  
+План работы в Cursor: [docs/cursor-plan/README.md](docs/cursor-plan/README.md). Если в локальном плане есть `PRODUCT_SPEC.md` / `UI_SPEC.md`, они выше макетов.
 
-- Node.js 22+
-- Ключ [Groq](https://console.groq.com/) в `.env` (`GROQ_API_KEY`)
+В репозитории остаётся разовый анализатор загруженного видео (FFmpeg → Groq Whisper → оценки). Описание — [SPEC.md](./SPEC.md). Это прежняя спецификация, не цель личного MVP.
+
+## Что нужно (Windows)
+
+- Node.js 22+ (проверено: 22.17.1)
+- npm
+- Ключ [Groq](https://console.groq.com/) в `.env` (`GROQ_API_KEY`) — расшифровка, названия, диалог, сценарий и портрет
 - FFmpeg подтягивается через `ffmpeg-static` / `ffprobe-static` (системный ставить не обязательно)
 
-## Запуск
+## Первая установка
 
-```bash
+В PowerShell из корня репозитория. Файл `.env` создаётся **только если его ещё нет** — существующий ключ не перезаписывается.
+
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+# при необходимости впишите GROQ_API_KEY в .env
 npm install
-npx prisma db push
+npx prisma migrate deploy
 npx prisma db seed
 npm run dev
 ```
 
-Откройте http://localhost:3000, вставьте ключ Groq в `.env` и загрузите ролик до 3 минут.
+Откройте http://localhost:3000. Без ключа Groq интерфейс может подняться; распознавание и ответы модели без ключа не выполнятся.
 
-## Пайплайн
+## Обычный запуск
 
-1. Загрузка видео (mp4 / webm / mov / mkv, ≤ 3 мин, ≤ 80 МБ)
-2. FFmpeg: MP3 16 kHz mono 64 kbps
-3. Groq STT: `whisper-large-v3-turbo`, `language=ru`, таймкоды сегментов
-4. Метрики: темп, паузы, слова-паразиты
-5. Groq LLM: тренер разговорных Instagram-видео (`openai/gpt-oss-120b`) по методике из `instagram_video_ai_analysis_prompts.md`. Итоговые веса считает backend.
+```powershell
+npm run dev
+```
 
-Подробности — в [SPEC.md](./SPEC.md).
+Навигация пользователя: **Мысли** (`/reels`) и **Профиль** (`/profile`). Глобального раздела «Вопросы» нет.
+
+## Существующая БД (после db push)
+
+Если база уже была создана через `db push` (старые таблицы Job/AnalysisResult/Criterion без `_prisma_migrations`), сначала `npm run db:migrate:existing`. Пустую базу не baselined — для неё обычный `migrate deploy`. При несовпадении схемы скрипт останавливается. Затем `npm run db:backfill-reels`. Не используйте `db push --force-reset`.
+
+## Проверки кода
+
+Без вызова живой модели:
+
+```powershell
+npm run typecheck
+npm run lint
+npm run test:reels
+npm run build
+```
+
+Сводка служебных вызовов модели (день, контекст reel/profile, вид, модель, токены):
+
+```powershell
+npm run report:ai
+```
+
+В development также есть `/dev/ai`. В production страница недоступна.
+
+Дневной лимит токенов: `VOCAL_DAILY_TOKEN_LIMIT` в `.env`. При исчерпании клиент получает понятную ошибку; несохранённый текст в поле ввода не стирается.
+
+## Резервное копирование
+
+Перед копированием остановите `npm run dev` и другие процессы, пишущие в БД.
+
+```powershell
+npx tsx scripts/backup.ts --dest "$env:USERPROFILE\Vocal-backups\manual-$(Get-Date -Format yyyy-MM-dd-HHmmss)"
+npx tsx scripts/backup.ts --restore-from "<каталог-бэкапа>" --restore-to "$env:USERPROFILE\Vocal-restore-check"
+```
+
+На части Windows `npm run backup -- --dest …` отбрасывает `--dest`. Надёжнее вызывать `npx tsx scripts/backup.ts` напрямую.
+
+Восстановление только в **изолированный** каталог, не поверх рабочей `prisma/dev.db`.
+Не используйте `migrate reset`, `db push --force-reset` и флаги с потерей данных.
+
+Экспорт карточки: в студии мысли, `GET /api/reels/:id/export`. Без `includeHiddenContext=1` скрытый контекст анкеты не входит.
+
+`.env`, база, анкета и медиа в git не входят.
+
+## Что умеет продукт
+
+- Мысль текстом, голосом или видео; голос сразу идёт в STT без экрана подтверждения транскрипта.
+- Диалог с Vocal, перенос предложения в черновик сценария, автосохранение черновика, готовые версии.
+- Запись нового голосового дубля и загрузка видео-дубля.
+- Независимый итоговый дубль и итоговый сценарий; завершение и возврат в работу без потери истории.
+- Разговорная анкета и один актуальный портрет. Анкета необязательна, чтобы начать мысль.
+
+## Известные ограничения
+
+- Один автор, localhost. Нет аккаунтов; не публикуйте приложение в интернет без защиты.
+- Нет публикации в соцсети, оплаты, команд и облачной синхронизации.
+- Живой Groq на этапах разработки часто не вызывался: маршруты проверены автотестами с mock.
+- Выбор файла в диалоге Windows через встроенный браузер агента недоступен; загрузка медиа — через API или обычный браузер.
+- Служебные страницы `/history`, `/settings`, `/jobs` не входят в пользовательскую навигацию; это остаток прежнего пайплайна, не продуктовый раздел.
+
+Исследования блогеров в `Analyz/` не нужны для запуска приложения.

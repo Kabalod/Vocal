@@ -7,17 +7,126 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Job {
+model Reel {
+  id               String                 @id @default(cuid())
+  title            String
+  initialNote      String                 @default("")
+  status           String                 @default("draft")
+  selectedTakeId   String?
+  finalTakeId      String?
+  reelGoal         String                 @default("")
+  reelAudience     String                 @default("")
+  contextKeysJson  String                 @default("[]")
+  selectedScriptId String?
+  finalScriptId    String?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  takes            Take[]
+  contextSnapshots ReelContextSnapshot[]
+  reviews          Review[]
+  questions        Question[]
+  aiCalls          AiCall[]
+  scripts          ScriptVersion[]
+  compares         CompareResult[]
+  thoughtCreateKeys ThoughtCreateKey[]
+  dialogueThreads   DialogueThread[]
+  scriptDraft       ScriptDraft?
+}
+
+model CreatorProfile {
+  id                 String             @id
+  currentRevisionId  String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  revisions          ProfileRevision[]
+  dialogueThreads    DialogueThread[]
+  aiCalls            AiCall[]
+}
+
+model ProfileRevision {
+  id          String         @id @default(cuid())
+  profileId   String
+  profile     CreatorProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  payloadJson String
+  createdAt   DateTime       @default(now())
+}
+
+model ReelContextSnapshot {
+  id                 String   @id @default(cuid())
+  reelId             String
+  reel               Reel     @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  profileRevisionId  String?
+  reelGoal           String
+  reelAudience       String
+  selectedKeysJson   String
+  assembledJson      String
+  createdAt          DateTime @default(now())
+}
+
+model ThoughtCreateKey {
+  key       String   @id
+  reelId    String   @unique
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+}
+
+model Take {
+  id                    String                @id @default(cuid())
+  reelId                String
+  reel                  Reel                  @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  number                Int
+  inputType             String
+  authorNote            String                @default("")
+  idempotencyKey        String?
+  mediaStatus           String                @default("ready")
+  originalName          String?
+  storedPath            String?
+  mimeType              String?
+  bodyText              String                @default("")
+  selectedTranscriptId  String?
+  scriptVersionId       String?
+  scriptVersion         ScriptVersion?        @relation(fields: [scriptVersionId], references: [id], onDelete: Restrict)
+  createdAt             DateTime              @default(now())
+  jobs                  Job[]
+  transcripts           TranscriptRevision[]
+  reviews               Review[]
+
+  @@unique([reelId, number])
+  @@unique([reelId, idempotencyKey])
+}
+
+model TranscriptRevision {
   id           String   @id @default(cuid())
+  takeId       String
+  take         Take     @relation(fields: [takeId], references: [id], onDelete: Restrict)
+  kind         String
+  source       String
+  text         String
+  segmentsJson String?
+  language     String?
+  sttModel     String?
+  parentId     String?
+  createdAt    DateTime @default(now())
+}
+
+model Job {
+  id           String    @id @default(cuid())
   originalName String
   videoPath    String
   audioPath    String?
   durationSec  Float?
-  status       String   @default("queued")
+  status       String    @default("queued")
+  stage        String    @default("convert")
+  attempts     Int       @default(0)
+  maxAttempts  Int       @default(3)
+  leaseUntil   DateTime?
+  leaseOwner   String?
   errorCode    String?
   errorMessage String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  takeId       String?
+  take         Take?     @relation(fields: [takeId], references: [id], onDelete: Restrict)
   analysis     AnalysisResult?
 }
 
@@ -43,4 +152,155 @@ model Criterion {
   categoryLabel  String  @default("")
   categoryWeight Int     @default(20)
   categoryOrder  Int     @default(0)
+}
+
+model AiCall {
+  id                 String          @id @default(cuid())
+  kind               String
+  reelId             String?
+  reel               Reel?           @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  profileId          String?
+  profile            CreatorProfile? @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  takeId             String?
+  reviewId           String?
+  model              String
+  status             String          @default("queued")
+  promptText         String // R8: stored for replay; logs/metrics must not print this. Dropping the column is a separate decision.
+  inputSnapshotJson  String
+  responseText       String?
+  resultJson         String?
+  errorMessage       String?
+  promptTokens       Int?
+  completionTokens   Int?
+  createdAt          DateTime        @default(now())
+  reviews            Review[]
+
+  @@index([reelId, createdAt])
+  @@index([profileId, createdAt])
+}
+
+model Review {
+  id                     String    @id @default(cuid())
+  reelId                 String
+  reel                   Reel      @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  takeId                 String
+  take                   Take      @relation(fields: [takeId], references: [id], onDelete: Restrict)
+  transcriptRevisionId   String
+  contextSnapshotId      String?
+  previousReviewId       String?
+  aiCallId               String?
+  aiCall                 AiCall?   @relation(fields: [aiCallId], references: [id], onDelete: SetNull)
+  status                 String    @default("queued")
+  resultJson             String?
+  errorMessage           String?
+  createdAt              DateTime  @default(now())
+  questions              Question[]
+}
+
+model Question {
+  id        String   @id @default(cuid())
+  reelId    String
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  reviewId  String?
+  review    Review?  @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  roundId   String
+  text      String
+  status    String   @default("open")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  answers   Answer[]
+}
+
+model Answer {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  text       String
+  createdAt  DateTime @default(now())
+}
+
+model ScriptVersion {
+  id                 String   @id @default(cuid())
+  reelId             String
+  reel               Reel     @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  kind               String
+  body               String
+  recordingJson      String   @default("{}")
+  sourcesJson        String   @default("[]")
+  parentId           String?
+  contextSnapshotId  String?
+  model              String?
+  promptVersion      String?
+  inventedIdeasJson  String   @default("[]")
+  inputSnapshotJson  String?
+  createdAt          DateTime @default(now())
+  takes              Take[]
+
+  @@index([reelId, createdAt])
+}
+
+model ScriptDraft {
+  id            String   @id @default(cuid())
+  reelId        String   @unique
+  reel          Reel     @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  body          String
+  sourcesJson   String   @default("[]")
+  sourceKind    String   @default("manual")
+  baseVersionId String?
+  saveToken     Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model DialogueThread {
+  id        String            @id @default(cuid())
+  scope     String            @default("reel")
+  reelId    String?           @unique
+  reel      Reel?             @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  profileId String?           @unique
+  profile   CreatorProfile?   @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  messages  DialogueMessage[]
+}
+
+model DialogueMessage {
+  id             String         @id @default(cuid())
+  threadId       String
+  thread         DialogueThread @relation(fields: [threadId], references: [id], onDelete: Restrict)
+  role           String
+  kind           String
+  body           String
+  payloadJson    String         @default("{}")
+  sourceType     String?
+  sourceId       String?
+  status         String         @default("done")
+  idempotencyKey String?
+  claimKey       String?        @unique
+  createdAt      DateTime       @default(now())
+
+  @@unique([threadId, idempotencyKey])
+  @@index([threadId, createdAt])
+}
+
+model CompareResult {
+  id                 String   @id @default(cuid())
+  reelId             String
+  reel               Reel     @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  leftTakeId         String
+  rightTakeId        String
+  leftTranscriptId   String
+  rightTranscriptId  String
+  intent             String   @default("")
+  textDiffJson       String
+  resultJson         String?
+  status             String   @default("done")
+  errorMessage       String?
+  contextSnapshotId  String?
+  aiCallId           String?
+  model              String?
+  promptVersion      String?
+  createdAt          DateTime @default(now())
+
+  @@index([reelId, createdAt])
 }

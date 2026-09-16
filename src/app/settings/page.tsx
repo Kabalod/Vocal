@@ -108,7 +108,7 @@ export default function SettingsPage() {
             type="button"
             onClick={() => void save()}
             disabled={saving}
-            className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-[#1a140c] disabled:opacity-60"
+            className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-on-accent disabled:opacity-60"
           >
             {saving ? "Сохраняем…" : "Сохранить"}
           </button>

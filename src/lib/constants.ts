@@ -8,3 +8,17 @@ export const ALLOWED_MIME = [
   "video/x-matroska",
   "application/octet-stream",
 ];
+export const ALLOWED_AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".aac", ".ogg", ".webm"];
+export const ALLOWED_AUDIO_MIME = [
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/mp4",
+  "audio/aac",
+  "audio/ogg",
+  "audio/webm",
+  "application/octet-stream",
+];
+export const BROWSER_VIDEO_EXTENSIONS = [".mp4", ".webm"];
+export const BROWSER_AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".ogg", ".webm", ".aac"];

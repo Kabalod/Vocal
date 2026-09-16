@@ -73,7 +73,7 @@ export function UploadDropzone() {
           mp4, webm, mov, mkv · до {MAX_VIDEO_SECONDS / 60} минут · до {MAX_UPLOAD_MB}{" "}
           МБ
         </p>
-        <span className="mt-6 inline-block rounded-full bg-accent px-5 py-2 text-sm font-medium text-[#1a140c]">
+        <span className="mt-6 inline-block rounded-full bg-accent px-5 py-2 text-sm font-medium text-on-accent">
           Выбрать файл
         </span>
       </button>
