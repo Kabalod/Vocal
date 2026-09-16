@@ -14,8 +14,11 @@ import {
   detachRecorderHandlers,
   finishVoiceRecording,
   formatRecordingDuration,
+  microphonePermissionMessage,
+  shouldPostVoiceReply,
   stopMediaStream,
   stopRecorderIfActive,
+  voiceReplyRetryTarget,
   type VoiceCaptureSession,
 } from "@/lib/media-session";
 import {
@@ -69,6 +72,7 @@ export function ProfileConversation() {
   const chunksRef = useRef<Blob[]>([]);
   const textKeyRef = useRef<string | null>(null);
   const voiceKeyRef = useRef<string | null>(null);
+  const lastVoiceRef = useRef<{ blob: Blob; duration: string } | null>(null);
 
   const applyWorkspace = useCallback((next: Workspace) => {
     setWorkspace(next);
@@ -190,8 +194,8 @@ export function ProfileConversation() {
         recorderRef.current = null;
         setError("Не удалось начать запись. Проверьте микрофон.");
       }
-    } catch {
-      setError("Нужен доступ к микрофону.");
+    } catch (err) {
+      setError(microphonePermissionMessage(err, { secureContext: window.isSecureContext }));
     }
   }
 
@@ -237,12 +241,19 @@ export function ProfileConversation() {
     }
     if (recorderRef.current === recorder) recorderRef.current = null;
     if (streamRef.current === stream) streamRef.current = null;
-    if (!blob.size) {
-      setError("Запись пуста. Запишите голос заново.");
-      setVoiceError(true);
+    if (!shouldPostVoiceReply({ cancelled: session.cancelled, byteLength: blob.size })) {
       setFinalizing(false);
+      if (!session.cancelled) {
+        setError("Запись пуста. Запишите голос заново.");
+        setVoiceError(true);
+      }
       return;
     }
+    lastVoiceRef.current = { blob, duration };
+    await postVoiceReply({ blob, duration });
+  }
+
+  async function postVoiceReply(payload: { blob: Blob; duration: string }) {
     setSending(true);
     setFinalizing(false);
     setError(null);
@@ -252,13 +263,14 @@ export function ProfileConversation() {
       const controller = new AbortController();
       fetchRef.current = controller;
       const form = new FormData();
-      form.set("file", blob, "reply.webm");
+      form.set("file", payload.blob, "reply.webm");
       form.set("idempotencyKey", voiceKeyRef.current);
-      form.set("voiceDurationLabel", duration);
+      form.set("voiceDurationLabel", payload.duration);
       const res = await fetch("/api/profile/dialogue", { method: "POST", body: form, signal: controller.signal });
       const data = (await res.json()) as Workspace & { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Не удалось отправить голос.");
       voiceKeyRef.current = null;
+      lastVoiceRef.current = null;
       applyWorkspace(data);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
@@ -437,11 +449,25 @@ export function ProfileConversation() {
       ) : null}
 
       {error ? (
-        <div className="space-y-1">
+        <div className="space-y-2">
           <InlineError message={error} />
           {voiceError ? (
             <p className="text-sm text-muted">Можно записать голос заново или отправить ту же мысль текстом.</p>
           ) : null}
+          <ActionButton
+            variant="compact"
+            onClick={() => {
+              const target = voiceReplyRetryTarget({
+                voiceError,
+                hasVoicePayload: Boolean(lastVoiceRef.current),
+                hasDraft: Boolean(draft.trim()),
+              });
+              if (target === "voice" && lastVoiceRef.current) void postVoiceReply(lastVoiceRef.current);
+              else if (target === "text") void sendText(draft);
+            }}
+          >
+            Повторить
+          </ActionButton>
         </div>
       ) : null}
     </div>

@@ -11,6 +11,7 @@ import {
   createVoiceCaptureSession,
   detachRecorderHandlers,
   formatRecordingDuration,
+  microphonePermissionMessage,
   previewUrlIfSessionActive,
   revokePreviewUrl,
   stopMediaStream,
@@ -177,11 +178,11 @@ export function RecordingView({
       timerRef.current = window.setInterval(() => setSeconds((value) => value + 1), 1000);
       startMeter(stream);
       setPhase("recording");
-    } catch {
+    } catch (err) {
       if (session.cancelled) return;
       releaseHardware();
       setPhase("idle");
-      setError("Нет доступа к микрофону. Разрешите доступ в настройках браузера и нажмите «Начать запись» снова.");
+      setError(microphonePermissionMessage(err, { secureContext: window.isSecureContext }));
     }
   }
 

@@ -1,3 +1,37 @@
+export function microphonePermissionMessage(
+  error: unknown,
+  options: { secureContext?: boolean } = {},
+): string {
+  if (options.secureContext === false) {
+    return "Запись голоса доступна только по HTTPS или на localhost.";
+  }
+  const name = error instanceof Error ? error.name : "";
+  if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+    return "Нет доступа к микрофону. Разрешите доступ в настройках браузера и повторите.";
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    return "Микрофон не найден. Подключите устройство и повторите.";
+  }
+  if (name === "NotReadableError" || name === "AbortError") {
+    return "Микрофон занят другим приложением. Закройте его и повторите.";
+  }
+  return "Не удалось получить микрофон. Проверьте доступ и повторите.";
+}
+
+export function shouldPostVoiceReply(input: { cancelled: boolean; byteLength: number }): boolean {
+  return !input.cancelled && input.byteLength > 0;
+}
+
+export function voiceReplyRetryTarget(input: {
+  voiceError: boolean;
+  hasVoicePayload: boolean;
+  hasDraft: boolean;
+}): "voice" | "text" | "reload" {
+  if (input.voiceError && input.hasVoicePayload) return "voice";
+  if (input.hasDraft) return "text";
+  return "reload";
+}
+
 export type VoiceCaptureSession = {
   cancelled: boolean;
 };

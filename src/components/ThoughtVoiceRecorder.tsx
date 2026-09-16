@@ -11,6 +11,7 @@ import {
   createVoiceCaptureSession,
   detachRecorderHandlers,
   formatRecordingDuration,
+  microphonePermissionMessage,
   previewUrlIfSessionActive,
   revokePreviewUrl,
   stopMediaStream,
@@ -145,11 +146,11 @@ export function ThoughtVoiceRecorder({
       timerRef.current = window.setInterval(() => setSeconds((value) => value + 1), 1000);
       startMeter(stream);
       setState("recording");
-    } catch {
+    } catch (err) {
       if (session.cancelled) return;
       releaseHardware();
       setState("idle");
-      setError("Нет доступа к микрофону. Разрешите доступ в настройках браузера и нажмите «Начать запись» снова.");
+      setError(microphonePermissionMessage(err, { secureContext: window.isSecureContext }));
     }
   }
 

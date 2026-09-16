@@ -13,8 +13,11 @@ import {
   detachRecorderHandlers,
   finishVoiceRecording,
   formatRecordingDuration,
+  microphonePermissionMessage,
+  shouldPostVoiceReply,
   stopMediaStream,
   stopRecorderIfActive,
+  voiceReplyRetryTarget,
   type VoiceCaptureSession,
 } from "@/lib/media-session";
 import { ShellError, ShellLoading } from "@/components/shell-status";
@@ -107,6 +110,7 @@ export function ThoughtDialogue({
   const chunksRef = useRef<Blob[]>([]);
   const textKeyRef = useRef<string | null>(null);
   const voiceKeyRef = useRef<string | null>(null);
+  const lastVoiceRef = useRef<{ blob: Blob; duration: string } | null>(null);
   const transferLockRef = useRef(false);
 
   const applyPage = useCallback((next: DialoguePageDto, mode: "replace" | "prepend") => {
@@ -248,8 +252,8 @@ export function ThoughtDialogue({
         recorderRef.current = null;
         setError("Не удалось начать запись. Проверьте микрофон.");
       }
-    } catch {
-      setError("Нужен доступ к микрофону.");
+    } catch (err) {
+      setError(microphonePermissionMessage(err, { secureContext: window.isSecureContext }));
     }
   }
 
@@ -295,12 +299,19 @@ export function ThoughtDialogue({
     }
     if (recorderRef.current === recorder) recorderRef.current = null;
     if (streamRef.current === stream) streamRef.current = null;
-    if (!blob.size) {
-      setError("Запись пуста. Запишите голос заново.");
-      setVoiceError(true);
+    if (!shouldPostVoiceReply({ cancelled: session.cancelled, byteLength: blob.size })) {
       setFinalizing(false);
+      if (!session.cancelled) {
+        setError("Запись пуста. Запишите голос заново.");
+        setVoiceError(true);
+      }
       return;
     }
+    lastVoiceRef.current = { blob, duration };
+    await postVoiceReply({ blob, duration });
+  }
+
+  async function postVoiceReply(payload: { blob: Blob; duration: string }) {
     setSending(true);
     setFinalizing(false);
     setError(null);
@@ -310,13 +321,14 @@ export function ThoughtDialogue({
       const controller = new AbortController();
       fetchRef.current = controller;
       const form = new FormData();
-      form.set("file", blob, "reply.webm");
+      form.set("file", payload.blob, "reply.webm");
       form.set("idempotencyKey", voiceKeyRef.current);
-      form.set("voiceDurationLabel", duration);
+      form.set("voiceDurationLabel", payload.duration);
       const res = await fetch(`/api/thoughts/${reelId}/dialogue`, { method: "POST", body: form, signal: controller.signal });
       const data = (await res.json()) as DialoguePageDto & { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Не удалось отправить голос.");
       voiceKeyRef.current = null;
+      lastVoiceRef.current = null;
       applyPage(data, "replace");
     } catch (err) {
       if (isDialogueAbortError(err)) return;
@@ -404,7 +416,13 @@ export function ThoughtDialogue({
               <ActionButton
                 variant="compact"
                 onClick={() => {
-                  if (draft.trim()) void sendText(draft);
+                  const target = voiceReplyRetryTarget({
+                    voiceError,
+                    hasVoicePayload: Boolean(lastVoiceRef.current),
+                    hasDraft: Boolean(draft.trim()),
+                  });
+                  if (target === "voice" && lastVoiceRef.current) void postVoiceReply(lastVoiceRef.current);
+                  else if (target === "text") void sendText(draft);
                   else void refreshHistory();
                 }}
               >
