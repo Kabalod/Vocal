@@ -14,12 +14,14 @@ import {
   pickAcceptedArchiveScript,
 } from "../src/lib/archive-preview";
 import { studioThoughtHref } from "../src/components/reel-studio";
+import { resolveStudioRecordDeepLink } from "../src/lib/recording-session";
 import {
   archiveListHref,
   closeArchivePreview,
   defaultArchiveListUrlState,
   openArchivePreview,
   parseArchiveListUrl,
+  restoreArchiveFocusOnce,
 } from "../src/lib/thought-archive-state";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -232,6 +234,63 @@ test("P01.5 preview endpoint returns summary without N+1 list fields", async (t)
     params: Promise.resolve({ id: "missing" }),
   });
   assert.equal(missing.status, 404);
+});
+
+test("P01.5 completed thought does not open RecordingView from record=1", () => {
+  assert.equal(
+    resolveStudioRecordDeepLink({ thoughtCompleted: true, hasReadyScript: true, hasDraft: false }),
+    "blocked",
+  );
+  assert.equal(
+    resolveStudioRecordDeepLink({ thoughtCompleted: false, hasReadyScript: true, hasDraft: false }),
+    "record",
+  );
+  assert.equal(
+    resolveStudioRecordDeepLink({ thoughtCompleted: false, hasReadyScript: false, hasDraft: true }),
+    "draft",
+  );
+
+  const studio = readFileSync(path.join(root, "src/components/ReelStudio.tsx"), "utf8");
+  const preview = readFileSync(path.join(root, "src/components/ArchiveThoughtPreview.tsx"), "utf8");
+  assert.match(studio, /resolveStudioRecordDeepLink/);
+  assert.match(studio, /thoughtCompleted: thoughtStatus === "completed"/);
+  assert.match(studio, /deepLink === "record"/);
+  assert.match(studio, /setRecording\(true\)/);
+  assert.match(preview, /Сначала верните мысль в работу/);
+  assert.match(preview, /data\.completed/);
+  const recordBranch = studio.slice(studio.indexOf("resolveStudioRecordDeepLink"));
+  assert.match(recordBranch, /if \(deepLink === "record"\)[\s\S]*setRecording\(true\)/);
+  assert.doesNotMatch(
+    recordBranch,
+    /if \(deepLink === "blocked"\)[\s\S]*setRecording\(true\)/,
+  );
+});
+
+test("P01.5 archive focus is written only on studio leave and cleared after the card is found", () => {
+  const first = restoreArchiveFocusOnce({ storedId: "r1", presentIds: ["r1"] });
+  assert.equal(first.scrolledTo, "r1");
+  assert.equal(first.nextStoredId, null);
+
+  const laterPage = restoreArchiveFocusOnce({
+    storedId: first.nextStoredId,
+    presentIds: ["r1", "r2", "r3"],
+  });
+  assert.equal(laterPage.scrolledTo, null);
+  assert.equal(laterPage.nextStoredId, null);
+
+  const waiting = restoreArchiveFocusOnce({ storedId: "r9", presentIds: ["r1"] });
+  assert.equal(waiting.scrolledTo, null);
+  assert.equal(waiting.nextStoredId, "r9");
+
+  const list = readFileSync(path.join(root, "src/components/ReelList.tsx"), "utf8");
+  const preview = readFileSync(path.join(root, "src/components/ArchiveThoughtPreview.tsx"), "utf8");
+  assert.match(list, /restoreArchiveFocusOnce/);
+  assert.match(list, /clearArchiveFocus\(\)/);
+  const openPreviewFn = list.slice(list.indexOf("function openPreview"), list.indexOf("useEffect", list.indexOf("function openPreview")));
+  assert.match(openPreviewFn, /pushUrl\(openArchivePreview/);
+  assert.equal(openPreviewFn.includes("rememberArchiveFocus"), false);
+  assert.match(preview, /onLeaveToStudio\?/);
+  assert.match(list, /onLeaveToStudio=\{\(\) => rememberArchiveFocus\(previewId\)\}/);
 });
 
 test("P01.5 UI opens preview from polaroid zones and routes dialog/record without AI", () => {

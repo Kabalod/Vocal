@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { StatusBadge } from "@/components/vocal-ui/StatusBadge";
 import { VocalModal } from "@/components/vocal-ui/VocalModal";
 import { studioThoughtHref } from "@/components/reel-studio";
@@ -12,10 +13,12 @@ export function ArchiveThoughtPreview({
   reelId,
   open,
   onClose,
+  onLeaveToStudio,
 }: {
   reelId: string;
   open: boolean;
   onClose: () => void;
+  onLeaveToStudio?: () => void;
 }) {
   const [load, setLoad] = useState<"loading" | "error" | "ok">("loading");
   const [error, setError] = useState<string | null>(null);
@@ -78,17 +81,25 @@ export function ArchiveThoughtPreview({
             <p className="text-sm text-muted">{data.noScriptHint}</p>
           )}
           <div className="flex flex-col gap-2 pt-2">
-            <Link
-              href={recordHref}
-              replace
-              className="vocal-btn vocal-btn-primary inline-flex min-h-11 items-center justify-center"
-            >
-              Снять новый дубль
-            </Link>
+            {data.completed ? (
+              <ActionButton variant="primary" disabled disabledReason="Сначала верните мысль в работу">
+                Снять новый дубль
+              </ActionButton>
+            ) : (
+              <Link
+                href={recordHref}
+                replace
+                className="vocal-btn vocal-btn-primary inline-flex min-h-11 items-center justify-center"
+                onClick={() => onLeaveToStudio?.()}
+              >
+                Снять новый дубль
+              </Link>
+            )}
             <Link
               href={dialogHref}
               replace
               className="vocal-btn inline-flex min-h-11 items-center justify-center"
+              onClick={() => onLeaveToStudio?.()}
             >
               Перейти к работе с мыслью
             </Link>

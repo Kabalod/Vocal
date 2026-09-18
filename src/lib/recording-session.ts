@@ -50,6 +50,20 @@ export function studioRecordGate(input: { hasReadyScript: boolean; hasDraft: boo
   return "ok";
 }
 
+export type StudioRecordDeepLink = "record" | "draft" | "blocked";
+
+export function resolveStudioRecordDeepLink(input: {
+  thoughtCompleted: boolean;
+  hasReadyScript: boolean;
+  hasDraft: boolean;
+}): StudioRecordDeepLink {
+  if (input.thoughtCompleted) return "blocked";
+  if (studioRecordGate({ hasReadyScript: input.hasReadyScript, hasDraft: input.hasDraft }) === "draft-open") {
+    return "draft";
+  }
+  return "record";
+}
+
 export function takeProcessRequiresScript(): boolean {
   return false;
 }

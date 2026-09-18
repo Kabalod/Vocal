@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { STUDIO_MOBILE_TABS, isStudioMobileTab, parseStudioTab, studioThoughtHref } from "../src/components/reel-studio";
-import { studioRecordGate } from "../src/lib/recording-session";
+import { resolveStudioRecordDeepLink, studioRecordGate } from "../src/lib/recording-session";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -23,6 +23,10 @@ test("studio IA is three thought tabs with a URL tab param", () => {
 test("record opens a new voice take even without a ready script", () => {
   assert.equal(studioRecordGate({ hasReadyScript: true, hasDraft: false }), "ok");
   assert.equal(studioRecordGate({ hasReadyScript: false, hasDraft: false }), "ok");
+  assert.equal(
+    resolveStudioRecordDeepLink({ thoughtCompleted: true, hasReadyScript: false, hasDraft: false }),
+    "blocked",
+  );
 });
 
 test("thought studio shell loads by id with back, tabs and honest missing/error", () => {

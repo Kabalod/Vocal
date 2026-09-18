@@ -15,7 +15,7 @@ import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
 import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
 import { newDialogueIdempotencyKey } from "@/lib/dialogue-client";
 import { parseStudioTab, studioThoughtHref, writeStudioTab, type StudioMobileTab } from "@/components/reel-studio";
-import { studioRecordGate } from "@/lib/recording-session";
+import { resolveStudioRecordDeepLink, studioRecordGate } from "@/lib/recording-session";
 import { studioShouldSilentRefetch } from "@/lib/recovery";
 import type { ReelStatus } from "@/types/reel";
 import type { ScriptWorkspaceDto } from "@/types/script";
@@ -129,15 +129,20 @@ export function ReelStudio({ reelId }: { reelId: string }) {
     if (searchParams.get("record") !== "1") return;
     if (load !== "ok" || !workspaceReady || recordBootstrapped.current) return;
     recordBootstrapped.current = true;
-    if (studioRecordGate({ hasReadyScript, hasDraft: hasManualDraft }) === "draft-open") {
+    const deepLink = resolveStudioRecordDeepLink({
+      thoughtCompleted: thoughtStatus === "completed",
+      hasReadyScript,
+      hasDraft: hasManualDraft,
+    });
+    if (deepLink === "draft") {
       setDraftPrompt(true);
-    } else {
+    } else if (deepLink === "record") {
       setDraftPrompt(false);
       setRecording(true);
     }
     writeStudioTab(reelId, "takes");
     router.replace(studioThoughtHref(reelId, "takes"), { scroll: false });
-  }, [hasManualDraft, hasReadyScript, load, reelId, router, searchParams, workspaceReady]);
+  }, [hasManualDraft, hasReadyScript, load, reelId, router, searchParams, thoughtStatus, workspaceReady]);
 
   function changeTab(next: StudioMobileTab) {
     writeStudioTab(reelId, next);
@@ -151,6 +156,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
   }
 
   function requestRecording() {
+    if (thoughtStatus === "completed") return;
     if (studioRecordGate({ hasReadyScript, hasDraft: hasManualDraft }) === "draft-open") {
       setDraftPrompt(true);
       return;

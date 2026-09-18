@@ -176,6 +176,28 @@ export function readArchiveFocus(): string | null {
   }
 }
 
+export function clearArchiveFocus() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(ARCHIVE_FOCUS_STORAGE_KEY);
+  } catch {
+    /* ignore quota */
+  }
+}
+
+/** Restore once: keep the id until the card is on the page, then drop it. */
+export function restoreArchiveFocusOnce(input: {
+  storedId: string | null;
+  presentIds: string[];
+}): { scrolledTo: string | null; nextStoredId: string | null } {
+  const storedId = input.storedId?.trim() || null;
+  if (!storedId) return { scrolledTo: null, nextStoredId: null };
+  if (!input.presentIds.includes(storedId)) {
+    return { scrolledTo: null, nextStoredId: storedId };
+  }
+  return { scrolledTo: storedId, nextStoredId: null };
+}
+
 export function openArchivePreview(state: ArchiveListUrlState, reelId: string): ArchiveListUrlState {
   return { ...state, previewId: reelId, calendarOpen: false };
 }

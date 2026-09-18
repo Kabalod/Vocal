@@ -34,6 +34,8 @@ import {
   parseArchiveListUrl,
   readArchiveFocus,
   rememberArchiveFocus,
+  restoreArchiveFocusOnce,
+  clearArchiveFocus,
   resolveArchiveEmptyKind,
   type ArchiveListUrlState,
 } from "@/lib/thought-archive-state";
@@ -280,16 +282,20 @@ export function ReelList() {
   }, [router]);
 
   function openPreview(reelId: string) {
-    rememberArchiveFocus(reelId);
     pushUrl(openArchivePreview(urlStateRef.current, reelId));
   }
 
   useEffect(() => {
     if (loading || listError || reels.length === 0) return;
-    const id = readArchiveFocus();
-    if (!id) return;
-    const node = document.querySelector<HTMLElement>(`[data-archive-reel="${id}"]`);
-    node?.scrollIntoView({ block: "nearest" });
+    const restore = restoreArchiveFocusOnce({
+      storedId: readArchiveFocus(),
+      presentIds: reels.map((reel) => reel.id),
+    });
+    if (!restore.scrolledTo) return;
+    const node = document.querySelector<HTMLElement>(`[data-archive-reel="${restore.scrolledTo}"]`);
+    if (!node) return;
+    node.scrollIntoView({ block: "nearest" });
+    clearArchiveFocus();
   }, [loading, listError, reels]);
 
   useEffect(() => {
@@ -371,7 +377,12 @@ export function ReelList() {
           ) : null}
 
           {previewId ? (
-            <ArchiveThoughtPreview open reelId={previewId} onClose={closePreview} />
+            <ArchiveThoughtPreview
+              open
+              reelId={previewId}
+              onClose={closePreview}
+              onLeaveToStudio={() => rememberArchiveFocus(previewId)}
+            />
           ) : null}
 
           {isDesktop ? (
