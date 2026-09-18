@@ -28,6 +28,11 @@ import {
   resolveArchiveDateField,
   type CalendarFacetDto,
 } from "@/lib/reel-archive-query";
+import {
+  assertValidTimeZone,
+  bucketCalendarDaysInTimeZone,
+  monthRangeInTimeZone,
+} from "@/lib/archive-calendar";
 import { toReelDto, toReelListItemDto } from "@/lib/serialize";
 import { thoughtCompletionGate } from "@/lib/thought-completion";
 import { enqueueByKey } from "@/lib/write-queue";
@@ -272,7 +277,8 @@ export async function listReels(query: ReelListQuery = {}): Promise<ReelListResu
 
 export async function listReelCalendarFacets(input: {
   month: string;
-  tzOffsetMinutes: number;
+  tzOffsetMinutes?: number;
+  timeZone?: string | null;
   q?: string;
   status?: ReelListQuery["status"];
   dateField?: string | null;
@@ -281,7 +287,10 @@ export async function listReelCalendarFacets(input: {
     const dateField = resolveArchiveDateField(input.dateField);
     const status = input.status ?? "open";
     const q = input.q?.trim();
-    const { from, to, month } = monthRangeForOffset(input.month, input.tzOffsetMinutes);
+    const timeZone = input.timeZone?.trim() ? assertValidTimeZone(input.timeZone) : null;
+    const { from, to, month } = timeZone
+      ? monthRangeInTimeZone(input.month, timeZone)
+      : monthRangeForOffset(input.month, input.tzOffsetMinutes ?? 0);
 
     const baseFilters: Prisma.ReelWhereInput[] = [reelListStatusWhere(status)];
     if (q) baseFilters.push(reelListSearchWhere(q));
@@ -324,10 +333,12 @@ export async function listReelCalendarFacets(input: {
       month,
       dateField,
       dateFieldDefault: ARCHIVE_DATE_FIELD_DEFAULT,
-      tzOffsetMinutes: input.tzOffsetMinutes,
+      tzOffsetMinutes: input.tzOffsetMinutes ?? 0,
       from: from.toISOString(),
       to: to.toISOString(),
-      days: bucketCalendarDays(instants, input.tzOffsetMinutes),
+      days: timeZone
+        ? bucketCalendarDaysInTimeZone(instants, timeZone)
+        : bucketCalendarDays(instants, input.tzOffsetMinutes ?? 0),
       dataBounds: {
         earliest: earliest ? earliest.toISOString() : null,
         latest: latest ? latest.toISOString() : null,
@@ -337,6 +348,9 @@ export async function listReelCalendarFacets(input: {
   } catch (error) {
     if (error instanceof ArchiveQueryError) {
       throw new ReelError(error.message, error.code, error.status);
+    }
+    if (error instanceof Error && /timeZone/i.test(error.message)) {
+      throw new ReelError(error.message, "CALENDAR_TZ", 400);
     }
     throw error;
   }

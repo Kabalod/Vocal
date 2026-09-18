@@ -26,10 +26,14 @@ export async function GET(request: Request) {
     if (!month) {
       return NextResponse.json({ error: "Нужен месяц YYYY-MM.", code: "CALENDAR_MONTH" }, { status: 400 });
     }
-    const tzRaw = url.searchParams.get("tzOffsetMinutes") ?? "0";
-    const tzOffsetMinutes = Number.parseInt(tzRaw, 10);
-    if (!Number.isFinite(tzOffsetMinutes)) {
+    const timeZone = url.searchParams.get("timeZone") ?? undefined;
+    const tzRaw = url.searchParams.get("tzOffsetMinutes");
+    const tzOffsetMinutes = tzRaw == null || tzRaw === "" ? undefined : Number.parseInt(tzRaw, 10);
+    if (tzOffsetMinutes !== undefined && !Number.isFinite(tzOffsetMinutes)) {
       return NextResponse.json({ error: "Некорректный tzOffsetMinutes.", code: "CALENDAR_TZ" }, { status: 400 });
+    }
+    if (!timeZone && tzOffsetMinutes === undefined) {
+      return NextResponse.json({ error: "Нужен timeZone или tzOffsetMinutes.", code: "CALENDAR_TZ" }, { status: 400 });
     }
 
     const q = url.searchParams.get("q") ?? undefined;
@@ -48,6 +52,7 @@ export async function GET(request: Request) {
     const facets = await listReelCalendarFacets({
       month,
       tzOffsetMinutes,
+      timeZone,
       q,
       status,
       dateField,

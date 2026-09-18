@@ -5,7 +5,6 @@ import {
   IconStatusProgress,
 } from "@/components/vocal-ui/icons";
 import { thoughtUserStatus } from "@/lib/thought-preview";
-import { formatDate } from "@/lib/format";
 import type { ReelListItemDto } from "@/types/reel";
 
 const STATUS_ICONS = {
@@ -38,15 +37,14 @@ export function ArchivePolaroidCard({ reel }: { reel: ReelListItemDto }) {
       </button>
       <Link href={`/reels/${reel.id}`} className="block min-w-0 text-left outline-none">
         <div className="archive-polaroid-frame">
-          <p className="archive-polaroid-title">{reel.title}</p>
-          <span className="inline-flex items-center gap-2 text-sm text-accent-soft" title={statusLabel}>
+          <span className="archive-polaroid-status" title={statusLabel}>
             <StatusIcon aria-hidden />
             <span className="sr-only">{statusLabel}</span>
           </span>
+          <p className="archive-polaroid-title">{reel.title}</p>
         </div>
         <div className="archive-polaroid-footer">
-          <time dateTime={reel.createdAt}>{formatDate(reel.createdAt)}</time>
-          <span aria-hidden="true" className="text-base leading-none text-[#1a1424]">
+          <span aria-hidden="true" className="text-lg leading-none text-[#1a1424]">
             →
           </span>
           <span className="sr-only">Открыть диалог мысли</span>

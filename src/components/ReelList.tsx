@@ -6,7 +6,9 @@ import { NewThoughtSheet } from "@/components/NewThoughtSheet";
 import { ArchiveCalendar } from "@/components/ArchiveCalendar";
 import { ArchivePolaroidCard } from "@/components/ArchivePolaroidCard";
 import { ArchiveStatusFilters } from "@/components/ArchiveStatusFilters";
+import { ReelCard } from "@/components/ReelCard";
 import { RECORDING_FILTERS, isRecordingFilterId } from "@/components/reel-filters";
+import { useShellDesktop } from "@/components/use-shell-desktop";
 import { ShellError, ShellLoading } from "@/components/shell-status";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { EmptyState } from "@/components/vocal-ui/EmptyState";
@@ -44,6 +46,7 @@ function NewThoughtButton({
 export function ReelList() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isDesktop = useShellDesktop();
   const urlKey = searchParams.toString();
   const urlState = useMemo(() => parseArchiveListUrl(new URLSearchParams(urlKey)), [urlKey]);
 
@@ -269,13 +272,20 @@ export function ReelList() {
             ) : null}
           </div>
 
-          <ArchiveCalendar
-            state={urlState}
-            onApplyRange={({ from, to }) => applyFilters({ from, to, dateField: null })}
-            onClearDate={clearDateFilter}
-          />
+          {isDesktop ? (
+            <ArchiveCalendar
+              state={urlState}
+              onApplyRange={({ from, to }) => applyFilters({ from, to, dateField: null })}
+              onClearDate={clearDateFilter}
+            />
+          ) : null}
 
-          <div className="shell:hidden">
+          {isDesktop ? (
+            <ArchiveStatusFilters
+              value={urlState.status}
+              onChange={(id) => applyFilters({ status: id })}
+            />
+          ) : (
             <FilterControl
               items={RECORDING_FILTERS}
               value={urlState.status}
@@ -285,13 +295,7 @@ export function ReelList() {
                 if (isRecordingFilterId(id)) applyFilters({ status: id });
               }}
             />
-          </div>
-          <div className="hidden shell:block">
-            <ArchiveStatusFilters
-              value={urlState.status}
-              onChange={(id) => applyFilters({ status: id })}
-            />
-          </div>
+          )}
 
           <div className="flex flex-wrap gap-2" role="group" aria-label="Сортировка">
             {ARCHIVE_LIST_SORTS.map((item) => (
@@ -361,13 +365,23 @@ export function ReelList() {
 
           {!loading && !listError && reels.length > 0 ? (
             <div className="space-y-4">
-              <ul className="archive-polaroid-grid list-none p-0">
-                {reels.map((reel) => (
-                  <li key={reel.id} className="min-w-0">
-                    <ArchivePolaroidCard reel={reel} />
-                  </li>
-                ))}
-              </ul>
+              {isDesktop ? (
+                <ul className="archive-polaroid-grid list-none p-0">
+                  {reels.map((reel) => (
+                    <li key={reel.id} className="min-w-0">
+                      <ArchivePolaroidCard reel={reel} />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <ul className="grid list-none grid-cols-1 gap-4 p-0">
+                  {reels.map((reel) => (
+                    <li key={reel.id} className="min-w-0">
+                      <ReelCard reel={reel} />
+                    </li>
+                  ))}
+                </ul>
+              )}
 
               {loadingMore ? (
                 <p className="text-sm text-muted" role="status" aria-live="polite">

@@ -4,13 +4,13 @@ import { useEffect, useId, useMemo, useState } from "react";
 import {
   CALENDAR_WEEKDAYS_RU,
   buildCalendarCells,
-  clientTzOffsetMinutes,
-  dayKeyFromDate,
-  dayRangeForOffset,
+  dayKeyFromInstant,
+  dayRangeInTimeZone,
   formatMonthTitleRu,
   matchArchiveDateSelection,
-  monthFilterRangeForOffset,
-  monthKeyFromDate,
+  monthFilterRangeInTimeZone,
+  monthKeyFromInstant,
+  resolveClientTimeZone,
   shiftMonthKey,
 } from "@/lib/archive-calendar";
 import type { CalendarFacetDto } from "@/lib/reel-archive-query";
@@ -24,11 +24,11 @@ type Props = {
 
 export function ArchiveCalendar({ state, onApplyRange, onClearDate }: Props) {
   const labelId = useId();
-  const tz = useMemo(() => clientTzOffsetMinutes(), []);
-  const today = useMemo(() => dayKeyFromDate(new Date(), tz), [tz]);
+  const timeZone = useMemo(() => resolveClientTimeZone(), []);
+  const today = useMemo(() => dayKeyFromInstant(new Date(), timeZone), [timeZone]);
   const selection = useMemo(
-    () => matchArchiveDateSelection(state.from, state.to, tz),
-    [state.from, state.to, tz],
+    () => matchArchiveDateSelection(state.from, state.to, timeZone),
+    [state.from, state.to, timeZone],
   );
 
   const initialMonth =
@@ -36,7 +36,7 @@ export function ArchiveCalendar({ state, onApplyRange, onClearDate }: Props) {
       ? selection.day.slice(0, 7)
       : selection?.kind === "month"
         ? selection.month
-        : monthKeyFromDate(new Date(), tz);
+        : monthKeyFromInstant(new Date(), timeZone);
 
   const [viewMonth, setViewMonth] = useState(initialMonth);
   const [facets, setFacets] = useState<CalendarFacetDto | null>(null);
@@ -52,7 +52,7 @@ export function ArchiveCalendar({ state, onApplyRange, onClearDate }: Props) {
     const ac = new AbortController();
     const params = new URLSearchParams();
     params.set("month", viewMonth);
-    params.set("tzOffsetMinutes", String(tz));
+    params.set("timeZone", timeZone);
     params.set("status", state.status);
     if (state.q.trim()) params.set("q", state.q.trim());
     if (state.dateField === "updatedAt") params.set("dateField", "updatedAt");
@@ -75,7 +75,7 @@ export function ArchiveCalendar({ state, onApplyRange, onClearDate }: Props) {
       });
 
     return () => ac.abort();
-  }, [state.dateField, state.q, state.status, tz, viewMonth]);
+  }, [state.dateField, state.q, state.status, timeZone, viewMonth]);
 
   const marked = useMemo(() => {
     const map = new Map<string, number>();
@@ -83,12 +83,12 @@ export function ArchiveCalendar({ state, onApplyRange, onClearDate }: Props) {
     return map;
   }, [facets]);
 
-  const cells = useMemo(() => buildCalendarCells(viewMonth, tz), [tz, viewMonth]);
+  const cells = useMemo(() => buildCalendarCells(viewMonth, timeZone), [timeZone, viewMonth]);
   const monthSelected = selection?.kind === "month" && selection.month === viewMonth;
   const hasDateFilter = Boolean(state.from && state.to);
 
   return (
-    <section className="hidden space-y-3 shell:block" aria-labelledby={labelId}>
+    <section className="space-y-3" aria-labelledby={labelId}>
       <div className="flex items-center justify-between gap-2">
         <h2 id={labelId} className="text-sm font-medium text-text">
           {formatMonthTitleRu(viewMonth)}
@@ -121,7 +121,7 @@ export function ArchiveCalendar({ state, onApplyRange, onClearDate }: Props) {
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-1" role="grid" aria-label="Календарь мыслей">
+      <div className="grid grid-cols-7 gap-1" aria-label="Календарь мыслей">
         {cells.map((cell) => {
           const count = marked.get(cell.date) ?? 0;
           const isToday = cell.date === today;
@@ -140,13 +140,12 @@ export function ArchiveCalendar({ state, onApplyRange, onClearDate }: Props) {
             <button
               key={`${cell.date}-${cell.inMonth ? "in" : "out"}`}
               type="button"
-              role="gridcell"
               disabled={!cell.inMonth}
               aria-label={label}
               aria-current={isToday ? "date" : undefined}
-              aria-selected={isSelected}
+              aria-pressed={isSelected}
               onClick={() => {
-                const range = dayRangeForOffset(cell.date, tz);
+                const range = dayRangeInTimeZone(cell.date, timeZone);
                 onApplyRange({ from: range.from, to: range.to });
               }}
               className={[
@@ -176,7 +175,7 @@ export function ArchiveCalendar({ state, onApplyRange, onClearDate }: Props) {
           }`}
           aria-pressed={monthSelected}
           onClick={() => {
-            const range = monthFilterRangeForOffset(viewMonth, tz);
+            const range = monthFilterRangeInTimeZone(viewMonth, timeZone);
             onApplyRange({ from: range.from, to: range.to });
           }}
         >

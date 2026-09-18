@@ -1,14 +1,96 @@
 /**
- * P01.3 — desktop calendar helpers (local day/month ranges, grid, selection match).
- * Date field default remains createdAt until product confirms otherwise.
+ * P01.3 — desktop calendar helpers using IANA time zones.
+ * Local day/month bounds are [from, to) at that zone's midnights, including DST 23h/25h days.
  */
 
-import { monthRangeForOffset, parseCalendarMonth } from "@/lib/reel-archive-query";
+import { parseCalendarMonth } from "@/lib/reel-archive-query";
 
-const DAY_MS = 86_400_000;
+export function resolveClientTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
 
-export function clientTzOffsetMinutes(now = new Date()): number {
-  return -now.getTimezoneOffset();
+export function assertValidTimeZone(timeZone: string): string {
+  const tz = timeZone.trim();
+  if (!tz) {
+    throw new Error("Некорректный timeZone.");
+  }
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: tz }).format(new Date(0));
+    return tz;
+  } catch {
+    throw new Error("Некорректный timeZone.");
+  }
+}
+
+function zonedParts(instant: Date, timeZone: string): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+} {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(instant);
+  const map: Record<string, string> = {};
+  for (const part of parts) {
+    if (part.type !== "literal") map[part.type] = part.value;
+  }
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+    second: Number(map.second),
+  };
+}
+
+/** Milliseconds east of UTC at this instant in `timeZone`. */
+export function zonedOffsetMs(instant: Date, timeZone: string): number {
+  const local = zonedParts(instant, timeZone);
+  const asUtc = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second);
+  return asUtc - instant.getTime();
+}
+
+export function tzOffsetMinutesAt(instant: Date, timeZone: string): number {
+  return Math.round(zonedOffsetMs(instant, timeZone) / 60_000);
+}
+
+export function addCalendarDate(
+  year: number,
+  month: number,
+  day: number,
+  deltaDays: number,
+): { year: number; month: number; day: number } {
+  const utc = new Date(Date.UTC(year, month - 1, day + deltaDays));
+  return { year: utc.getUTCFullYear(), month: utc.getUTCMonth() + 1, day: utc.getUTCDate() };
+}
+
+export function zonedMidnightUtc(
+  year: number,
+  month: number,
+  day: number,
+  timeZone: string,
+): Date {
+  let utcMs = Date.UTC(year, month - 1, day, 0, 0, 0);
+  for (let i = 0; i < 4; i += 1) {
+    const offset = zonedOffsetMs(new Date(utcMs), timeZone);
+    utcMs = Date.UTC(year, month - 1, day, 0, 0, 0) - offset;
+  }
+  return new Date(utcMs);
 }
 
 export function shiftMonthKey(monthKey: string, delta: number): string {
@@ -19,19 +101,18 @@ export function shiftMonthKey(monthKey: string, delta: number): string {
   return `${y}-${m}`;
 }
 
-export function monthKeyFromDate(date: Date, tzOffsetMinutes: number): string {
-  const shifted = new Date(date.getTime() + tzOffsetMinutes * 60_000);
-  return shifted.toISOString().slice(0, 7);
+export function dayKeyFromInstant(instant: Date, timeZone: string): string {
+  const local = zonedParts(instant, timeZone);
+  return `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
 }
 
-export function dayKeyFromDate(date: Date, tzOffsetMinutes: number): string {
-  const shifted = new Date(date.getTime() + tzOffsetMinutes * 60_000);
-  return shifted.toISOString().slice(0, 10);
+export function monthKeyFromInstant(instant: Date, timeZone: string): string {
+  return dayKeyFromInstant(instant, timeZone).slice(0, 7);
 }
 
-export function dayRangeForOffset(
+export function dayRangeInTimeZone(
   dayKey: string,
-  tzOffsetMinutes: number,
+  timeZone: string,
 ): { from: string; to: string; day: string } {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey.trim());
   if (!match) {
@@ -40,20 +121,34 @@ export function dayRangeForOffset(
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  const fromMs = Date.UTC(year, month - 1, day, 0, 0, 0, 0) - tzOffsetMinutes * 60_000;
-  const toMs = fromMs + DAY_MS;
+  const next = addCalendarDate(year, month, day, 1);
+  const from = zonedMidnightUtc(year, month, day, timeZone);
+  const to = zonedMidnightUtc(next.year, next.month, next.day, timeZone);
   return {
     day: `${match[1]}-${match[2]}-${match[3]}`,
-    from: new Date(fromMs).toISOString(),
-    to: new Date(toMs).toISOString(),
+    from: from.toISOString(),
+    to: to.toISOString(),
   };
 }
 
-export function monthFilterRangeForOffset(
+export function monthRangeInTimeZone(
   monthKey: string,
-  tzOffsetMinutes: number,
+  timeZone: string,
+): { from: Date; to: Date; month: string } {
+  const { year, month, key } = parseCalendarMonth(monthKey);
+  const next = month === 12 ? { year: year + 1, month: 1 } : { year, month: month + 1 };
+  return {
+    month: key,
+    from: zonedMidnightUtc(year, month, 1, timeZone),
+    to: zonedMidnightUtc(next.year, next.month, 1, timeZone),
+  };
+}
+
+export function monthFilterRangeInTimeZone(
+  monthKey: string,
+  timeZone: string,
 ): { from: string; to: string; month: string } {
-  const range = monthRangeForOffset(monthKey, tzOffsetMinutes);
+  const range = monthRangeInTimeZone(monthKey, timeZone);
   return {
     month: range.month,
     from: range.from.toISOString(),
@@ -68,16 +163,16 @@ export type ArchiveDateSelection =
 export function matchArchiveDateSelection(
   from: string | null | undefined,
   to: string | null | undefined,
-  tzOffsetMinutes: number,
+  timeZone: string,
 ): ArchiveDateSelection | null {
   if (!from?.trim() || !to?.trim()) return null;
   const fromMs = Date.parse(from);
   const toMs = Date.parse(to);
   if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return null;
 
-  const dayKey = dayKeyFromDate(new Date(fromMs), tzOffsetMinutes);
+  const dayKey = dayKeyFromInstant(new Date(fromMs), timeZone);
   try {
-    const day = dayRangeForOffset(dayKey, tzOffsetMinutes);
+    const day = dayRangeInTimeZone(dayKey, timeZone);
     if (Date.parse(day.from) === fromMs && Date.parse(day.to) === toMs) {
       return { kind: "day", day: day.day };
     }
@@ -85,8 +180,8 @@ export function matchArchiveDateSelection(
     /* fall through */
   }
 
-  const monthKey = monthKeyFromDate(new Date(fromMs), tzOffsetMinutes);
-  const month = monthFilterRangeForOffset(monthKey, tzOffsetMinutes);
+  const monthKey = monthKeyFromInstant(new Date(fromMs), timeZone);
+  const month = monthFilterRangeInTimeZone(monthKey, timeZone);
   if (Date.parse(month.from) === fromMs && Date.parse(month.to) === toMs) {
     return { kind: "month", month: month.month };
   }
@@ -99,34 +194,39 @@ export type CalendarCell = {
   inMonth: boolean;
 };
 
-/** Monday-first grid covering the local calendar month. */
-export function buildCalendarCells(monthKey: string, tzOffsetMinutes: number): CalendarCell[] {
+function padDate(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/** Monday-first grid covering the civil calendar month (IANA zone only affects day keys of padding). */
+export function buildCalendarCells(monthKey: string, timeZone: string): CalendarCell[] {
+  assertValidTimeZone(timeZone);
   const { year, month } = parseCalendarMonth(monthKey);
-  const firstUtc = Date.UTC(year, month - 1, 1) - tzOffsetMinutes * 60_000;
-  const first = new Date(firstUtc);
-  // weekday in local offset: 0=Sun..6=Sat → Monday-first index
-  const shifted = new Date(first.getTime() + tzOffsetMinutes * 60_000);
-  const sundayIndex = shifted.getUTCDay();
-  const mondayIndex = (sundayIndex + 6) % 7;
+  const firstWeekday = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
+  const mondayIndex = (firstWeekday + 6) % 7;
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const cells: CalendarCell[] = [];
 
   for (let i = 0; i < mondayIndex; i += 1) {
-    const dayOffset = i - mondayIndex;
-    const instant = new Date(firstUtc + dayOffset * DAY_MS);
-    const date = dayKeyFromDate(instant, tzOffsetMinutes);
-    cells.push({ date, day: Number(date.slice(8, 10)), inMonth: false });
+    const prev = addCalendarDate(year, month, 1, i - mondayIndex);
+    cells.push({
+      date: padDate(prev.year, prev.month, prev.day),
+      day: prev.day,
+      inMonth: false,
+    });
   }
   for (let day = 1; day <= daysInMonth; day += 1) {
-    const date = `${monthKey}-${String(day).padStart(2, "0")}`;
-    cells.push({ date, day, inMonth: true });
+    cells.push({ date: padDate(year, month, day), day, inMonth: true });
   }
   while (cells.length % 7 !== 0) {
     const last = cells[cells.length - 1]!;
-    const next = dayRangeForOffset(last.date, tzOffsetMinutes);
-    const instant = new Date(Date.parse(next.to));
-    const date = dayKeyFromDate(instant, tzOffsetMinutes);
-    cells.push({ date, day: Number(date.slice(8, 10)), inMonth: false });
+    const [y, m, d] = last.date.split("-").map(Number);
+    const next = addCalendarDate(y, m, d, 1);
+    cells.push({
+      date: padDate(next.year, next.month, next.day),
+      day: next.day,
+      inMonth: false,
+    });
   }
   return cells;
 }
@@ -141,4 +241,18 @@ export function formatMonthTitleRu(monthKey: string): string {
     timeZone: "UTC",
   });
   return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+export function bucketCalendarDaysInTimeZone(
+  instants: Date[],
+  timeZone: string,
+): Array<{ date: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const instant of instants) {
+    const key = dayKeyFromInstant(instant, timeZone);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, count]) => ({ date, count }));
 }
