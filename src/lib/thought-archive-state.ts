@@ -22,6 +22,8 @@ export type ArchiveListUrlState = {
   from: string | null;
   to: string | null;
   dateField: "createdAt" | "updatedAt" | null;
+  /** Mobile calendar sheet. Stored as `calendar=1`; ignored by list API. */
+  calendarOpen?: boolean;
 };
 
 export type ArchiveEmptyKind = "none" | "search" | "filter" | "date";
@@ -34,6 +36,7 @@ export function defaultArchiveListUrlState(): ArchiveListUrlState {
     from: null,
     to: null,
     dateField: null,
+    calendarOpen: false,
   };
 }
 
@@ -57,7 +60,7 @@ export function parseArchiveListUrl(params: URLSearchParams): ArchiveListUrlStat
   const dateFieldRaw = params.get("dateField");
   const dateField =
     dateFieldRaw === "createdAt" || dateFieldRaw === "updatedAt" ? dateFieldRaw : null;
-  return { q, status, sort, from, to, dateField };
+  return { q, status, sort, from, to, dateField, calendarOpen: params.get("calendar") === "1" };
 }
 
 /** Omits defaults so refresh/back URLs stay short. */
@@ -72,6 +75,7 @@ export function serializeArchiveListUrl(state: ArchiveListUrlState): URLSearchPa
     params.set("to", state.to.trim());
     if (state.dateField === "updatedAt") params.set("dateField", "updatedAt");
   }
+  if (state.calendarOpen) params.set("calendar", "1");
   return params;
 }
 
@@ -111,6 +115,31 @@ export function archiveListUrlEquals(a: ArchiveListUrlState, b: ArchiveListUrlSt
     (a.to ?? "") === (b.to ?? "") &&
     (a.dateField ?? null) === (b.dateField ?? null)
   );
+}
+
+export function openArchiveCalendar(state: ArchiveListUrlState): ArchiveListUrlState {
+  return { ...state, calendarOpen: true };
+}
+
+export function closeArchiveCalendar(state: ArchiveListUrlState): ArchiveListUrlState {
+  return { ...state, calendarOpen: false };
+}
+
+export function applyArchiveCalendarRange(
+  state: ArchiveListUrlState,
+  range: { from: string; to: string },
+): ArchiveListUrlState {
+  return {
+    ...state,
+    from: range.from,
+    to: range.to,
+    dateField: null,
+    calendarOpen: false,
+  };
+}
+
+export function clearArchiveCalendarRange(state: ArchiveListUrlState): ArchiveListUrlState {
+  return { ...state, from: null, to: null, dateField: null, calendarOpen: false };
 }
 
 export function mergeReelListPages(

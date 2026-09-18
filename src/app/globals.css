@@ -294,8 +294,15 @@ a[aria-disabled="true"] {
   position: absolute;
   top: 0.7rem;
   right: 0.7rem;
+  z-index: 1;
   display: inline-flex;
+  pointer-events: none;
   color: var(--accent-soft);
+}
+
+.archive-polaroid-mobile .archive-polaroid-status {
+  top: 0.55rem;
+  right: 0.55rem;
 }
 
 .archive-polaroid-footer {

@@ -20,6 +20,18 @@ const STATUS_LABELS = {
   completed: "Успешно завершена",
 } as const;
 
+function PolaroidStatus({ reel }: { reel: ReelListItemDto }) {
+  const userStatus = thoughtUserStatus(reel.statusGroup);
+  const StatusIcon = STATUS_ICONS[userStatus];
+  const statusLabel = STATUS_LABELS[userStatus];
+
+  return (
+    <span className="archive-polaroid-status" role="img" aria-label={statusLabel}>
+      <StatusIcon aria-hidden />
+    </span>
+  );
+}
+
 function PolaroidFace({
   reel,
   compact,
@@ -27,16 +39,8 @@ function PolaroidFace({
   reel: ReelListItemDto;
   compact?: boolean;
 }) {
-  const userStatus = thoughtUserStatus(reel.statusGroup);
-  const StatusIcon = STATUS_ICONS[userStatus];
-  const statusLabel = STATUS_LABELS[userStatus];
-
   return (
     <div className={`archive-polaroid-frame ${compact ? "archive-polaroid-frame-mobile" : ""}`}>
-      <span className="archive-polaroid-status" title={statusLabel}>
-        <StatusIcon aria-hidden />
-        <span className="sr-only">{statusLabel}</span>
-      </span>
       <p className="archive-polaroid-title">{reel.title}</p>
     </div>
   );
@@ -54,6 +58,7 @@ export function ArchivePolaroidCard({
   if (variant === "mobile") {
     return (
       <article className="archive-polaroid archive-polaroid-mobile">
+        <PolaroidStatus reel={reel} />
         <button
           type="button"
           className="archive-polaroid-preview"
@@ -91,7 +96,10 @@ export function ArchivePolaroidCard({
         i
       </button>
       <Link href={dialogHref} className="block min-w-0 text-left outline-none">
-        <PolaroidFace reel={reel} />
+        <div className="archive-polaroid-frame">
+          <PolaroidStatus reel={reel} />
+          <p className="archive-polaroid-title">{reel.title}</p>
+        </div>
         <div className="archive-polaroid-footer">
           <span aria-hidden="true" className="text-lg leading-none text-[#1a1424]">
             →

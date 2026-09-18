@@ -21,11 +21,14 @@ import {
 } from "@/lib/archive-calendar";
 import {
   ARCHIVE_LIST_SORTS,
+  applyArchiveCalendarRange,
   archiveListHref,
   archiveListUrlEquals,
   buildArchiveListApiQuery,
+  clearArchiveCalendarRange,
   defaultArchiveListUrlState,
   mergeReelListPages,
+  openArchiveCalendar,
   parseArchiveListUrl,
   resolveArchiveEmptyKind,
   type ArchiveListUrlState,
@@ -65,7 +68,7 @@ export function ReelList() {
   const [listError, setListError] = useState<string | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const calendarOpen = Boolean(urlState.calendarOpen);
   const [dateHeading, setDateHeading] = useState({
     title: "Календарь",
     subtitle: "День или месяц",
@@ -107,6 +110,30 @@ export function ReelList() {
     return () => window.clearTimeout(timer);
   }, [draftQ, replaceUrl]);
 
+  const { q: listQ, status: listStatus, sort: listSort, from: listFrom, to: listTo, dateField: listDateField } =
+    urlState;
+  const listQueryString = useMemo(
+    () =>
+      buildArchiveListApiQuery({
+        q: listQ,
+        status: listStatus,
+        sort: listSort,
+        from: listFrom,
+        to: listTo,
+        dateField: listDateField,
+      }),
+    [listQ, listStatus, listSort, listFrom, listTo, listDateField],
+  );
+
+  const pushUrl = useCallback(
+    (next: ArchiveListUrlState) => {
+      const href = archiveListHref(next);
+      if (href === archiveListHref(urlStateRef.current)) return;
+      router.push(href, { scroll: false });
+    },
+    [router],
+  );
+
   const applyFilters = useCallback(
     (patch: Partial<ArchiveListUrlState>) => {
       const next: ArchiveListUrlState = {
@@ -144,7 +171,7 @@ export function ReelList() {
     setHasMore(false);
     setMatchCount(0);
 
-    const queryString = buildArchiveListApiQuery(urlState);
+    const queryString = listQueryString;
     try {
       const res = await fetch(`/api/reels?${queryString}`, {
         cache: "no-store",
@@ -165,7 +192,7 @@ export function ReelList() {
     } finally {
       if (req.isCurrent() && epoch === listEpoch.current) setLoading(false);
     }
-  }, [applyPage, urlState]);
+  }, [applyPage, listQueryString]);
 
   const loadMore = useCallback(async () => {
     const cursor = nextCursorRef.current;
@@ -234,10 +261,13 @@ export function ReelList() {
   }
 
   function clearDateFilter() {
-    applyFilters({ from: null, to: null, dateField: null });
+    replaceUrl(clearArchiveCalendarRange(urlStateRef.current));
   }
 
-  const closeCalendar = useCallback(() => setCalendarOpen(false), []);
+  const closeCalendar = useCallback(() => {
+    if (!urlStateRef.current.calendarOpen) return;
+    router.back();
+  }, [router]);
 
   useEffect(() => {
     setDateHeading(formatArchiveDateHeading(urlState.from, urlState.to, resolveClientTimeZone()));
@@ -262,7 +292,7 @@ export function ReelList() {
             aria-haspopup="dialog"
             aria-expanded={calendarOpen}
             aria-label="Открыть календарь"
-            onClick={() => setCalendarOpen(true)}
+            onClick={() => pushUrl(openArchiveCalendar(urlStateRef.current))}
           >
             <span className="block text-xl font-medium leading-tight text-text">{dateHeading.title}</span>
             <span className="block text-sm capitalize text-muted">{dateHeading.subtitle}</span>
@@ -312,7 +342,7 @@ export function ReelList() {
               open
               state={urlState}
               onClose={closeCalendar}
-              onApplyRange={({ from, to }) => applyFilters({ from, to, dateField: null })}
+              onApplyRange={(range) => replaceUrl(applyArchiveCalendarRange(urlStateRef.current, range))}
               onClearDate={clearDateFilter}
             />
           ) : null}
