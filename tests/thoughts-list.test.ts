@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { closeSync, mkdtempSync, openSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,7 +26,9 @@ function migrateDeploy(url: string) {
 
 test("thought list groups statuses, paginates, and keeps compact DTO", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-thoughts-"));
-  const url = fileUrl(path.join(dir, "test.db"));
+  const dbPath = path.join(dir, "test.db");
+  closeSync(openSync(dbPath, "a"));
+  const url = fileUrl(dbPath);
   process.env.DATABASE_URL = url;
   await resetPrismaClient();
   const prisma = new PrismaClient({ datasources: { db: { url } } });

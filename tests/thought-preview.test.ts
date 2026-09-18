@@ -70,7 +70,14 @@ test("desktop preview prefers a ready script over the original note", () => {
 });
 
 test("reset clears search and filter together without AI", () => {
-  assert.deepEqual(resetThoughtListQuery(), { q: "", status: "all" });
+  assert.deepEqual(resetThoughtListQuery(), {
+    q: "",
+    status: "all",
+    sort: "updated",
+    from: null,
+    to: null,
+    dateField: null,
+  });
   const list = readFileSync(join(root, "src/components/ReelList.tsx"), "utf8");
   assert.match(list, /Сбросить поиск и фильтры/);
   assert.match(list, /resetThoughtListQuery/);

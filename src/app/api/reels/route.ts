@@ -23,6 +23,10 @@ export async function GET(request: Request) {
     const cursor = url.searchParams.get("cursor") ?? undefined;
     const limitRaw = url.searchParams.get("limit");
     const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
+    const from = url.searchParams.get("from") ?? undefined;
+    const to = url.searchParams.get("to") ?? undefined;
+    const dateFieldRaw = url.searchParams.get("dateField");
+    const dateField = dateFieldRaw === null || dateFieldRaw === "" ? undefined : dateFieldRaw;
     const sort =
       sortRaw === "title" || sortRaw === "created" || sortRaw === "updated" ? sortRaw : "updated";
     let status: ReelListQuery["status"] = "open";
@@ -40,6 +44,9 @@ export async function GET(request: Request) {
       sort,
       cursor,
       limit: Number.isFinite(limit) ? limit : undefined,
+      from,
+      to,
+      dateField,
     });
     return NextResponse.json(result);
   } catch (error) {

@@ -25,7 +25,8 @@
 | `docs/design/WORKING_CYCLE_CHECKPOINT_2026-09-15.md` | Статус сквозной сборки |
 | `docs/design/working-cycle-output/` | Актуальный прототип (`review.html`) |
 | `docs/design/profile-model-output/` | Принятый смысл профиля P10–P12 |
-| `docs/design/references-new/` | **Визуальный источник истины** — утверждённые экраны 01–08 |
+| `docs/design/references-new/` | **Визуальный источник истины** — утверждённые экраны 01–09; для `/reels` использовать экран 09 |
+| `docs/design/references-new/09_thoughts_archive/` | Канон архива мыслей: календарь, lazy grid и переходы карточки |
 | `docs/PERSONAL_MVP.md` | Продуктовые правила MVP (UI-описания champagne внутри устарели) |
 
 ## Запрещено как инструкция (архив)

@@ -39,6 +39,13 @@ export function pickThoughtPreviewFragment(input: {
   return { text: "", source: "empty" };
 }
 
-export function resetThoughtListQuery(): { q: ""; status: "all" } {
-  return { q: "", status: "all" };
+export function resetThoughtListQuery(): {
+  q: "";
+  status: "all";
+  sort: "updated";
+  from: null;
+  to: null;
+  dateField: null;
+} {
+  return { q: "", status: "all", sort: "updated", from: null, to: null, dateField: null };
 }

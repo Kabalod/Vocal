@@ -18,6 +18,16 @@ import {
   TAKE_NOTE_MAX,
   TAKE_TEXT_MAX,
 } from "@/types/reel";
+import {
+  ARCHIVE_DATE_FIELD_DEFAULT,
+  ArchiveQueryError,
+  archiveFilterFingerprint,
+  bucketCalendarDays,
+  monthRangeForOffset,
+  parseArchiveRange,
+  resolveArchiveDateField,
+  type CalendarFacetDto,
+} from "@/lib/reel-archive-query";
 import { toReelDto, toReelListItemDto } from "@/lib/serialize";
 import { thoughtCompletionGate } from "@/lib/thought-completion";
 import { enqueueByKey } from "@/lib/write-queue";
@@ -83,6 +93,8 @@ type ListCursor = {
   sort: "updated" | "created" | "title";
   k: string;
   id: string;
+  /** Fingerprint of status/sort/q/from/to/dateField; required for every cursor. */
+  fp?: string;
 };
 
 function encodeListCursor(cursor: ListCursor): string {
@@ -98,7 +110,10 @@ function decodeListCursor(raw: string): ListCursor | null {
     if (typeof parsed.k !== "string" || typeof parsed.id !== "string" || !parsed.id) {
       return null;
     }
-    return { sort: parsed.sort, k: parsed.k, id: parsed.id };
+    if (parsed.fp !== undefined && typeof parsed.fp !== "string") {
+      return null;
+    }
+    return { sort: parsed.sort, k: parsed.k, id: parsed.id, fp: parsed.fp };
   } catch {
     return null;
   }
@@ -113,6 +128,19 @@ function reelListStatusWhere(status: ReelListQuery["status"]): Prisma.ReelWhereI
     return { status: { in: ["in_progress", "active", "ready_to_record"] } };
   }
   return { status };
+}
+
+function reelListSearchWhere(q: string): Prisma.ReelWhereInput {
+  return { OR: [{ title: { contains: q } }, { initialNote: { contains: q } }] };
+}
+
+function reelListDateWhere(range: NonNullable<ReturnType<typeof parseArchiveRange>>): Prisma.ReelWhereInput {
+  return {
+    [range.dateField]: {
+      gte: range.from,
+      lt: range.to,
+    },
+  };
 }
 
 function reelListCursorWhere(sort: ListCursor["sort"], cursor: ListCursor): Prisma.ReelWhereInput {
@@ -134,67 +162,184 @@ function reelListCursorWhere(sort: ListCursor["sort"], cursor: ListCursor): Pris
   };
 }
 
+function assertCursorMatchesFilters(cursor: ListCursor, sort: ListCursor["sort"], fingerprint: string) {
+  if (typeof cursor.fp !== "string" || cursor.fp.length === 0) {
+    throw new ReelError("Курсор списка устарел. Обновите страницу.", "LIST_CURSOR", 400);
+  }
+  if (cursor.sort !== sort || cursor.fp !== fingerprint) {
+    throw new ReelError("Курсор не подходит к текущим фильтрам.", "LIST_CURSOR", 400);
+  }
+}
+
 export async function listReels(query: ReelListQuery = {}): Promise<ReelListResult> {
-  const limit = Math.min(Math.max(query.limit ?? REEL_LIST_PAGE, 1), REEL_LIST_LIMIT);
-  const q = query.q?.trim();
-  const status = query.status ?? "open";
-  const sort = query.sort ?? "updated";
+  try {
+    const limit = Math.min(Math.max(query.limit ?? REEL_LIST_PAGE, 1), REEL_LIST_LIMIT);
+    const q = query.q?.trim();
+    const status = query.status ?? "open";
+    const sort = query.sort ?? "updated";
+    const range = parseArchiveRange({
+      from: query.from,
+      to: query.to,
+      dateField: query.dateField,
+    });
+    const dateField = range?.dateField ?? resolveArchiveDateField(query.dateField);
+    const fingerprint = archiveFilterFingerprint({
+      status,
+      sort,
+      q,
+      from: query.from,
+      to: query.to,
+      dateField,
+    });
 
-  const filters: Prisma.ReelWhereInput[] = [reelListStatusWhere(status)];
-  if (q) {
-    filters.push({ OR: [{ title: { contains: q } }, { initialNote: { contains: q } }] });
-  }
-  if (query.cursor) {
-    const cursor = decodeListCursor(query.cursor);
-    if (!cursor || cursor.sort !== sort) {
-      throw new ReelError("Некорректный курсор списка.", "LIST_CURSOR", 400);
+    const baseFilters: Prisma.ReelWhereInput[] = [reelListStatusWhere(status)];
+    if (q) baseFilters.push(reelListSearchWhere(q));
+    if (range) baseFilters.push(reelListDateWhere(range));
+
+    const pageFilters = [...baseFilters];
+    if (query.cursor) {
+      const cursor = decodeListCursor(query.cursor);
+      if (!cursor) {
+        throw new ReelError("Некорректный курсор списка.", "LIST_CURSOR", 400);
+      }
+      assertCursorMatchesFilters(cursor, sort, fingerprint);
+      pageFilters.push(reelListCursorWhere(sort, cursor));
     }
-    filters.push(reelListCursorWhere(sort, cursor));
+
+    const where: Prisma.ReelWhereInput = { AND: pageFilters };
+    const orderBy: Prisma.ReelOrderByWithRelationInput[] =
+      sort === "title"
+        ? [{ title: "asc" }, { id: "asc" }]
+        : sort === "created"
+          ? [{ createdAt: "desc" }, { id: "desc" }]
+          : [{ updatedAt: "desc" }, { id: "desc" }];
+
+    const [rows, totalCount, matchCount] = await Promise.all([
+      prisma.reel.findMany({
+        where,
+        orderBy,
+        take: limit + 1,
+        select: {
+          id: true,
+          title: true,
+          initialNote: true,
+          status: true,
+          selectedScriptId: true,
+          finalScriptId: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: { select: { takes: true, scripts: true } },
+        },
+      }),
+      prisma.reel.count({ where: { NOT: { status: "archived" } } }),
+      prisma.reel.count({ where: { AND: baseFilters } }),
+    ]);
+
+    const page = rows.slice(0, limit).map(toReelListItemDto);
+    const hasMore = rows.length > limit;
+    const last = page[page.length - 1];
+    const nextCursor =
+      hasMore && last
+        ? encodeListCursor({
+            sort,
+            id: last.id,
+            k: sort === "title" ? last.title : last[sort === "created" ? "createdAt" : "updatedAt"],
+            fp: fingerprint,
+          })
+        : null;
+
+    return {
+      reels: page,
+      nextCursor,
+      hasMore,
+      totalCount,
+      matchCount,
+      range: range
+        ? {
+            from: range.from.toISOString(),
+            to: range.to.toISOString(),
+            dateField: range.dateField,
+          }
+        : null,
+    };
+  } catch (error) {
+    if (error instanceof ArchiveQueryError) {
+      throw new ReelError(error.message, error.code, error.status);
+    }
+    throw error;
   }
+}
 
-  const where: Prisma.ReelWhereInput = { AND: filters };
-  const orderBy: Prisma.ReelOrderByWithRelationInput[] =
-    sort === "title"
-      ? [{ title: "asc" }, { id: "asc" }]
-      : sort === "created"
-        ? [{ createdAt: "desc" }, { id: "desc" }]
-        : [{ updatedAt: "desc" }, { id: "desc" }];
+export async function listReelCalendarFacets(input: {
+  month: string;
+  tzOffsetMinutes: number;
+  q?: string;
+  status?: ReelListQuery["status"];
+  dateField?: string | null;
+}): Promise<CalendarFacetDto> {
+  try {
+    const dateField = resolveArchiveDateField(input.dateField);
+    const status = input.status ?? "open";
+    const q = input.q?.trim();
+    const { from, to, month } = monthRangeForOffset(input.month, input.tzOffsetMinutes);
 
-  const matchFilters = q ? filters.slice(0, 2) : filters.slice(0, 1);
-  const [rows, totalCount, matchCount] = await Promise.all([
-    prisma.reel.findMany({
-      where,
-      orderBy,
-      take: limit + 1,
-      select: {
-        id: true,
-        title: true,
-        initialNote: true,
-        status: true,
-        selectedScriptId: true,
-        finalScriptId: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: { select: { takes: true, scripts: true } },
+    const baseFilters: Prisma.ReelWhereInput[] = [reelListStatusWhere(status)];
+    if (q) baseFilters.push(reelListSearchWhere(q));
+
+    const monthFilters = [
+      ...baseFilters,
+      {
+        [dateField]: {
+          gte: from,
+          lt: to,
+        },
+      } satisfies Prisma.ReelWhereInput,
+    ];
+
+    const [monthRows, bounds, matchCount] = await Promise.all([
+      prisma.reel.findMany({
+        where: { AND: monthFilters },
+        select: dateField === "createdAt" ? { createdAt: true } : { updatedAt: true },
+      }),
+      prisma.reel.aggregate({
+        where: { AND: baseFilters },
+        _min: { createdAt: true, updatedAt: true },
+        _max: { createdAt: true, updatedAt: true },
+      }),
+      prisma.reel.count({ where: { AND: monthFilters } }),
+    ]);
+
+    const instants = monthRows.map((row) =>
+      dateField === "createdAt"
+        ? (row as { createdAt: Date }).createdAt
+        : (row as { updatedAt: Date }).updatedAt,
+    );
+
+    const earliest =
+      dateField === "createdAt" ? bounds._min.createdAt : bounds._min.updatedAt;
+    const latest =
+      dateField === "createdAt" ? bounds._max.createdAt : bounds._max.updatedAt;
+
+    return {
+      month,
+      dateField,
+      dateFieldDefault: ARCHIVE_DATE_FIELD_DEFAULT,
+      tzOffsetMinutes: input.tzOffsetMinutes,
+      from: from.toISOString(),
+      to: to.toISOString(),
+      days: bucketCalendarDays(instants, input.tzOffsetMinutes),
+      dataBounds: {
+        earliest: earliest ? earliest.toISOString() : null,
+        latest: latest ? latest.toISOString() : null,
       },
-    }),
-    prisma.reel.count({ where: { NOT: { status: "archived" } } }),
-    prisma.reel.count({ where: { AND: matchFilters } }),
-  ]);
-
-  const page = rows.slice(0, limit).map(toReelListItemDto);
-  const hasMore = rows.length > limit;
-  const last = page[page.length - 1];
-  const nextCursor =
-    hasMore && last
-      ? encodeListCursor({
-          sort,
-          id: last.id,
-          k: sort === "title" ? last.title : last[sort === "created" ? "createdAt" : "updatedAt"],
-        })
-      : null;
-
-  return { reels: page, nextCursor, hasMore, totalCount, matchCount };
+      matchCount,
+    };
+  } catch (error) {
+    if (error instanceof ArchiveQueryError) {
+      throw new ReelError(error.message, error.code, error.status);
+    }
+    throw error;
+  }
 }
 
 async function assertFinalTakeBelongs(reelId: string, takeId: string): Promise<void> {

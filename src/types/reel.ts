@@ -169,6 +169,15 @@ export interface ReelListQuery {
   sort?: "updated" | "created" | "title";
   limit?: number;
   cursor?: string;
+  /** Absolute ISO instant; half-open with `to`. */
+  from?: string;
+  /** Absolute ISO instant; exclusive end of [from, to). */
+  to?: string;
+  /**
+   * Calendar / archive date field. Default `createdAt` when omitted.
+   * Unknown values must be rejected by the API (`ARCHIVE_DATE_FIELD`).
+   */
+  dateField?: string;
 }
 
 export interface ReelListResult {
@@ -177,4 +186,6 @@ export interface ReelListResult {
   hasMore: boolean;
   totalCount: number;
   matchCount: number;
+  /** Echo of applied date bounds when present. */
+  range?: { from: string; to: string; dateField: "createdAt" | "updatedAt" } | null;
 }
