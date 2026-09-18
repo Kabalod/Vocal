@@ -233,6 +233,31 @@ export function buildCalendarCells(monthKey: string, timeZone: string): Calendar
 
 export const CALENDAR_WEEKDAYS_RU = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"] as const;
 
+export function formatArchiveDateHeading(
+  from: string | null | undefined,
+  to: string | null | undefined,
+  timeZone: string,
+  now = new Date(),
+): { title: string; subtitle: string; selected: boolean } {
+  const selection = matchArchiveDateSelection(from, to, timeZone);
+  if (selection?.kind === "month") {
+    return { title: formatMonthTitleRu(selection.month), subtitle: "Весь месяц", selected: true };
+  }
+  const dayKey = selection?.kind === "day" ? selection.day : dayKeyFromInstant(now, timeZone);
+  const [year, month, day] = dayKey.split("-").map(Number);
+  const instant = zonedMidnightUtc(year, month, day, timeZone);
+  const title = new Intl.DateTimeFormat("ru-RU", {
+    timeZone,
+    day: "numeric",
+    month: "long",
+  }).format(instant);
+  const subtitle = new Intl.DateTimeFormat("ru-RU", {
+    timeZone,
+    weekday: "long",
+  }).format(instant);
+  return { title, subtitle, selected: selection?.kind === "day" };
+}
+
 export function formatMonthTitleRu(monthKey: string): string {
   const { year, month } = parseCalendarMonth(monthKey);
   const label = new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("ru-RU", {

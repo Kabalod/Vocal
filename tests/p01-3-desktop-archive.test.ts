@@ -72,8 +72,8 @@ test("P01.3 desktop archive stays desktop-only with polaroid composition and sim
   assert.match(list, /useShellDesktop/);
   assert.match(list, /isDesktop \? \(/);
   assert.match(list, /<ArchiveCalendar/);
-  assert.match(list, /<ReelCard/);
   assert.match(list, /ArchivePolaroidCard/);
+  assert.equal(list.includes("<ReelCard"), false);
   assert.match(calendar, /Показать месяц/);
   assert.match(calendar, /timeZone/);
   assert.match(calendar, /\/api\/reels\/calendar/);

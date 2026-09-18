@@ -35,6 +35,7 @@
 - [ ] P01.2: URL-state, lazy loading, гонки и состояния ошибок приняты.
 - [ ] P01.3: desktop sidebar/calendar/polaroid grid и reduced motion приняты.
 - [ ] P01.4: mobile grid, bottom-sheet calendar и две зоны карточки приняты.
+- [ ] Техдолг (не блокер P01.3): `tests/profile-dialogue.test.ts` — «stale ready reply cannot complete after a newer clarify» падает на SHA `4e1b847`; файлы профиля не менялись. Закрыть до общей релизной приёмки.
 - [ ] P01.5: preview, быстрый диалог, запись дубля и возврат в архив приняты.
 - [ ] Подтверждены три открытых решения из `02_P01_СПИСОК_МЫСЛЕЙ.md`.
 - [ ] Итоговая ревизия P01 принята; приложены desktop/mobile screenshots.

@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { NewThoughtSheet } from "@/components/NewThoughtSheet";
 import { ArchiveCalendar } from "@/components/ArchiveCalendar";
+import { ArchiveCalendarSheet } from "@/components/ArchiveCalendarSheet";
 import { ArchivePolaroidCard } from "@/components/ArchivePolaroidCard";
 import { ArchiveStatusFilters } from "@/components/ArchiveStatusFilters";
-import { ReelCard } from "@/components/ReelCard";
 import { RECORDING_FILTERS, isRecordingFilterId } from "@/components/reel-filters";
 import { useShellDesktop } from "@/components/use-shell-desktop";
 import { ShellError, ShellLoading } from "@/components/shell-status";
@@ -15,6 +15,10 @@ import { EmptyState } from "@/components/vocal-ui/EmptyState";
 import { Field } from "@/components/vocal-ui/Field";
 import { FilterControl } from "@/components/vocal-ui/FilterControl";
 import { GenerationGuard } from "@/lib/generation-guard";
+import {
+  formatArchiveDateHeading,
+  resolveClientTimeZone,
+} from "@/lib/archive-calendar";
 import {
   ARCHIVE_LIST_SORTS,
   archiveListHref,
@@ -61,6 +65,12 @@ export function ReelList() {
   const [listError, setListError] = useState<string | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [dateHeading, setDateHeading] = useState({
+    title: "Календарь",
+    subtitle: "День или месяц",
+    selected: false,
+  });
 
   const loadGen = useRef(new GenerationGuard());
   const listEpoch = useRef(0);
@@ -227,6 +237,12 @@ export function ReelList() {
     applyFilters({ from: null, to: null, dateField: null });
   }
 
+  const closeCalendar = useCallback(() => setCalendarOpen(false), []);
+
+  useEffect(() => {
+    setDateHeading(formatArchiveDateHeading(urlState.from, urlState.to, resolveClientTimeZone()));
+  }, [urlState.from, urlState.to]);
+
   const resetAction = (
     <ActionButton variant="secondary" onClick={resetSearchAndFilters}>
       Сбросить поиск и фильтры
@@ -236,10 +252,21 @@ export function ReelList() {
   const endReached = !loading && !listError && !hasMore && reels.length > 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-[env(safe-area-inset-bottom)]">
       <div className="flex items-start justify-between gap-3 shell:hidden">
         <div className="min-w-0">
           <h1 className="font-[family-name:var(--font-display)] text-4xl">Мысли</h1>
+          <button
+            type="button"
+            className="mt-2 min-h-11 text-left"
+            aria-haspopup="dialog"
+            aria-expanded={calendarOpen}
+            aria-label="Открыть календарь"
+            onClick={() => setCalendarOpen(true)}
+          >
+            <span className="block text-xl font-medium leading-tight text-text">{dateHeading.title}</span>
+            <span className="block text-sm capitalize text-muted">{dateHeading.subtitle}</span>
+          </button>
         </div>
         <NewThoughtButton onClick={() => setCreateOpen(true)} />
       </div>
@@ -275,6 +302,16 @@ export function ReelList() {
           {isDesktop ? (
             <ArchiveCalendar
               state={urlState}
+              onApplyRange={({ from, to }) => applyFilters({ from, to, dateField: null })}
+              onClearDate={clearDateFilter}
+            />
+          ) : null}
+
+          {!isDesktop && calendarOpen ? (
+            <ArchiveCalendarSheet
+              open
+              state={urlState}
+              onClose={closeCalendar}
               onApplyRange={({ from, to }) => applyFilters({ from, to, dateField: null })}
               onClearDate={clearDateFilter}
             />
@@ -369,15 +406,15 @@ export function ReelList() {
                 <ul className="archive-polaroid-grid list-none p-0">
                   {reels.map((reel) => (
                     <li key={reel.id} className="min-w-0">
-                      <ArchivePolaroidCard reel={reel} />
+                      <ArchivePolaroidCard reel={reel} variant="desktop" />
                     </li>
                   ))}
                 </ul>
               ) : (
-                <ul className="grid list-none grid-cols-1 gap-4 p-0">
+                <ul className="archive-polaroid-grid-mobile list-none p-0">
                   {reels.map((reel) => (
                     <li key={reel.id} className="min-w-0">
-                      <ReelCard reel={reel} />
+                      <ArchivePolaroidCard reel={reel} variant="mobile" />
                     </li>
                   ))}
                 </ul>

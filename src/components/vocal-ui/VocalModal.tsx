@@ -68,7 +68,7 @@ export function VocalModal({
         tabIndex={-1}
         className={`relative max-h-[90vh] w-full overflow-auto bg-bg-elev p-4 ${
           placement === "sheet"
-            ? "rounded-t-[var(--vocal-radius-modal)] shell:max-w-md shell:rounded-[var(--vocal-radius-modal)]"
+            ? "rounded-t-[var(--vocal-radius-modal)] pb-[max(1rem,env(safe-area-inset-bottom))] shell:max-w-md shell:rounded-[var(--vocal-radius-modal)]"
             : "m-4 max-w-[440px] rounded-[var(--vocal-radius-modal)]"
         }`}
       >

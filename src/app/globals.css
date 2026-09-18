@@ -219,11 +219,24 @@ a[aria-disabled="true"] {
     color 160ms ease;
 }
 
-.archive-polaroid:hover,
-.archive-polaroid:focus-within {
-  transform: translateY(-5px) rotate(-1.25deg);
-  box-shadow: 0 18px 34px rgba(11, 7, 20, 0.45);
-  color: #100b1a;
+.archive-polaroid-grid-mobile {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem 0.5rem;
+  align-items: start;
+}
+
+.archive-polaroid-mobile {
+  padding: 0.35rem 0.35rem 0;
+}
+
+@media (min-width: 75rem) {
+  .archive-polaroid:hover,
+  .archive-polaroid:focus-within {
+    transform: translateY(-5px) rotate(-1.25deg);
+    box-shadow: 0 18px 34px rgba(11, 7, 20, 0.45);
+    color: #100b1a;
+  }
 }
 
 .archive-polaroid-frame {
@@ -248,6 +261,35 @@ a[aria-disabled="true"] {
   overflow-wrap: anywhere;
 }
 
+.archive-polaroid-frame-mobile {
+  padding: 2.35rem 0.4rem 0.45rem;
+}
+
+.archive-polaroid-frame-mobile .archive-polaroid-title {
+  font-size: 0.78rem;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.archive-polaroid-preview {
+  display: block;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.archive-polaroid-preview:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
 .archive-polaroid-status {
   position: absolute;
   top: 0.7rem;
@@ -261,6 +303,7 @@ a[aria-disabled="true"] {
   align-items: center;
   justify-content: center;
   min-height: 2.75rem;
+  min-width: 2.75rem;
   padding: 0.55rem 0.35rem 0.7rem;
   border: 0;
 }
