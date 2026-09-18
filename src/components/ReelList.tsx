@@ -7,6 +7,7 @@ import { ArchiveCalendar } from "@/components/ArchiveCalendar";
 import { ArchiveCalendarSheet } from "@/components/ArchiveCalendarSheet";
 import { ArchivePolaroidCard } from "@/components/ArchivePolaroidCard";
 import { ArchiveStatusFilters } from "@/components/ArchiveStatusFilters";
+import { ArchiveThoughtPreview } from "@/components/ArchiveThoughtPreview";
 import { RECORDING_FILTERS, isRecordingFilterId } from "@/components/reel-filters";
 import { useShellDesktop } from "@/components/use-shell-desktop";
 import { ShellError, ShellLoading } from "@/components/shell-status";
@@ -29,7 +30,10 @@ import {
   defaultArchiveListUrlState,
   mergeReelListPages,
   openArchiveCalendar,
+  openArchivePreview,
   parseArchiveListUrl,
+  readArchiveFocus,
+  rememberArchiveFocus,
   resolveArchiveEmptyKind,
   type ArchiveListUrlState,
 } from "@/lib/thought-archive-state";
@@ -69,6 +73,7 @@ export function ReelList() {
   const [moreError, setMoreError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const calendarOpen = Boolean(urlState.calendarOpen);
+  const previewId = urlState.previewId?.trim() || null;
   const [dateHeading, setDateHeading] = useState({
     title: "Календарь",
     subtitle: "День или месяц",
@@ -269,6 +274,24 @@ export function ReelList() {
     router.back();
   }, [router]);
 
+  const closePreview = useCallback(() => {
+    if (!urlStateRef.current.previewId) return;
+    router.back();
+  }, [router]);
+
+  function openPreview(reelId: string) {
+    rememberArchiveFocus(reelId);
+    pushUrl(openArchivePreview(urlStateRef.current, reelId));
+  }
+
+  useEffect(() => {
+    if (loading || listError || reels.length === 0) return;
+    const id = readArchiveFocus();
+    if (!id) return;
+    const node = document.querySelector<HTMLElement>(`[data-archive-reel="${id}"]`);
+    node?.scrollIntoView({ block: "nearest" });
+  }, [loading, listError, reels]);
+
   useEffect(() => {
     setDateHeading(formatArchiveDateHeading(urlState.from, urlState.to, resolveClientTimeZone()));
   }, [urlState.from, urlState.to]);
@@ -345,6 +368,10 @@ export function ReelList() {
               onApplyRange={(range) => replaceUrl(applyArchiveCalendarRange(urlStateRef.current, range))}
               onClearDate={clearDateFilter}
             />
+          ) : null}
+
+          {previewId ? (
+            <ArchiveThoughtPreview open reelId={previewId} onClose={closePreview} />
           ) : null}
 
           {isDesktop ? (
@@ -436,7 +463,12 @@ export function ReelList() {
                 <ul className="archive-polaroid-grid list-none p-0">
                   {reels.map((reel) => (
                     <li key={reel.id} className="min-w-0">
-                      <ArchivePolaroidCard reel={reel} variant="desktop" />
+                      <ArchivePolaroidCard
+                        reel={reel}
+                        variant="desktop"
+                        onOpenPreview={() => openPreview(reel.id)}
+                        onLeaveToStudio={() => rememberArchiveFocus(reel.id)}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -444,7 +476,12 @@ export function ReelList() {
                 <ul className="archive-polaroid-grid-mobile list-none p-0">
                   {reels.map((reel) => (
                     <li key={reel.id} className="min-w-0">
-                      <ArchivePolaroidCard reel={reel} variant="mobile" />
+                      <ArchivePolaroidCard
+                        reel={reel}
+                        variant="mobile"
+                        onOpenPreview={() => openPreview(reel.id)}
+                        onLeaveToStudio={() => rememberArchiveFocus(reel.id)}
+                      />
                     </li>
                   ))}
                 </ul>

@@ -92,8 +92,9 @@ test("P01.2 API query clears cursor on new filters and includes date bounds", ()
   const next = buildArchiveListApiQuery(base, { cursor: "abc" });
   assert.match(next, /cursor=abc/);
 
-  const withSheet = buildArchiveListApiQuery({ ...base, calendarOpen: true });
+  const withSheet = buildArchiveListApiQuery({ ...base, calendarOpen: true, previewId: "r1" });
   assert.equal(withSheet.includes("calendar="), false);
+  assert.equal(withSheet.includes("preview="), false);
 });
 
 test("P01.2 merge dedupes pages; empty kinds distinguish archive vs filters", () => {

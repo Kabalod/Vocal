@@ -49,23 +49,28 @@ function PolaroidFace({
 export function ArchivePolaroidCard({
   reel,
   variant = "desktop",
+  onOpenPreview,
+  onLeaveToStudio,
 }: {
   reel: ReelListItemDto;
   variant?: "desktop" | "mobile";
+  onOpenPreview: () => void;
+  onLeaveToStudio?: () => void;
 }) {
   const dialogHref = studioThoughtHref(reel.id, "dialog");
 
   if (variant === "mobile") {
     return (
-      <article className="archive-polaroid archive-polaroid-mobile">
+      <article className="archive-polaroid archive-polaroid-mobile" data-archive-reel={reel.id}>
         <PolaroidStatus reel={reel} />
         <button
           type="button"
           className="archive-polaroid-preview"
-          aria-label={`Превью мысли «${reel.title}». Содержимое появится позже.`}
-          disabled
-          title="Превью появится на следующем этапе"
-          onClick={(event) => event.stopPropagation()}
+          aria-label={`Открыть превью мысли «${reel.title}»`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenPreview();
+          }}
         >
           <PolaroidFace reel={reel} compact />
         </button>
@@ -73,7 +78,10 @@ export function ArchivePolaroidCard({
           href={dialogHref}
           className="archive-polaroid-footer"
           aria-label={`Открыть диалог мысли «${reel.title}»`}
-          onClick={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onLeaveToStudio?.();
+          }}
         >
           <span aria-hidden="true" className="text-lg leading-none text-[#1a1424]">
             →
@@ -84,18 +92,23 @@ export function ArchivePolaroidCard({
   }
 
   return (
-    <article className="archive-polaroid">
+    <article className="archive-polaroid" data-archive-reel={reel.id}>
       <button
         type="button"
         className="archive-polaroid-info"
-        aria-label="Подробнее — превью появится позже"
-        disabled
-        title="Превью появится на следующем этапе"
-        onClick={(event) => event.stopPropagation()}
+        aria-label={`Открыть превью мысли «${reel.title}»`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenPreview();
+        }}
       >
         i
       </button>
-      <Link href={dialogHref} className="block min-w-0 text-left outline-none">
+      <Link
+        href={dialogHref}
+        className="block min-w-0 text-left outline-none"
+        onClick={() => onLeaveToStudio?.()}
+      >
         <div className="archive-polaroid-frame">
           <PolaroidStatus reel={reel} />
           <p className="archive-polaroid-title">{reel.title}</p>

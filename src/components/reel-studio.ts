@@ -18,7 +18,12 @@ export function parseStudioTab(value: string | null | undefined, fallback: Studi
   return value && isStudioMobileTab(value) ? value : fallback;
 }
 
-export function studioThoughtHref(reelId: string, tab: StudioMobileTab): string {
+export function studioThoughtHref(
+  reelId: string,
+  tab: StudioMobileTab,
+  opts?: { record?: boolean },
+): string {
+  if (opts?.record) return `/reels/${reelId}?tab=${tab}&record=1`;
   return `/reels/${reelId}?tab=${tab}`;
 }
 

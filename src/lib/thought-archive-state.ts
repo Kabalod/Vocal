@@ -24,6 +24,8 @@ export type ArchiveListUrlState = {
   dateField: "createdAt" | "updatedAt" | null;
   /** Mobile calendar sheet. Stored as `calendar=1`; ignored by list API. */
   calendarOpen?: boolean;
+  /** Archive preview sheet. Stored as `preview=<id>`; ignored by list API. */
+  previewId?: string | null;
 };
 
 export type ArchiveEmptyKind = "none" | "search" | "filter" | "date";
@@ -37,6 +39,7 @@ export function defaultArchiveListUrlState(): ArchiveListUrlState {
     to: null,
     dateField: null,
     calendarOpen: false,
+    previewId: null,
   };
 }
 
@@ -60,7 +63,16 @@ export function parseArchiveListUrl(params: URLSearchParams): ArchiveListUrlStat
   const dateFieldRaw = params.get("dateField");
   const dateField =
     dateFieldRaw === "createdAt" || dateFieldRaw === "updatedAt" ? dateFieldRaw : null;
-  return { q, status, sort, from, to, dateField, calendarOpen: params.get("calendar") === "1" };
+  return {
+    q,
+    status,
+    sort,
+    from,
+    to,
+    dateField,
+    calendarOpen: params.get("calendar") === "1",
+    previewId: params.get("preview")?.trim() || null,
+  };
 }
 
 /** Omits defaults so refresh/back URLs stay short. */
@@ -76,6 +88,8 @@ export function serializeArchiveListUrl(state: ArchiveListUrlState): URLSearchPa
     if (state.dateField === "updatedAt") params.set("dateField", "updatedAt");
   }
   if (state.calendarOpen) params.set("calendar", "1");
+  const previewId = state.previewId?.trim();
+  if (previewId) params.set("preview", previewId);
   return params;
 }
 
@@ -140,6 +154,34 @@ export function applyArchiveCalendarRange(
 
 export function clearArchiveCalendarRange(state: ArchiveListUrlState): ArchiveListUrlState {
   return { ...state, from: null, to: null, dateField: null, calendarOpen: false };
+}
+
+export const ARCHIVE_FOCUS_STORAGE_KEY = "vocal-archive-focus-v1";
+
+export function rememberArchiveFocus(reelId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(ARCHIVE_FOCUS_STORAGE_KEY, reelId);
+  } catch {
+    /* ignore quota */
+  }
+}
+
+export function readArchiveFocus(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(ARCHIVE_FOCUS_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function openArchivePreview(state: ArchiveListUrlState, reelId: string): ArchiveListUrlState {
+  return { ...state, previewId: reelId, calendarOpen: false };
+}
+
+export function closeArchivePreview(state: ArchiveListUrlState): ArchiveListUrlState {
+  return { ...state, previewId: null };
 }
 
 export function mergeReelListPages(

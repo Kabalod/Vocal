@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RecordingView } from "@/components/RecordingView";
 import { StudioJobWatch } from "@/components/StudioJobWatch";
@@ -39,6 +39,8 @@ export function ReelStudio({ reelId }: { reelId: string }) {
   const [draftPrompt, setDraftPrompt] = useState(false);
   const [watchJobId, setWatchJobId] = useState<string | null>(null);
   const [thoughtStatus, setThoughtStatus] = useState<ReelStatus>("idea");
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  const recordBootstrapped = useRef(false);
 
   const refreshStudioAfterJob = useCallback((status: "done" | "error") => {
     setTakesTick((value) => value + 1);
@@ -111,11 +113,31 @@ export function ReelStudio({ reelId }: { reelId: string }) {
   }, [loadThought]);
 
   useEffect(() => {
+    recordBootstrapped.current = false;
+    setWorkspaceReady(false);
+  }, [reelId]);
+
+  useEffect(() => {
     void fetch(`/api/reels/${reelId}/scripts`, { cache: "no-store" })
       .then((res) => res.json())
       .then((data: ScriptWorkspaceDto) => applyWorkspace(data))
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setWorkspaceReady(true));
   }, [reelId, scriptTick]);
+
+  useEffect(() => {
+    if (searchParams.get("record") !== "1") return;
+    if (load !== "ok" || !workspaceReady || recordBootstrapped.current) return;
+    recordBootstrapped.current = true;
+    if (studioRecordGate({ hasReadyScript, hasDraft: hasManualDraft }) === "draft-open") {
+      setDraftPrompt(true);
+    } else {
+      setDraftPrompt(false);
+      setRecording(true);
+    }
+    writeStudioTab(reelId, "takes");
+    router.replace(studioThoughtHref(reelId, "takes"), { scroll: false });
+  }, [hasManualDraft, hasReadyScript, load, reelId, router, searchParams, workspaceReady]);
 
   function changeTab(next: StudioMobileTab) {
     writeStudioTab(reelId, next);
