@@ -59,6 +59,17 @@ export function IconCheck(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconStatusAll(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="5" y="5" width="5.5" height="5.5" rx="1.2" />
+      <rect x="13.5" y="5" width="5.5" height="5.5" rx="1.2" />
+      <rect x="5" y="13.5" width="5.5" height="5.5" rx="1.2" />
+      <rect x="13.5" y="13.5" width="5.5" height="5.5" rx="1.2" />
+    </svg>
+  );
+}
+
 export function IconStatusOpen(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...base} {...props}>

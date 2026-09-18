@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { NewThoughtSheet } from "@/components/NewThoughtSheet";
-import { ReelCard } from "@/components/ReelCard";
+import { ArchiveCalendar } from "@/components/ArchiveCalendar";
+import { ArchivePolaroidCard } from "@/components/ArchivePolaroidCard";
+import { ArchiveStatusFilters } from "@/components/ArchiveStatusFilters";
 import { RECORDING_FILTERS, isRecordingFilterId } from "@/components/reel-filters";
 import { ShellError, ShellLoading } from "@/components/shell-status";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
@@ -17,7 +19,6 @@ import {
   archiveListUrlEquals,
   buildArchiveListApiQuery,
   defaultArchiveListUrlState,
-  hasArchiveDateFilter,
   mergeReelListPages,
   parseArchiveListUrl,
   resolveArchiveEmptyKind,
@@ -233,15 +234,18 @@ export function ReelList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 shell:hidden">
         <div className="min-w-0">
           <h1 className="font-[family-name:var(--font-display)] text-4xl">Мысли</h1>
         </div>
         <NewThoughtButton onClick={() => setCreateOpen(true)} />
       </div>
 
-      <div className="grid gap-6 shell:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)] shell:items-start">
-        <aside className="flex flex-col gap-3" aria-label="Поиск и фильтры">
+      <div className="grid gap-6 shell:grid-cols-[minmax(14rem,17rem)_minmax(0,1fr)] shell:items-start">
+        <aside className="flex flex-col gap-4" aria-label="Поиск и фильтры">
+          <div className="hidden shell:block">
+            <NewThoughtButton className="w-full" onClick={() => setCreateOpen(true)} />
+          </div>
           <div className="relative">
             <Field
               value={draftQ}
@@ -264,15 +268,31 @@ export function ReelList() {
               </button>
             ) : null}
           </div>
-          <FilterControl
-            items={RECORDING_FILTERS}
-            value={urlState.status}
-            aria-label="Фильтры мыслей"
-            className="grid grid-cols-2 gap-2 shell:flex shell:flex-wrap"
-            onChange={(id) => {
-              if (isRecordingFilterId(id)) applyFilters({ status: id });
-            }}
+
+          <ArchiveCalendar
+            state={urlState}
+            onApplyRange={({ from, to }) => applyFilters({ from, to, dateField: null })}
+            onClearDate={clearDateFilter}
           />
+
+          <div className="shell:hidden">
+            <FilterControl
+              items={RECORDING_FILTERS}
+              value={urlState.status}
+              aria-label="Фильтры мыслей"
+              className="grid grid-cols-2 gap-2"
+              onChange={(id) => {
+                if (isRecordingFilterId(id)) applyFilters({ status: id });
+              }}
+            />
+          </div>
+          <div className="hidden shell:block">
+            <ArchiveStatusFilters
+              value={urlState.status}
+              onChange={(id) => applyFilters({ status: id })}
+            />
+          </div>
+
           <div className="flex flex-wrap gap-2" role="group" aria-label="Сортировка">
             {ARCHIVE_LIST_SORTS.map((item) => (
               <button
@@ -290,18 +310,13 @@ export function ReelList() {
               </button>
             ))}
           </div>
-          {hasArchiveDateFilter(urlState) ? (
-            <button
-              type="button"
-              className="min-h-11 self-start text-sm text-muted underline-offset-2 hover:text-text hover:underline"
-              onClick={clearDateFilter}
-            >
-              Сбросить дату
-            </button>
-          ) : null}
         </aside>
 
         <div className="min-w-0 space-y-4">
+          <div className="hidden shell:block">
+            <h1 className="font-[family-name:var(--font-display)] text-4xl">Мысли</h1>
+          </div>
+
           {!listError && !loading && reels.length > 0 ? (
             <p className="text-sm text-muted">
               Всего мыслей: {totalCount}. Найдено: {matchCount}.
@@ -346,10 +361,10 @@ export function ReelList() {
 
           {!loading && !listError && reels.length > 0 ? (
             <div className="space-y-4">
-              <ul className="grid grid-cols-1 gap-4">
+              <ul className="archive-polaroid-grid list-none p-0">
                 {reels.map((reel) => (
                   <li key={reel.id} className="min-w-0">
-                    <ReelCard reel={reel} />
+                    <ArchivePolaroidCard reel={reel} />
                   </li>
                 ))}
               </ul>

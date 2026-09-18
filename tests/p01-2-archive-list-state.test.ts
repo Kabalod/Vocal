@@ -173,8 +173,7 @@ test("P01.2 ReelList wires URL state, abort, observer, split errors and fallback
   assert.match(list, /buildArchiveListApiQuery/);
   assert.match(list, /fetch\(`\/api\/reels\?\$\{queryString\}`/);
   assert.match(list, /Нет мыслей в выбранных датах/);
-  assert.equal(list.includes("polaroid"), false);
-  assert.equal(list.includes("calendar"), false);
   assert.equal(list.includes("bottom sheet"), false);
+  assert.equal(list.includes("bottom-sheet"), false);
   assert.match(page, /Suspense/);
 });
