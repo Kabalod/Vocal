@@ -119,7 +119,12 @@ export async function createThoughtFromMedia(input: {
         });
         if (raced) return raced.reelId;
         const reel = await tx.reel.create({
-          data: { title: DEFAULT_THOUGHT_TITLE, initialNote: "", status: "idea" },
+          data: {
+            title: DEFAULT_THOUGHT_TITLE,
+            initialNote: "",
+            status: "idea",
+            ownerUserId: ownerUserId(),
+          },
         });
         await tx.thoughtCreateKey.create({
           data: { key: idempotencyKey, reelId: reel.id },

@@ -29,6 +29,7 @@ test("A/B isolation: read, change, export, files, job retry; ID spoofing fails",
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-auth-iso-"));
   const url = fileUrl(path.join(dir, "test.db"));
   process.env.DATABASE_URL = url;
+  (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
   await resetPrismaClient();
   const prisma = new PrismaClient({ datasources: { db: { url } } });
   t.after(async () => {
@@ -147,6 +148,10 @@ test("signed object path cannot be spoofed across owners", async () => {
   });
   await runWithOwner({ id: "user-a", email: null }, () => {
     assertOwnedObjectPath(`${PRIVATE_MEDIA_PREFIX}user-a/takes/x.mp4`);
+    assert.throws(
+      () => assertOwnedObjectPath(`${PRIVATE_MEDIA_PREFIX}user-a/../user-b/x.mp4`),
+      /MEDIA_PATH_DENIED/,
+    );
   });
 });
 

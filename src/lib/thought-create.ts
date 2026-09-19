@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { getReel, ReelError } from "@/lib/reels";
 import { REEL_NOTE_MAX, REEL_TITLE_MAX, TAKE_TEXT_MAX, type ReelDto } from "@/types/reel";
 import { SCRIPT_BODY_MAX, emptyRecording } from "@/types/script";
@@ -59,6 +60,7 @@ export async function createThoughtFromText(input: {
           title,
           initialNote,
           status: "idea",
+          ownerUserId: ownerUserId(),
         },
       });
       if (process.env.VOCAL_FAIL_THOUGHT_CREATE === "after-reel") {

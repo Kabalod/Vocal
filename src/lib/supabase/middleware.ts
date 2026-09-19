@@ -5,7 +5,12 @@ import { getSupabasePublicEnv } from "@/lib/supabase/env";
 export async function updateSupabaseSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
   const env = getSupabasePublicEnv();
-  if (!env) return supabaseResponse;
+  if (!env) {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json({ error: "Нужен вход.", code: "UNAUTHENTICATED" }, { status: 401 });
+    }
+    return supabaseResponse;
+  }
 
   const supabase = createServerClient(env.url, env.publishableKey, {
     cookies: {

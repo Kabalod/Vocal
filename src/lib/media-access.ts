@@ -16,8 +16,13 @@ export function objectPathFromStored(storedPath: string) {
 export function assertOwnedObjectPath(storedPath: string) {
   const owner = ownerUserId();
   if (!isPrivateObjectPath(storedPath)) return;
-  const objectPath = objectPathFromStored(storedPath);
-  if (!objectPath.startsWith(`${owner}/`)) {
+  const objectPath = objectPathFromStored(storedPath).replace(/\\/g, "/");
+  if (
+    objectPath.includes("..") ||
+    objectPath.includes("%") ||
+    objectPath.startsWith("/") ||
+    objectPath.split("/").filter(Boolean)[0] !== owner
+  ) {
     throw new Error("MEDIA_PATH_DENIED");
   }
 }
