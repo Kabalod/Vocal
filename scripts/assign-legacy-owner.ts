@@ -1,53 +1,29 @@
-import { PrismaClient } from "@prisma/client";
+import { loadVocalEnv } from "./lib/load-env";
 import { legacyOwnerUserId } from "../src/lib/auth/session";
+import { PrismaClient } from "@prisma/client";
+import { assignLegacyOwner } from "./lib/assign-legacy";
+import { PortraitConflictError } from "./lib/portrait-conflict";
 
-/**
- * Assigns every local-owned row to VOCAL_LEGACY_OWNER_USER_ID.
- * Does not assign to the first interactive login.
- */
+loadVocalEnv();
+
 async function main() {
   const owner = legacyOwnerUserId();
   const prisma = new PrismaClient();
-  const before = {
-    reels: await prisma.reel.count({ where: { ownerUserId: "local" } }),
-    jobs: await prisma.job.count({ where: { ownerUserId: "local" } }),
-    aiCalls: await prisma.aiCall.count({ where: { ownerUserId: "local" } }),
-    portraits: await prisma.creatorProfile.count({ where: { id: "local" } }),
-  };
-
-  await prisma.$transaction(async (tx) => {
-    await tx.reel.updateMany({ where: { ownerUserId: "local" }, data: { ownerUserId: owner } });
-    await tx.job.updateMany({ where: { ownerUserId: "local" }, data: { ownerUserId: owner } });
-    await tx.aiCall.updateMany({ where: { ownerUserId: "local" }, data: { ownerUserId: owner } });
-    const localPortrait = await tx.creatorProfile.findUnique({ where: { id: "local" } });
-    if (localPortrait) {
-      const existing = await tx.creatorProfile.findUnique({ where: { id: owner } });
-      if (!existing) {
-        await tx.creatorProfile.create({
-          data: {
-            id: owner,
-            ownerUserId: owner,
-            currentRevisionId: localPortrait.currentRevisionId,
-          },
-        });
-        await tx.profileRevision.updateMany({ where: { profileId: "local" }, data: { profileId: owner } });
-        await tx.dialogueThread.updateMany({ where: { profileId: "local" }, data: { profileId: owner } });
-        await tx.aiCall.updateMany({ where: { profileId: "local" }, data: { profileId: owner } });
-        await tx.creatorProfile.delete({ where: { id: "local" } });
-      }
-      await tx.creatorProfile.update({ where: { id: owner }, data: { ownerUserId: owner } });
+  try {
+    const result = await assignLegacyOwner(prisma, owner);
+    console.log(JSON.stringify(result, null, 2));
+  } catch (error) {
+    if (error instanceof PortraitConflictError) {
+      console.error(JSON.stringify({ ok: false, code: "PORTRAIT_CONFLICT", report: error.report }, null, 2));
+      process.exit(2);
     }
-  });
-
-  const after = {
-    reels: await prisma.reel.count({ where: { ownerUserId: owner } }),
-    leftoverLocalReels: await prisma.reel.count({ where: { ownerUserId: "local" } }),
-  };
-  console.log(JSON.stringify({ owner, before, after }, null, 2));
-  await prisma.$disconnect();
+    throw error;
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });

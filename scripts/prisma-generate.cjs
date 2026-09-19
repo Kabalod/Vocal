@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 const { spawnSync } = require("node:child_process");
 const { existsSync } = require("node:fs");
+const { loadVocalEnv } = require("./lib/load-env.cjs");
+
+loadVocalEnv();
 
 function resolvePrismaSchema(env) {
   const explicit = (env.VOCAL_PRISMA_SCHEMA || "").trim();

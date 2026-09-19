@@ -1,7 +1,10 @@
+import { loadVocalEnv } from "./lib/load-env";
 import { existsSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { isPrivateObjectPath } from "../src/lib/media-access";
+
+loadVocalEnv();
 
 type Row = {
   kind: "take" | "job-video" | "job-audio";

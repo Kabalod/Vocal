@@ -1,94 +1,66 @@
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import path from "node:path";
 import { PrismaClient } from "@prisma/client";
+import { loadVocalEnv } from "./lib/load-env";
+import { assertConfirmedBackup, createConfirmedSqliteBackup } from "./lib/sqlite-backup";
+import { countVocalModels, readVocalDump } from "./lib/copy-database";
+import { resolvePrismaSchema } from "./prisma-schema";
 
-const COUNTED_MODELS = [
-  "reel",
-  "take",
-  "job",
-  "dialogueThread",
-  "dialogueMessage",
-  "scriptVersion",
-  "scriptDraft",
-  "review",
-  "question",
-  "answer",
-  "aiCall",
-  "creatorProfile",
-  "profileRevision",
-  "compareResult",
-  "transcriptRevision",
-] as const;
+loadVocalEnv();
 
-async function counts(client: PrismaClient) {
-  const out: Record<string, number> = {};
-  out.reels = await client.reel.count();
-  out.takes = await client.take.count();
-  out.jobs = await client.job.count();
-  out.dialogueThreads = await client.dialogueThread.count();
-  out.dialogueMessages = await client.dialogueMessage.count();
-  out.scripts = await client.scriptVersion.count();
-  out.scriptDrafts = await client.scriptDraft.count();
-  out.reviews = await client.review.count();
-  out.questions = await client.question.count();
-  out.answers = await client.answer.count();
-  out.aiCalls = await client.aiCall.count();
-  out.portraits = await client.creatorProfile.count();
-  out.portraitRevisions = await client.profileRevision.count();
-  out.compares = await client.compareResult.count();
-  out.transcripts = await client.transcriptRevision.count();
-  return out;
+function run(args: string[], env: NodeJS.ProcessEnv) {
+  execFileSync("npx", args, {
+    cwd: process.cwd(),
+    env,
+    stdio: "inherit",
+    shell: true,
+  });
 }
 
 async function main() {
   const root = process.cwd();
-  const sqliteUrl = process.env.DATABASE_URL || "file:./prisma/dev.db";
-  const filePath = sqliteUrl.replace(/^file:/, "");
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const outDir = path.join(root, "backups", `sqlite-${stamp}`);
-  mkdirSync(outDir, { recursive: true });
-  if (existsSync(filePath)) {
-    copyFileSync(filePath, path.join(outDir, "dev.db"));
+  const sqliteUrl = process.env.DATABASE_URL?.trim();
+  if (!sqliteUrl?.startsWith("file:")) {
+    throw new Error("DATABASE_URL must be a sqlite file: URL for this copy.");
   }
-
-  const sqlite = new PrismaClient();
-  const sqliteCounts = await counts(sqlite);
-  writeFileSync(path.join(outDir, "sqlite-counts.json"), JSON.stringify(sqliteCounts, null, 2));
-  console.log("sqlite backup", outDir);
-  console.log("sqlite counts", sqliteCounts);
-
   const postgresUrl = process.env.POSTGRES_DATABASE_URL?.trim();
   if (!postgresUrl) {
-    console.log("POSTGRES_DATABASE_URL unset: schema push skipped. Counts captured.");
-    await sqlite.$disconnect();
-    return;
+    throw new Error("POSTGRES_DATABASE_URL is required.");
   }
 
-  execFileSync("npx", ["prisma", "db", "push", "--skip-generate", "--schema", "prisma/schema.postgres.prisma"], {
+  const backup = createConfirmedSqliteBackup({
+    databaseUrl: sqliteUrl,
+    schemaPath: "prisma/schema.prisma",
     cwd: root,
-    env: { ...process.env, DATABASE_URL: postgresUrl },
-    stdio: "inherit",
-    shell: true,
   });
+  assertConfirmedBackup(backup);
 
-  const tables = COUNTED_MODELS;
-  writeFileSync(
-    path.join(outDir, "README.txt"),
-    [
-      "SQLite copy and counts are here.",
-      "Postgres schema was pushed with prisma/schema.postgres.prisma.",
-      "Row copy: keep DATABASE_URL on sqlite for tests; set POSTGRES_DATABASE_URL for app production.",
-      "Then run: npm run db:assign-legacy-owner with VOCAL_LEGACY_OWNER_USER_ID set to the predetermined auth uuid.",
-      "Never assign local rows to the first interactive login.",
-      `models: ${tables.join(", ")}`,
-    ].join("\n"),
-  );
-
+  const sqlite = new PrismaClient({ datasources: { db: { url: sqliteUrl } } });
+  const dump = await readVocalDump(sqlite);
+  const dumpPath = path.join(path.dirname(backup.dest), "vocal-dump.json");
+  writeFileSync(dumpPath, JSON.stringify(dump));
+  const sourceCounts = await countVocalModels(sqlite);
   await sqlite.$disconnect();
+
+  const postgresEnv = {
+    ...process.env,
+    DATABASE_URL: postgresUrl,
+    VOCAL_PRISMA_SCHEMA: "prisma/schema.postgres.prisma",
+  };
+  run(["prisma", "generate", "--schema", "prisma/schema.postgres.prisma"], postgresEnv);
+  run(["prisma", "db", "push", "--schema", "prisma/schema.postgres.prisma"], postgresEnv);
+  run(["tsx", "scripts/import-vocal-dump.ts", dumpPath], postgresEnv);
+
+  const restoreSchema = resolvePrismaSchema({
+    DATABASE_URL: sqliteUrl,
+    VOCAL_PRISMA_SCHEMA: process.env.VOCAL_PRISMA_SCHEMA,
+  });
+  run(["prisma", "generate", "--schema", restoreSchema], { ...process.env, DATABASE_URL: sqliteUrl });
+  console.log(JSON.stringify({ ok: true, backup: backup.dest, dump: dumpPath, sourceCounts }, null, 2));
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });

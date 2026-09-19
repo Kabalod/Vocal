@@ -1,6 +1,6 @@
 # PostgreSQL Prisma commands
 
-Default `prisma/schema.prisma` stays SQLite for tests. Runtime Postgres uses `prisma/schema.postgres.prisma`.
+CLI scripts and `postinstall` load `.env` then `.env.local` (shell env wins), matching Next.js. Values only in `.env.local` are enough for the Prisma picker.
 
 `npm install` / `postinstall` runs `node scripts/prisma-generate.cjs`. That script **does not** generate SQLite if `DATABASE_URL` is `postgres://` or `postgresql://`, or if `VOCAL_PRISMA_SCHEMA` is set.
 

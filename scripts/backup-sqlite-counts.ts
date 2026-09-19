@@ -1,37 +1,30 @@
-import { mkdirSync, copyFileSync, existsSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
+import { loadVocalEnv } from "./lib/load-env";
+import { createConfirmedSqliteBackup } from "./lib/sqlite-backup";
+import { countVocalModels } from "./lib/copy-database";
 
-const root = process.cwd();
-const sqliteUrl = process.env.DATABASE_URL || "file:./prisma/dev.db";
-const filePath = sqliteUrl.replace(/^file:/, "");
-const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-const outDir = path.join(root, "backups", `sqlite-${stamp}`);
+loadVocalEnv();
 
 async function main() {
-  mkdirSync(outDir, { recursive: true });
-  if (existsSync(filePath)) {
-    copyFileSync(filePath, path.join(outDir, "dev.db"));
+  const sqliteUrl = process.env.DATABASE_URL?.trim();
+  if (!sqliteUrl?.startsWith("file:")) {
+    throw new Error("DATABASE_URL must be a sqlite file: URL.");
   }
-  const prisma = new PrismaClient();
-  const counts = {
-    reels: await prisma.reel.count(),
-    takes: await prisma.take.count(),
-    jobs: await prisma.job.count(),
-    dialogues: await prisma.dialogueThread.count(),
-    scripts: await prisma.scriptVersion.count(),
-    reviews: await prisma.review.count(),
-    aiCalls: await prisma.aiCall.count(),
-    profiles: await prisma.creatorProfile.count(),
-    revisions: await prisma.profileRevision.count(),
-  };
-  writeFileSync(path.join(outDir, "counts.json"), JSON.stringify(counts, null, 2));
-  console.log(outDir);
+  const backup = createConfirmedSqliteBackup({
+    databaseUrl: sqliteUrl,
+    schemaPath: "prisma/schema.prisma",
+  });
+  const prisma = new PrismaClient({ datasources: { db: { url: sqliteUrl } } });
+  const counts = await countVocalModels(prisma);
+  writeFileSync(path.join(path.dirname(backup.dest), "counts.json"), JSON.stringify(counts, null, 2));
+  console.log(path.dirname(backup.dest));
   console.log(JSON.stringify(counts, null, 2));
   await prisma.$disconnect();
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });
