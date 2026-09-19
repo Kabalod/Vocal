@@ -8,16 +8,16 @@ import { ArchiveCalendarSheet } from "@/components/ArchiveCalendarSheet";
 import { ArchiveDateControl } from "@/components/ArchiveDateControl";
 import { ArchiveDensityToggle } from "@/components/ArchiveDensityToggle";
 import { ArchiveDesktopSlot } from "@/components/ArchiveDesktopChrome";
+import { ArchiveListView } from "@/components/ArchiveListView";
 import { ArchivePolaroidCard } from "@/components/ArchivePolaroidCard";
+import { ArchiveSortMenu } from "@/components/ArchiveSortMenu";
 import { ArchiveStatusFilters } from "@/components/ArchiveStatusFilters";
 import { ArchiveThoughtPreview } from "@/components/ArchiveThoughtPreview";
-import { RECORDING_FILTERS, isRecordingFilterId } from "@/components/reel-filters";
 import { useShellDesktop } from "@/components/use-shell-desktop";
 import { ShellError, ShellLoading } from "@/components/shell-status";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { EmptyState } from "@/components/vocal-ui/EmptyState";
 import { Field } from "@/components/vocal-ui/Field";
-import { FilterControl } from "@/components/vocal-ui/FilterControl";
 import { GenerationGuard } from "@/lib/generation-guard";
 import {
   formatArchiveDateHeading,
@@ -42,11 +42,8 @@ import {
   resolveArchiveEmptyKind,
   type ArchiveListUrlState,
 } from "@/lib/thought-archive-state";
-import {
-  archiveDeskSlot,
-  archiveDeskSpreadKind,
-  chunkArchiveDeskSpreads,
-} from "@/lib/archive-desk-layout";
+import { ArchiveDeskSpread } from "@/components/ArchiveDeskSpread";
+import { chunkArchiveDeskSpreads } from "@/lib/archive-desk-layout";
 import {
   readArchiveDensity,
   writeArchiveDensity,
@@ -63,7 +60,7 @@ function NewThoughtButton({
   onClick?: () => void;
 }) {
   return (
-    <ActionButton variant="primary" className={className} onClick={onClick}>
+    <ActionButton variant="primary" className={`archive-toolbar-cta ${className}`} onClick={onClick}>
       + Новая мысль
     </ActionButton>
   );
@@ -357,17 +354,15 @@ export function ReelList() {
   );
 
   const sortControl = (
-    <div className="flex flex-wrap gap-2" role="group" aria-label="Сортировка">
+    <div className="archive-toolbar-segment flex gap-0.5" role="group" aria-label="Сортировка">
       {ARCHIVE_LIST_SORTS.map((item) => (
         <button
           key={item.id}
           type="button"
           onClick={() => applyFilters({ sort: item.id })}
           aria-pressed={urlState.sort === item.id}
-          className={`min-h-11 rounded-full px-3 text-sm ${
-            urlState.sort === item.id
-              ? "border border-accent bg-bg text-text"
-              : "border border-line bg-surface text-muted hover:text-text"
+          className={`min-h-11 rounded-[var(--vocal-radius-control)] px-3 text-sm ${
+            urlState.sort === item.id ? "bg-bg text-text" : "text-muted hover:text-text"
           }`}
         >
           {item.label}
@@ -383,14 +378,19 @@ export function ReelList() {
           <h1 className="font-[family-name:var(--font-display)] text-4xl">Мысли</h1>
           <button
             type="button"
-            className="mt-2 min-h-11 text-left"
+            className="archive-mobile-date mt-2"
             aria-haspopup="dialog"
             aria-expanded={calendarOpen}
             aria-label="Открыть календарь"
             onClick={() => pushUrl(openArchiveCalendar(urlStateRef.current))}
           >
-            <span className="block text-xl font-medium leading-tight text-text">{dateHeading.title}</span>
-            <span className="block text-sm capitalize text-muted">{dateHeading.subtitle}</span>
+            <span>
+              <span className="block text-xl font-medium leading-tight text-text">{dateHeading.title}</span>
+              <span className="block text-sm capitalize text-muted">{dateHeading.subtitle}</span>
+            </span>
+            <span aria-hidden="true" className="text-muted">
+              ▾
+            </span>
           </button>
         </div>
         <NewThoughtButton onClick={() => setCreateOpen(true)} />
@@ -428,12 +428,23 @@ export function ReelList() {
             />
           </ArchiveDesktopSlot>
         </>
-      ) : null}
+      ) : (
+        <ArchiveDesktopSlot slot="sheet-statuses">
+          <ArchiveStatusFilters
+            variant="sheet"
+            value={urlState.status}
+            onChange={(id) => applyFilters({ status: id })}
+          />
+        </ArchiveDesktopSlot>
+      )}
 
       <div className="grid gap-6 shell:grid-cols-1">
         {!isDesktop ? (
-          <aside className="flex flex-col gap-4" aria-label="Поиск и фильтры">
-            {searchField}
+          <aside className="flex flex-col gap-3 archive-mobile-tight" aria-label="Поиск и фильтры">
+            <div className="flex items-center gap-2">
+              {searchField}
+              <ArchiveSortMenu value={urlState.sort} onChange={(id) => applyFilters({ sort: id })} />
+            </div>
             {calendarOpen ? (
               <ArchiveCalendarSheet
                 open
@@ -443,16 +454,11 @@ export function ReelList() {
                 onClearDate={clearDateFilter}
               />
             ) : null}
-            <FilterControl
-              items={RECORDING_FILTERS}
+            <ArchiveStatusFilters
+              variant="icons"
               value={urlState.status}
-              aria-label="Фильтры мыслей"
-              className="grid grid-cols-2 gap-2"
-              onChange={(id) => {
-                if (isRecordingFilterId(id)) applyFilters({ status: id });
-              }}
+              onChange={(id) => applyFilters({ status: id })}
             />
-            {sortControl}
           </aside>
         ) : null}
 
@@ -465,20 +471,14 @@ export function ReelList() {
           />
         ) : null}
 
-        <div className="archive-desk-surface min-w-0 space-y-4">
+        <div className={`min-w-0 ${isDesktop ? "" : "archive-desk-surface space-y-4"}`}>
           {isDesktop ? (
-            <div className="archive-workspace-toolbar space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h1 className="font-[family-name:var(--font-display)] text-4xl">Мысли</h1>
-                <div className="flex flex-wrap items-center gap-2">
-                  <NewThoughtButton onClick={() => setCreateOpen(true)} />
-                  <ArchiveDensityToggle value={density} onChange={changeDensity} />
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                {searchField}
-                {sortControl}
-              </div>
+            <div className="archive-workspace-toolbar">
+              <h1 className="archive-toolbar-title">Мысли</h1>
+              <div className="min-w-0 flex-1">{searchField}</div>
+              <NewThoughtButton onClick={() => setCreateOpen(true)} />
+              {sortControl}
+              <ArchiveDensityToggle value={density} onChange={changeDensity} />
             </div>
           ) : null}
 
@@ -519,9 +519,15 @@ export function ReelList() {
           ) : null}
 
           {!loading && !listError && reels.length > 0 ? (
-            <div className="space-y-4">
-              {isDesktop && density === "compact" ? (
-                <ul className="archive-polaroid-grid archive-polaroid-grid-compact list-none p-0">
+            <div className={isDesktop && density === "large" ? "archive-desk-spreads" : "space-y-4"}>
+              {isDesktop && density === "list" ? (
+                <ArchiveListView
+                  reels={reels}
+                  onOpenPreview={openPreview}
+                  onLeaveToStudio={rememberArchiveFocus}
+                />
+              ) : isDesktop && density === "compact" ? (
+                <ul className="archive-polaroid-grid archive-polaroid-grid-compact list-none p-0 px-4 shell:px-6">
                   {reels.map((reel) => (
                     <li key={reel.id} className="min-w-0">
                       <ArchivePolaroidCard
@@ -534,36 +540,17 @@ export function ReelList() {
                   ))}
                 </ul>
               ) : isDesktop ? (
-                <div className="archive-desk-spreads">
-                  {chunkArchiveDeskSpreads(reels).map((spread, spreadIndex) => (
-                    <ul
-                      key={spread.map((reel) => reel.id).join("-")}
-                      className={`archive-desk-spread archive-desk-spread-${archiveDeskSpreadKind(spread.length)} list-none p-0`}
-                      data-archive-spread={spreadIndex + 1}
-                      data-archive-spread-kind={archiveDeskSpreadKind(spread.length)}
-                    >
-                      {spread.map((reel, indexInSpread) => {
-                        const slot = archiveDeskSlot(indexInSpread);
-                        return (
-                          <li
-                            key={reel.id}
-                            data-slot={slot}
-                            className={`archive-desk-slot archive-desk-slot-${slot}`}
-                          >
-                            <ArchivePolaroidCard
-                              reel={reel}
-                              variant="desktop"
-                              onOpenPreview={() => openPreview(reel.id)}
-                              onLeaveToStudio={() => rememberArchiveFocus(reel.id)}
-                            />
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  ))}
-                </div>
+                chunkArchiveDeskSpreads(reels).map((spread, spreadIndex) => (
+                  <ArchiveDeskSpread
+                    key={spread.map((reel) => reel.id).join("-")}
+                    reels={spread}
+                    spreadIndex={spreadIndex}
+                    onOpenPreview={openPreview}
+                    onLeaveToStudio={rememberArchiveFocus}
+                  />
+                ))
               ) : (
-                <ul className="archive-polaroid-grid-mobile list-none p-0">
+                <ul className="archive-polaroid-grid-mobile archive-mobile-tight list-none p-0">
                   {reels.map((reel) => (
                     <li key={reel.id} className="min-w-0">
                       <ArchivePolaroidCard

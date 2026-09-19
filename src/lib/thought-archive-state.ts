@@ -205,6 +205,38 @@ export function closeArchivePreview(state: ArchiveListUrlState): ArchiveListUrlS
   return { ...state, previewId: null };
 }
 
+export function formatArchiveListMonth(iso: string, locale = "ru-RU"): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const month = date.toLocaleDateString(locale, { month: "long" });
+  const label = month.charAt(0).toUpperCase() + month.slice(1);
+  return `${label} ${date.getFullYear()}`;
+}
+
+export function archiveListMonthKey(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function groupArchiveListByMonth(reels: readonly ReelListItemDto[]): Array<{
+  key: string;
+  label: string;
+  items: ReelListItemDto[];
+}> {
+  const groups: Array<{ key: string; label: string; items: ReelListItemDto[] }> = [];
+  for (const reel of reels) {
+    const key = archiveListMonthKey(reel.createdAt);
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) {
+      last.items.push(reel);
+    } else {
+      groups.push({ key, label: formatArchiveListMonth(reel.createdAt), items: [reel] });
+    }
+  }
+  return groups;
+}
+
 export function mergeReelListPages(
   prev: ReelListItemDto[],
   incoming: ReelListItemDto[],
