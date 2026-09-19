@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { ReelError } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
 import {
@@ -18,6 +19,7 @@ function errorResponse(error: unknown) {
 }
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   const { id } = await context.params;
   try {
     const transcript = await listTranscriptBundle(id);
@@ -28,6 +30,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 }
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   const { id } = await context.params;
   try {
     const body = (await request.json()) as Record<string, unknown>;
@@ -40,6 +43,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   const { id } = await context.params;
   try {
     const body = (await request.json()) as Record<string, unknown>;

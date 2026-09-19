@@ -1,5 +1,6 @@
 import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { continueQuestions, listReelQuestions } from "@/lib/ai/questions";
 import { ReviewError } from "@/lib/ai/review";
 import { ReelError } from "@/lib/reels";
@@ -16,6 +17,7 @@ function errorResponse(error: unknown) {
 }
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     const questions = await listReelQuestions(id);
@@ -26,6 +28,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 }
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     let takeId: string | null = null;

@@ -19,8 +19,11 @@ model Reel {
   contextKeysJson  String                 @default("[]")
   selectedScriptId String?
   finalScriptId    String?
+  ownerUserId      String                 @default("local")
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
+
+  @@index([ownerUserId, createdAt])
   takes            Take[]
   contextSnapshots ReelContextSnapshot[]
   reviews          Review[]
@@ -33,8 +36,11 @@ model Reel {
   scriptDraft       ScriptDraft?
 }
 
+/// AI portrait for one author. Not the login row: that is public.profiles (auth.users.id).
+/// CreatorProfile.id equals the auth user uuid (same as public.profiles.id).
 model CreatorProfile {
   id                 String             @id
+  ownerUserId        String             @unique @default("local")
   currentRevisionId  String?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
@@ -127,7 +133,10 @@ model Job {
   updatedAt    DateTime  @updatedAt
   takeId       String?
   take         Take?     @relation(fields: [takeId], references: [id], onDelete: Restrict)
+  ownerUserId  String    @default("local")
   analysis     AnalysisResult?
+
+  @@index([ownerUserId, createdAt])
 }
 
 model AnalysisResult {
@@ -172,11 +181,13 @@ model AiCall {
   errorMessage       String?
   promptTokens       Int?
   completionTokens   Int?
+  ownerUserId        String          @default("local")
   createdAt          DateTime        @default(now())
   reviews            Review[]
 
   @@index([reelId, createdAt])
   @@index([profileId, createdAt])
+  @@index([ownerUserId, createdAt])
 }
 
 model Review {

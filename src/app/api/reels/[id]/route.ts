@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { ReelError, getReel, updateReel } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
 import { parseReelStatusInput, type UpdateReelInput } from "@/types/reel";
@@ -18,6 +19,7 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     const reel = await getReel(id);
@@ -34,6 +36,7 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     const body = (await request.json()) as Record<string, unknown>;

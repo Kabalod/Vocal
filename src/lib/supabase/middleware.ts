@@ -25,6 +25,30 @@ export async function updateSupabaseSession(request: NextRequest) {
     },
   });
 
-  await supabase.auth.getClaims();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const path = request.nextUrl.pathname;
+  const isAuthPage =
+    path === "/login" ||
+    path === "/signup" ||
+    path === "/forgot-password" ||
+    path.startsWith("/auth/");
+  const isPublicApi = path === "/api/health" || path.startsWith("/auth/callback");
+  const isApi = path.startsWith("/api/");
+
+  if (!user && isApi && !isPublicApi) {
+    return NextResponse.json({ error: "Нужен вход.", code: "UNAUTHENTICATED" }, { status: 401 });
+  }
+
+  if (!user && !isAuthPage && !isPublicApi) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  if (user && (path === "/login" || path === "/signup")) {
+    return NextResponse.redirect(new URL("/reels", request.url));
+  }
+
   return supabaseResponse;
 }

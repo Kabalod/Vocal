@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { ReelError } from "@/lib/reels";
 import { enqueueByKey } from "@/lib/write-queue";
 
@@ -120,7 +121,9 @@ function normalizeRecording(input?: Partial<RecordingCardDto> | null): Recording
 }
 
 async function assertReel(reelId: string) {
-  const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+  const reel = await prisma.reel.findFirst({
+    where: { id: reelId, ownerUserId: ownerUserId() },
+  });
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
   return reel;
 }
@@ -596,7 +599,9 @@ export async function setFinalScript(reelId: string, scriptId: string | null): P
     }
   }
 
-  const snapshot = await prisma.reel.findUnique({ where: { id: reelId } });
+  const snapshot = await prisma.reel.findFirst({
+    where: { id: reelId, ownerUserId: ownerUserId() },
+  });
   if (!snapshot) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
   if (snapshot.status === "completed") {
     throw new ScriptError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
@@ -606,7 +611,7 @@ export async function setFinalScript(reelId: string, scriptId: string | null): P
   }
 
   return enqueueByKey(`reel:${reelId}`, async () => {
-    const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+    const reel = await prisma.reel.findFirst({ where: { id: reelId, ownerUserId: ownerUserId() } });
     if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
     if (reel.status === "completed") {
       throw new ScriptError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
@@ -695,7 +700,7 @@ export async function loadSourceTexts(reelId: string, refs: ScriptSourceRef[]): 
   const out: { label: string; text: string }[] = [];
   for (const ref of resolved) {
     if (ref.type === "note") {
-      const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+      const reel = await prisma.reel.findFirst({ where: { id: reelId, ownerUserId: ownerUserId() } });
       out.push({ label: ref.label ?? "Заметка", text: reel?.initialNote ?? "" });
     } else if (ref.type === "transcript") {
       const row = await prisma.transcriptRevision.findFirst({

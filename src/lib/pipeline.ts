@@ -1,4 +1,5 @@
 import { existsSync } from "fs";
+import { enterWithOwner } from "@/lib/auth/session";
 import { analyzeSpeech } from "@/lib/analyze";
 import { MAX_VIDEO_SECONDS } from "@/lib/config";
 import { ensureCriteria, prisma } from "@/lib/db";
@@ -165,6 +166,8 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
     }
     return claimed;
   }
+
+  enterWithOwner({ id: claimed.job.ownerUserId, email: null });
 
   const transcribe = deps.transcribeAudio ?? transcribeAudio;
   const analyze = deps.analyzeSpeech ?? analyzeSpeech;

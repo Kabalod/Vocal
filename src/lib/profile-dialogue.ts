@@ -19,7 +19,7 @@ import {
 } from "@/lib/profile";
 import { buildPortrait, coveredProfileKeys, decidePortraitComplete, applyFieldOperations, applyUnchangedFieldsOnly } from "@/lib/profile-portrait";
 import type { ProfileAiReply } from "@/lib/ai/profile";
-import { LOCAL_PROFILE_ID } from "@/types/profile";
+import { portraitProfileId, ownerUserId } from "@/lib/auth/session";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
 import type { ProfileFieldValue, ProfileWorkspaceDto } from "@/types/profile";
@@ -99,14 +99,14 @@ function asDto(row: {
 
 export async function ensureProfileThread() {
   await ensureLocalProfile();
-  const existing = await prisma.dialogueThread.findUnique({ where: { profileId: LOCAL_PROFILE_ID } });
+  const existing = await prisma.dialogueThread.findUnique({ where: { profileId: portraitProfileId() } });
   if (existing) return existing;
   try {
     return await prisma.dialogueThread.create({
-      data: { scope: "profile", profileId: LOCAL_PROFILE_ID },
+      data: { scope: "profile", profileId: portraitProfileId() },
     });
   } catch (error) {
-    const raced = await prisma.dialogueThread.findUnique({ where: { profileId: LOCAL_PROFILE_ID } });
+    const raced = await prisma.dialogueThread.findUnique({ where: { profileId: portraitProfileId() } });
     if (raced) return raced;
     throw error;
   }
@@ -120,7 +120,7 @@ function visibleDialogueItems<T extends { id: string }>(items: T[], sessionStart
 }
 
 export async function listProfileDialoguePage(input: { cursor?: string | null; limit?: number } = {}): Promise<DialoguePageDto> {
-  const thread = await prisma.dialogueThread.findUnique({ where: { profileId: LOCAL_PROFILE_ID } });
+  const thread = await prisma.dialogueThread.findUnique({ where: { profileId: portraitProfileId() } });
   if (!thread) {
     return { threadId: "", messages: [], nextCursor: null, analyzing: false };
   }
@@ -143,7 +143,7 @@ export async function listProfileDialoguePage(input: { cursor?: string | null; l
 }
 
 async function hideTechnicalProfileErrors(): Promise<void> {
-  const thread = await prisma.dialogueThread.findUnique({ where: { profileId: LOCAL_PROFILE_ID } });
+  const thread = await prisma.dialogueThread.findUnique({ where: { profileId: portraitProfileId() } });
   if (!thread) return;
   const rows = await prisma.dialogueMessage.findMany({
     where: { threadId: thread.id, kind: "error" },
@@ -161,7 +161,7 @@ async function healStoredPortrait(stored: Awaited<ReturnType<typeof readStoredPr
   let next = stored;
   if (!coveredProfileKeys(stored.fields).length) {
     const calls = await prisma.aiCall.findMany({
-      where: { kind: PROFILE_DIALOGUE_KIND, profileId: LOCAL_PROFILE_ID, status: "done" },
+      where: { kind: PROFILE_DIALOGUE_KIND, profileId: portraitProfileId(), status: "done" },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: { responseText: true, resultJson: true },
     });
@@ -360,12 +360,12 @@ async function applyPortraitReply(input: {
         }
         const revision = await tx.profileRevision.create({
           data: {
-            profileId: LOCAL_PROFILE_ID,
+            profileId: portraitProfileId(),
             payloadJson: serializeStoredPayload(nextStored),
           },
         });
         const switched = await tx.creatorProfile.updateMany({
-          where: { id: LOCAL_PROFILE_ID, currentRevisionId: revisionId },
+          where: { id: portraitProfileId(), currentRevisionId: revisionId },
           data: { currentRevisionId: revision.id },
         });
         if (switched.count !== 1) throw new ProfileApplyConflict();
@@ -470,12 +470,12 @@ export async function confirmProfilePortrait(): Promise<ProfileWorkspaceDto & { 
         };
         const revision = await tx.profileRevision.create({
           data: {
-            profileId: LOCAL_PROFILE_ID,
+            profileId: portraitProfileId(),
             payloadJson: serializeStoredPayload(nextStored),
           },
         });
         const switched = await tx.creatorProfile.updateMany({
-          where: { id: LOCAL_PROFILE_ID, currentRevisionId: revisionId },
+          where: { id: portraitProfileId(), currentRevisionId: revisionId },
           data: { currentRevisionId: revision.id },
         });
         if (switched.count !== 1) throw new ProfileApplyConflict();
@@ -579,13 +579,14 @@ ${await recentStoredText(thread.id, userMessage.id)}
       data: {
         kind: PROFILE_DIALOGUE_KIND,
         reelId: null,
-        profileId: LOCAL_PROFILE_ID,
+        profileId: portraitProfileId(),
         model: LLM_MODEL,
         status: "running",
+        ownerUserId: ownerUserId(),
         promptText: userPrompt,
         inputSnapshotJson: JSON.stringify({
           text,
-          profileId: LOCAL_PROFILE_ID,
+          profileId: portraitProfileId(),
           mode,
           playbook: false,
           fields: workingFields,

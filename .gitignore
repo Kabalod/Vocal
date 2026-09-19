@@ -60,3 +60,4 @@ tsconfig.tsbuildinfo
 
 .codex
 tmp-backup-dir.txt
+/backups/

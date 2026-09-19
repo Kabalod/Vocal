@@ -1,5 +1,6 @@
 import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { AiBudgetError } from "@/lib/ai/usage-guard";
 import { DialogueError, requestScriptHelp } from "@/lib/dialogue";
 import { ReelError } from "@/lib/reels";
@@ -8,6 +9,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     const body = (await request.json()) as { idempotencyKey?: string };

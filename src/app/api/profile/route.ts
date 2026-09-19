@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { ProfileError, getProfile, saveProfile } from "@/lib/profile";
 import { logApiError } from "@/lib/safe-log";
 
@@ -14,6 +15,7 @@ function errorResponse(error: unknown) {
 }
 
 export async function GET() {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const profile = await getProfile();
     return NextResponse.json({ profile });
@@ -23,6 +25,7 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const body = (await request.json()) as Record<string, unknown>;
     if (body.fields === undefined) {

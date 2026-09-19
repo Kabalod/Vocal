@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { ExportError } from "@/lib/canonical-export";
 import { exportCanonicalTxt, exportReel } from "@/lib/export-reel";
 import { ReelError } from "@/lib/reels";
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     const url = new URL(request.url);

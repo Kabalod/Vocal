@@ -1,5 +1,7 @@
 import { after, NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { JOB_LEASE_MS } from "@/lib/jobs";
 import { enqueueJob } from "@/lib/pipeline";
 import { toJobDto } from "@/lib/serialize";
@@ -10,8 +12,9 @@ export async function POST(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   const { id } = await context.params;
-  const job = await prisma.job.findUnique({ where: { id } });
+  const job = await prisma.job.findFirst({ where: { id, ownerUserId: ownerUserId() } });
   if (!job) {
     return NextResponse.json({ error: "Запись не найдена.", code: "JOB_NOT_FOUND" }, { status: 404 });
   }

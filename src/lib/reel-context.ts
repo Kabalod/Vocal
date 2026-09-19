@@ -4,6 +4,7 @@ import {
   selectedKeysForRuntime,
 } from "@/lib/ai-runtime-context";
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { ProfileError, getProfile, parseSelectedKeys, readStoredProfilePayload } from "@/lib/profile";
 import { ReelError } from "@/lib/reels";
 import {
@@ -92,7 +93,7 @@ function snapshotToDto(row: {
 }
 
 export async function getReelContext(reelId: string): Promise<ReelContextDto> {
-  const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+  const reel = await prisma.reel.findFirst({ where: { id: reelId, ownerUserId: ownerUserId() } });
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
   const profile = await getProfile();
   const stored = await readStoredProfilePayload();
@@ -123,7 +124,7 @@ export async function saveReelContext(
   reelId: string,
   input: { reelGoal?: string; reelAudience?: string; selectedKeys?: unknown },
 ): Promise<ReelContextDto> {
-  const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+  const reel = await prisma.reel.findFirst({ where: { id: reelId, ownerUserId: ownerUserId() } });
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
 
   const reelGoal = input.reelGoal !== undefined ? input.reelGoal : reel.reelGoal;

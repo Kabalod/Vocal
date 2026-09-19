@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { ReelError } from "@/lib/reels";
 import { thoughtProcessingPhase } from "@/lib/thought-media";
 import { thoughtUserStatus } from "@/lib/thought-preview";
@@ -103,8 +104,8 @@ export function archivePreviewHonesty(job: {
 }
 
 export async function getArchiveThoughtPreview(reelId: string): Promise<ArchiveThoughtPreviewDto> {
-  const reel = await prisma.reel.findUnique({
-    where: { id: reelId },
+  const reel = await prisma.reel.findFirst({
+    where: { id: reelId, ownerUserId: ownerUserId() },
     select: {
       id: true,
       title: true,

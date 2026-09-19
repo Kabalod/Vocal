@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { ProfileError } from "@/lib/profile";
 import { getReelContext, saveReelContext } from "@/lib/reel-context";
 import { ReelError } from "@/lib/reels";
@@ -16,6 +17,7 @@ function errorResponse(error: unknown) {
 }
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     const reelContext = await getReelContext(id);
@@ -26,6 +28,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 }
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     const body = (await request.json()) as Record<string, unknown>;

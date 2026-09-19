@@ -1,6 +1,7 @@
 import path from "node:path";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { enqueueJob } from "@/lib/pipeline";
 import { ReelError, getReel } from "@/lib/reels";
 import { toJobDto } from "@/lib/serialize";
@@ -53,7 +54,7 @@ async function loadByKey(key: string): Promise<{
   });
   if (!row) return null;
   const reel = await getReel(row.reelId);
-  if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+  if (!reel) return null;
   const take = reel.takes[0] ?? null;
   const jobRow = take
     ? await prisma.job.findFirst({ where: { takeId: take.id }, orderBy: { createdAt: "desc" } })
@@ -65,15 +66,16 @@ async function loadByKey(key: string): Promise<{
 }
 
 export async function ensureJobForTake(takeId: string, fileName: string): Promise<JobDto> {
+  const take = await prisma.take.findFirst({
+    where: { id: takeId, reel: { ownerUserId: ownerUserId() } },
+    select: { mediaStatus: true, storedPath: true, originalName: true },
+  });
+  if (!take) throw new ReelError("Дубль не найден.", "TAKE_NOT_FOUND", 404);
   const existing = await prisma.job.findFirst({
-    where: { takeId },
+    where: { takeId, ownerUserId: ownerUserId() },
     orderBy: { createdAt: "desc" },
   });
   if (existing) return toJobDto(existing);
-  const take = await prisma.take.findUnique({
-    where: { id: takeId },
-    select: { mediaStatus: true, storedPath: true, originalName: true },
-  });
   if (!take || take.mediaStatus !== "ready" || !take.storedPath) {
     throw new ReelError("Файл ещё не сохранён.", "UPLOAD_FAILED");
   }
@@ -84,6 +86,7 @@ export async function ensureJobForTake(takeId: string, fileName: string): Promis
       status: "queued",
       stage: "convert",
       takeId,
+      ownerUserId: ownerUserId(),
     },
   });
   return toJobDto(created);
@@ -159,8 +162,8 @@ export async function applyThoughtMediaFromTranscript(
   transcript: string,
   complete?: CompleteJsonFn,
 ): Promise<void> {
-  const take = await prisma.take.findUnique({
-    where: { id: takeId },
+  const take = await prisma.take.findFirst({
+    where: { id: takeId, reel: { ownerUserId: ownerUserId() } },
     include: { reel: true },
   });
   if (!take) return;

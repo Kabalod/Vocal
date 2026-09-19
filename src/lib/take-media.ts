@@ -1,6 +1,11 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
+import {
+  assertOwnedObjectPath,
+  createOwnedSignedUrl,
+  isPrivateObjectPath,
+} from "@/lib/media-access";
 import { assertStoredMediaPath } from "@/lib/storage";
 import { mimeFromName } from "@/lib/take-playback";
 
@@ -33,6 +38,11 @@ export async function mediaFileResponse(options: {
   request: Request;
   download: boolean;
 }) {
+  if (isPrivateObjectPath(options.storedPath)) {
+    assertOwnedObjectPath(options.storedPath);
+    const signed = await createOwnedSignedUrl(options.storedPath);
+    return Response.redirect(signed, 302);
+  }
   const safePath = await assertStoredMediaPath(options.storedPath);
   const info = await stat(safePath);
   const size = info.size;

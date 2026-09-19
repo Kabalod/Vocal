@@ -1,4 +1,4 @@
--- Vocal author row, isolated by auth.uid(). Applied on project zfbiyyhedhqdgrxxajrj.
+-- Vocal login row (auth.users.id). Not CreatorProfile / AI portrait.
 
 create schema if not exists private;
 

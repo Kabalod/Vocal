@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { ReelError, listReelCalendarFacets } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
 import { parseReelStatusInput, type ReelListQuery } from "@/types/reel";
@@ -20,6 +21,7 @@ function errorResponse(error: unknown) {
  * without loading list cards. Date field default is createdAt (P01.1).
  */
 export async function GET(request: Request) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const url = new URL(request.url);
     const month = url.searchParams.get("month");

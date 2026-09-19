@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { portraitProfileId } from "@/lib/auth/session";
 import { buildPortrait, parseStoredPayload, type StoredProfilePayload } from "@/lib/profile-portrait";
 import {
-  LOCAL_PROFILE_ID,
   PROFILE_FIELD_IDS,
   PROFILE_FIELD_LABELS,
   PROFILE_FIELD_MAX,
@@ -76,9 +76,10 @@ function toRevisionDto(id: string, createdAt: Date, payloadJson: string): Profil
 }
 
 export async function ensureLocalProfile() {
-  const existing = await prisma.creatorProfile.findUnique({ where: { id: LOCAL_PROFILE_ID } });
+  const id = portraitProfileId();
+  const existing = await prisma.creatorProfile.findUnique({ where: { id } });
   if (existing) return existing;
-  return prisma.creatorProfile.create({ data: { id: LOCAL_PROFILE_ID } });
+  return prisma.creatorProfile.create({ data: { id, ownerUserId: id } });
 }
 
 export async function getProfile(): Promise<ProfileDto> {
@@ -100,7 +101,9 @@ export async function getProfile(): Promise<ProfileDto> {
 
 export async function getProfileRevision(id: string | null | undefined): Promise<ProfileRevisionDto | null> {
   if (!id) return null;
-  const row = await prisma.profileRevision.findUnique({ where: { id } });
+  const row = await prisma.profileRevision.findFirst({
+    where: { id, profileId: portraitProfileId() },
+  });
   if (!row) return null;
   return toRevisionDto(row.id, row.createdAt, row.payloadJson);
 }
@@ -139,7 +142,7 @@ export function serializeStoredPayload(input: StoredProfilePayload): string {
 export async function readStoredProfilePayloadTx(
   tx: Prisma.TransactionClient,
 ): Promise<{ stored: StoredProfilePayload; revisionId: string | null }> {
-  const profile = await tx.creatorProfile.findUnique({ where: { id: LOCAL_PROFILE_ID } });
+  const profile = await tx.creatorProfile.findUnique({ where: { id: portraitProfileId() } });
   if (!profile?.currentRevisionId) {
     return { stored: emptyStoredPayload(), revisionId: null };
   }
@@ -162,12 +165,12 @@ export async function persistProfilePayloadTx(
 ): Promise<string> {
   const revision = await tx.profileRevision.create({
     data: {
-      profileId: LOCAL_PROFILE_ID,
+      profileId: portraitProfileId(),
       payloadJson: serializeStoredPayload(input),
     },
   });
   await tx.creatorProfile.update({
-    where: { id: LOCAL_PROFILE_ID },
+    where: { id: portraitProfileId() },
     data: { currentRevisionId: revision.id },
   });
   return revision.id;

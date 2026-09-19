@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { toJobDto } from "@/lib/serialize";
 import { thoughtProcessingPhase } from "@/lib/thought-media";
 
@@ -7,9 +9,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   const { id } = await context.params;
-  const reel = await prisma.reel.findUnique({
-    where: { id },
+  const reel = await prisma.reel.findFirst({
+    where: { id, ownerUserId: ownerUserId() },
     select: {
       id: true,
       title: true,
@@ -39,7 +42,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     await recoverJobIfStale(jobId);
   }
   const jobRow = jobId
-    ? await prisma.job.findUnique({ where: { id: jobId } })
+    ? await prisma.job.findFirst({ where: { id: jobId, ownerUserId: ownerUserId() } })
     : null;
   const job = jobRow ? toJobDto(jobRow) : null;
   const phase = thoughtProcessingPhase(job);

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
 import { extractAudio } from "@/lib/ffmpeg";
 import { transcribeAudio } from "@/lib/stt";
@@ -87,7 +88,10 @@ function asDto(row: {
 }
 
 export async function ensureReelThread(reelId: string) {
-  const reel = await prisma.reel.findUnique({ where: { id: reelId }, select: { id: true } });
+  const reel = await prisma.reel.findFirst({
+    where: { id: reelId, ownerUserId: ownerUserId() },
+    select: { id: true },
+  });
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
   const existing = await prisma.dialogueThread.findUnique({ where: { reelId } });
   if (existing) return existing;
@@ -206,8 +210,8 @@ export async function listDialoguePage(
 }
 
 export async function buildThoughtMaterialContext(reelId: string): Promise<string> {
-  const reel = await prisma.reel.findUnique({
-    where: { id: reelId },
+  const reel = await prisma.reel.findFirst({
+    where: { id: reelId, ownerUserId: ownerUserId() },
     include: {
       takes: { orderBy: { number: "asc" }, take: 2 },
       scripts: { orderBy: { createdAt: "desc" }, take: 4 },
@@ -309,6 +313,7 @@ JSON: {"reply":"","scriptProposal":null}`;
         reelId,
         model: LLM_MODEL,
         status: "running",
+        ownerUserId: ownerUserId(),
         promptText: userPrompt,
         inputSnapshotJson: JSON.stringify({ text, playbook: false }),
       },

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { ReelError } from "@/lib/reels";
 import { diffTexts, type TextDiffDto } from "@/lib/text-diff";
 import { COMPARE_INTENT_MAX, type CompareDto, type SemanticCompareResult } from "@/types/compare";
@@ -82,7 +83,9 @@ export async function resolveCompareSides(
     rightTranscriptId?: string | null;
   },
 ) {
-  const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+  const reel = await prisma.reel.findFirst({
+    where: { id: reelId, ownerUserId: ownerUserId() },
+  });
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
   if (input.leftTakeId === input.rightTakeId) {
     throw new CompareError("Выберите два разных дубля одной карточки.", "SAME_TAKE");
@@ -125,7 +128,9 @@ export async function previewTextDiff(
 }
 
 export async function listComparisons(reelId: string): Promise<CompareDto[]> {
-  const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+  const reel = await prisma.reel.findFirst({
+    where: { id: reelId, ownerUserId: ownerUserId() },
+  });
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
   const rows = await prisma.compareResult.findMany({
     where: { reelId },

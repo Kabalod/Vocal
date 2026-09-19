@@ -37,6 +37,7 @@ import {
 import { toReelDto, toReelListItemDto } from "@/lib/serialize";
 import { thoughtCompletionGate } from "@/lib/thought-completion";
 import { enqueueByKey } from "@/lib/write-queue";
+import { ownerUserId } from "@/lib/auth/session";
 import { isHeadKind } from "@/types/script";
 
 const reelInclude = {
@@ -84,6 +85,7 @@ export async function createReel(input: CreateReelInput): Promise<ReelDto> {
       title,
       initialNote,
       status: "idea",
+      ownerUserId: ownerUserId(),
     },
     include: reelInclude,
   });
@@ -91,7 +93,10 @@ export async function createReel(input: CreateReelInput): Promise<ReelDto> {
 }
 
 export async function getReel(id: string): Promise<ReelDto | null> {
-  const row = await prisma.reel.findUnique({ where: { id }, include: reelInclude });
+  const row = await prisma.reel.findFirst({
+    where: { id, ownerUserId: ownerUserId() },
+    include: reelInclude,
+  });
   return row ? asReelDto(row) : null;
 }
 
@@ -194,7 +199,10 @@ export async function listReels(query: ReelListQuery = {}): Promise<ReelListResu
       dateField,
     });
 
-    const baseFilters: Prisma.ReelWhereInput[] = [reelListStatusWhere(status)];
+    const baseFilters: Prisma.ReelWhereInput[] = [
+      { ownerUserId: ownerUserId() },
+      reelListStatusWhere(status),
+    ];
     if (q) baseFilters.push(reelListSearchWhere(q));
     if (range) baseFilters.push(reelListDateWhere(range));
 
@@ -229,7 +237,7 @@ export async function listReels(query: ReelListQuery = {}): Promise<ReelListResu
           _count: { select: { takes: true, scripts: true } },
         },
       }),
-      prisma.reel.count({ where: { NOT: { status: "archived" } } }),
+      prisma.reel.count({ where: { ownerUserId: ownerUserId(), NOT: { status: "archived" } } }),
       prisma.reel.count({ where: { AND: baseFilters } }),
     ]);
 
@@ -285,7 +293,10 @@ export async function listReelCalendarFacets(input: {
       ? monthRangeInTimeZone(input.month, timeZone)
       : monthRangeForOffset(input.month, input.tzOffsetMinutes ?? 0);
 
-    const baseFilters: Prisma.ReelWhereInput[] = [reelListStatusWhere(status)];
+    const baseFilters: Prisma.ReelWhereInput[] = [
+      { ownerUserId: ownerUserId() },
+      reelListStatusWhere(status),
+    ];
     if (q) baseFilters.push(reelListSearchWhere(q));
 
     const monthFilters = [
@@ -374,7 +385,7 @@ export async function updateReel(id: string, input: UpdateReelInput): Promise<Re
 }
 
 async function applyReelUpdate(id: string, input: UpdateReelInput): Promise<ReelDto> {
-  const current = await prisma.reel.findUnique({ where: { id } });
+  const current = await prisma.reel.findFirst({ where: { id, ownerUserId: ownerUserId() } });
   if (!current) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
 
   const nextFinalTake = input.finalTakeId !== undefined ? input.finalTakeId : current.finalTakeId;
@@ -512,7 +523,7 @@ async function applyReelUpdate(id: string, input: UpdateReelInput): Promise<Reel
     return tx.reel.updateMany({ where, data });
   });
   if (updated.count !== 1) {
-    const exists = await prisma.reel.findUnique({ where: { id } });
+    const exists = await prisma.reel.findFirst({ where: { id, ownerUserId: ownerUserId() } });
     if (!exists) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
     if (takeOnlyPatch && exists.finalTakeId === (input.finalTakeId ?? null)) {
       return loadReelDto(id);
@@ -540,7 +551,7 @@ async function applyReelUpdate(id: string, input: UpdateReelInput): Promise<Reel
 }
 
 async function loadReelDto(id: string): Promise<ReelDto> {
-  const row = await prisma.reel.findUnique({ where: { id }, include: reelInclude });
+    const row = await prisma.reel.findFirst({ where: { id, ownerUserId: ownerUserId() }, include: reelInclude });
   if (!row) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
   return asReelDto(row);
 }
@@ -582,7 +593,7 @@ export async function createTake(reelId: string, input: CreateTakeInput): Promis
     if (!script) throw new ReelError("Версия сценария не найдена в этой карточке.", "SCRIPT_NOT_IN_REEL");
   }
 
-  const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+  const reel = await prisma.reel.findFirst({ where: { id: reelId, ownerUserId: ownerUserId() } });
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
 
   for (let attempt = 0; attempt < 12; attempt++) {

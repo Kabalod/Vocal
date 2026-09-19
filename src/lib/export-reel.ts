@@ -1,5 +1,6 @@
 import path from "node:path";
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { ReelError } from "@/lib/reels";
 import { getReel } from "@/lib/reels";
 import { listReelQuestions } from "@/lib/ai/questions";
@@ -91,7 +92,7 @@ export async function exportReel(
 ): Promise<ReelExportDto> {
   const reel = await getReel(reelId);
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
-  const row = await prisma.reel.findUnique({ where: { id: reelId } });
+  const row = await prisma.reel.findFirst({ where: { id: reelId, ownerUserId: ownerUserId() } });
   if (!row) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
 
   const takes = await prisma.take.findMany({
@@ -210,7 +211,7 @@ export async function exportCanonicalTxt(
 ): Promise<{ filename: string; text: string; scriptId: string }> {
   const reel = await getReel(reelId);
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
-  const row = await prisma.reel.findUnique({ where: { id: reelId } });
+  const row = await prisma.reel.findFirst({ where: { id: reelId, ownerUserId: ownerUserId() } });
   if (!row) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
   const scripts = await listScriptBundle(reelId);
   const scriptId = resolveCanonicalExportScriptId({

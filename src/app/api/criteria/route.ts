@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { z } from "zod";
 import { ensureCriteria, prisma, resetCriteria } from "@/lib/db";
 import { toCriterionDto } from "@/lib/serialize";
@@ -6,6 +7,7 @@ import { toCriterionDto } from "@/lib/serialize";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   await ensureCriteria();
   const rows = await prisma.criterion.findMany({
     orderBy: [{ categoryOrder: "asc" }, { sortOrder: "asc" }],
@@ -24,6 +26,7 @@ const patchSchema = z.object({
 });
 
 export async function PUT(request: Request) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   await ensureCriteria();
   let body: z.infer<typeof patchSchema>;
   try {
@@ -55,6 +58,7 @@ export async function PUT(request: Request) {
 }
 
 export async function POST() {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   await resetCriteria();
   const rows = await prisma.criterion.findMany({
     orderBy: [{ categoryOrder: "asc" }, { sortOrder: "asc" }],

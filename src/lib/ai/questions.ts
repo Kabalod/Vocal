@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
 import { freezeReelContext } from "@/lib/reel-context";
 import { ReelError } from "@/lib/reels";
@@ -51,7 +52,9 @@ function toQuestionDto(row: {
 }
 
 export async function listReelQuestions(reelId: string): Promise<QuestionDto[]> {
-  const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+  const reel = await prisma.reel.findFirst({
+    where: { id: reelId, ownerUserId: ownerUserId() },
+  });
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
   const rows = await prisma.question.findMany({
     where: { reelId },
@@ -65,8 +68,8 @@ export async function updateQuestion(
   questionId: string,
   input: { text?: string; status?: string },
 ): Promise<QuestionDto> {
-  const question = await prisma.question.findUnique({
-    where: { id: questionId },
+  const question = await prisma.question.findFirst({
+    where: { id: questionId, reel: { ownerUserId: ownerUserId() } },
     include: { answers: { orderBy: { createdAt: "asc" } } },
   });
   if (!question) throw new ReelError("Вопрос не найден.", "QUESTION_NOT_FOUND", 404);
@@ -127,14 +130,18 @@ export async function continueQuestions(
   input: { takeId?: string | null } = {},
   complete: CompleteJsonFn = defaultCompleteJson,
 ): Promise<QuestionDto[]> {
-  const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+  const reel = await prisma.reel.findFirst({
+    where: { id: reelId, ownerUserId: ownerUserId() },
+  });
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
 
   const takeId = input.takeId ?? reel.selectedTakeId ?? null;
   let transcript = "";
   const takeForCall = takeId;
   if (takeId) {
-    const take = await prisma.take.findUnique({ where: { id: takeId } });
+    const take = await prisma.take.findFirst({
+      where: { id: takeId, reelId, reel: { ownerUserId: ownerUserId() } },
+    });
     if (!take || take.reelId !== reelId) {
       throw new ReviewError("Дубль должен принадлежать этой карточке.", "TAKE_NOT_IN_REEL");
     }
@@ -173,6 +180,7 @@ JSON: {"questions":[],"note":""}`;
       takeId: takeForCall,
       model: LLM_MODEL,
       status: "running",
+      ownerUserId: ownerUserId(),
       promptText: userPrompt,
       inputSnapshotJson: JSON.stringify(inputSnapshot),
     },

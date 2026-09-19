@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { mediaFileResponse } from "@/lib/take-media";
 import { resolveTakeFilePath } from "@/lib/takes";
 
@@ -6,6 +7,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   const { id } = await context.params;
   const file = await resolveTakeFilePath(id);
   if (!file) {

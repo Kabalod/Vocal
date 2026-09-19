@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CONVERSATIONAL_GROWTH_PLAYBOOK } from "@/lib/playbook";
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { uniqueNewQuestions } from "@/lib/question-text";
 import { annotateQuotes } from "@/lib/evidence";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
@@ -110,7 +111,9 @@ function toReviewDto(row: {
 const reviewInclude = { aiCall: { select: { model: true, promptTokens: true, completionTokens: true } } } as const;
 
 export async function listTakeReviews(takeId: string): Promise<ReviewDto[]> {
-  const take = await prisma.take.findUnique({ where: { id: takeId } });
+  const take = await prisma.take.findFirst({
+    where: { id: takeId, reel: { ownerUserId: ownerUserId() } },
+  });
   if (!take) throw new ReelError("Дубль не найден.", "TAKE_NOT_FOUND", 404);
   const rows = await prisma.review.findMany({
     where: { takeId },
@@ -125,7 +128,9 @@ export async function createTakeReview(
   input: { previousReviewId?: string | null } = {},
   complete: CompleteJsonFn = defaultCompleteJson,
 ): Promise<ReviewDto> {
-  const take = await prisma.take.findUnique({ where: { id: takeId } });
+  const take = await prisma.take.findFirst({
+    where: { id: takeId, reel: { ownerUserId: ownerUserId() } },
+  });
   if (!take) throw new ReelError("Дубль не найден.", "TAKE_NOT_FOUND", 404);
 
   const bundle = await listTranscriptBundle(takeId);
@@ -204,6 +209,7 @@ JSON:
       reviewId: review.id,
       model: LLM_MODEL,
       status: "running",
+      ownerUserId: ownerUserId(),
       promptText: userPrompt,
       inputSnapshotJson: JSON.stringify(inputSnapshot),
     },

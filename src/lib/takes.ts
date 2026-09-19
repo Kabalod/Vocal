@@ -1,6 +1,7 @@
 import { unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { ReelError, createTake, getReel } from "@/lib/reels";
 import { assertScriptOnReel, ScriptError } from "@/lib/scripts";
 import { toTakeDto } from "@/lib/serialize";
@@ -28,7 +29,10 @@ const takeInclude = {
 } as const;
 
 export async function getTakeDto(id: string): Promise<TakeDto | null> {
-  const row = await prisma.take.findUnique({ where: { id }, include: takeInclude });
+  const row = await prisma.take.findFirst({
+    where: { id, reel: { ownerUserId: ownerUserId() } },
+    include: takeInclude,
+  });
   return row ? toTakeDto(row) : null;
 }
 
@@ -39,7 +43,9 @@ export async function listTakeDtos(reelId: string): Promise<TakeDto[]> {
 }
 
 export async function updateTake(id: string, input: UpdateTakeInput): Promise<TakeDto> {
-  const existing = await prisma.take.findUnique({ where: { id } });
+  const existing = await prisma.take.findFirst({
+    where: { id, reel: { ownerUserId: ownerUserId() } },
+  });
   if (!existing) throw new ReelError("Дубль не найден.", "TAKE_NOT_FOUND", 404);
 
   const data: { authorNote?: string; bodyText?: string; scriptVersionId?: string | null } = {};
@@ -103,8 +109,8 @@ export async function resolveTakeFilePath(takeId: string): Promise<{
   originalName: string | null;
   mimeType: string | null;
 } | null> {
-  const take = await prisma.take.findUnique({
-    where: { id: takeId },
+  const take = await prisma.take.findFirst({
+    where: { id: takeId, reel: { ownerUserId: ownerUserId() } },
     include: { jobs: { orderBy: { createdAt: "asc" } } },
   });
   if (!take) return null;

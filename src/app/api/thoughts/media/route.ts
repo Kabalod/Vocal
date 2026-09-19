@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { ReelError } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
 import { createThoughtFromMedia } from "@/lib/thought-media";
@@ -16,6 +17,7 @@ function errorResponse(error: unknown) {
 }
 
 export async function POST(request: Request) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const form = await request.formData();
     const file = form.get("file");

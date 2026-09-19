@@ -1,5 +1,6 @@
 import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { AiBudgetError } from "@/lib/ai/usage-guard";
 import { DialogueError, listDialoguePage, sendDialogueMessage, sendDialogueVoice } from "@/lib/dialogue";
 import { ReelError } from "@/lib/reels";
@@ -16,6 +17,7 @@ function errorResponse(error: unknown) {
 }
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     const cursor = new URL(request.url).searchParams.get("cursor");
@@ -27,6 +29,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 }
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     const contentType = request.headers.get("content-type") ?? "";

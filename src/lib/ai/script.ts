@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { freezeReelContext } from "@/lib/reel-context";
 import {
   insertProposalVersion,
@@ -29,7 +30,9 @@ export async function generateScriptProposal(
   input: { sources?: unknown } = {},
   complete: CompleteJsonFn = defaultCompleteJson,
 ): Promise<{ bundle: ScriptBundleDto; proposalId: string }> {
-  const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+  const reel = await prisma.reel.findFirst({
+    where: { id: reelId, ownerUserId: ownerUserId() },
+  });
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
 
   const sources: ScriptSourceRef[] = parseSourceRefs(input.sources);
@@ -68,6 +71,7 @@ JSON:
       reelId,
       model: LLM_MODEL,
       status: "running",
+      ownerUserId: ownerUserId(),
       promptText: userPrompt,
       inputSnapshotJson: JSON.stringify(inputSnapshot),
     },

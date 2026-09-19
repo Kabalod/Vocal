@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { DEFAULT_THOUGHT_TITLE } from "@/lib/thought-create";
 import { REEL_TITLE_MAX } from "@/types/reel";
 import type { CompleteJsonFn } from "@/types/review";
@@ -28,7 +29,10 @@ export async function applyThoughtTitleFromTranscript(
   complete: CompleteJsonFn = defaultCompleteJson,
 ): Promise<string> {
   const fallback = fallbackThoughtTitle(transcript);
-  const reel = await prisma.reel.findUnique({ where: { id: reelId }, select: { title: true } });
+  const reel = await prisma.reel.findFirst({
+    where: { id: reelId, ownerUserId: ownerUserId() },
+    select: { title: true },
+  });
   if (!reel) return fallback;
   if (reel.title.trim() && reel.title !== DEFAULT_THOUGHT_TITLE) return reel.title;
 
@@ -40,6 +44,7 @@ export async function applyThoughtTitleFromTranscript(
       reelId,
       model: LLM_MODEL,
       status: "running",
+      ownerUserId: ownerUserId(),
       promptText: userPrompt,
       inputSnapshotJson: JSON.stringify(inputSnapshot),
     },

@@ -1,5 +1,6 @@
 import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { generateScriptProposal } from "@/lib/ai/script";
 import { ReelError } from "@/lib/reels";
 import { ScriptError } from "@/lib/scripts";
@@ -16,6 +17,7 @@ function errorResponse(error: unknown) {
 }
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     let sources: unknown = [];

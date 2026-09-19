@@ -1,8 +1,10 @@
 import { after, NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { writeFile } from "fs/promises";
 import path from "path";
 import { ALLOWED_EXTENSIONS, MAX_UPLOAD_MB } from "@/lib/config";
 import { ensureCriteria, prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 import { enqueueJob } from "@/lib/pipeline";
 import { ReelError, createReel, createTake } from "@/lib/reels";
 import { toJobDto } from "@/lib/serialize";
@@ -16,6 +18,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     await ensureStorageDirs();
     const form = await request.formData();
@@ -72,6 +75,7 @@ export async function POST(request: Request) {
         originalName: file.name,
         videoPath: "pending",
         status: "queued",
+        ownerUserId: ownerUserId(),
       },
     });
 

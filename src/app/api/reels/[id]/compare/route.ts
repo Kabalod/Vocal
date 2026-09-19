@@ -1,5 +1,6 @@
 import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
+import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
 import { createReelComparison } from "@/lib/ai/compare";
 import { CompareError, listComparisons, previewTextDiff } from "@/lib/compare";
 import { ReelError } from "@/lib/reels";
@@ -16,6 +17,7 @@ function errorResponse(error: unknown) {
 }
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     const url = new URL(request.url);
@@ -38,6 +40,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 }
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     const body = (await request.json()) as Record<string, unknown>;

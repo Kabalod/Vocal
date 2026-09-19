@@ -1,4 +1,5 @@
 import { ProfileConversation } from "@/components/ProfileConversation";
+import { LogoutButton } from "@/components/LogoutButton";
 import { Panel } from "@/components/vocal-ui/Panel";
 
 export default function ProfilePage() {
@@ -8,6 +9,7 @@ export default function ProfilePage() {
       <Panel className="min-w-0 overflow-x-hidden border-0 bg-transparent p-0">
         <ProfileConversation />
       </Panel>
+      <LogoutButton />
     </div>
   );
 }
