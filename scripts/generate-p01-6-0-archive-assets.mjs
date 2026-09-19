@@ -4,9 +4,13 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const sourceCardsDir = join(root, "scripts", "p01-6-0-assets", "cards");
+const sourceDeskDir = join(root, "scripts", "p01-6-0-assets", "desk");
 const cardsDir = join(root, "public", "archive", "cards");
 const deskDir = join(root, "public", "archive", "desk");
 
+mkdirSync(sourceCardsDir, { recursive: true });
+mkdirSync(sourceDeskDir, { recursive: true });
 mkdirSync(cardsDir, { recursive: true });
 mkdirSync(deskDir, { recursive: true });
 
@@ -157,9 +161,9 @@ const deskSvg = `<?xml version="1.0" encoding="UTF-8"?>
 `;
 
 for (const card of cards) {
-  writeFileSync(join(cardsDir, `${card.id}.svg`), cardSvg(card));
+  writeFileSync(join(sourceCardsDir, `${card.id}.svg`), cardSvg(card));
 }
-writeFileSync(join(deskDir, "desk.svg"), deskSvg);
+writeFileSync(join(sourceDeskDir, "desk.svg"), deskSvg);
 
 function findBinary(names) {
   for (const name of names) {
@@ -173,11 +177,11 @@ const ffmpeg = findBinary(["ffmpeg", "ffmpeg.exe"]);
 if (ffmpeg) {
   const jobs = [
     ...cards.map((card) => ({
-      in: join(cardsDir, `${card.id}.svg`),
+      in: join(sourceCardsDir, `${card.id}.svg`),
       out: join(cardsDir, `${card.id}.webp`),
       size: "768:1024",
     })),
-    { in: join(deskDir, "desk.svg"), out: join(deskDir, "desk.webp"), size: "1920:1200" },
+    { in: join(sourceDeskDir, "desk.svg"), out: join(deskDir, "desk.webp"), size: "1920:1200" },
   ];
   for (const job of jobs) {
     const result = spawnSync(

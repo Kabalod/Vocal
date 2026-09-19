@@ -4,14 +4,12 @@ export const ARCHIVE_CARD_ASSETS = Array.from({ length: ARCHIVE_CARD_ASSET_COUNT
   const id = String(index + 1).padStart(2, "0");
   return {
     id,
-    webp: `/archive/cards/${id}.webp`,
-    fallback: `/archive/cards/${id}.svg`,
+    src: `/archive/cards/${id}.webp`,
   } as const;
 });
 
 export const ARCHIVE_DESK_BG = {
-  webp: "/archive/desk/desk.webp",
-  fallback: "/archive/desk/desk.svg",
+  src: "/archive/desk/desk.webp",
 } as const;
 
 export function archiveCardAssetIndex(reelId: string): number {
@@ -28,10 +26,9 @@ export function archiveCardAsset(reelId: string) {
 }
 
 export function archiveCardBackgroundImage(reelId: string) {
-  const asset = archiveCardAsset(reelId);
-  return `url("${asset.webp}"), url("${asset.fallback}")`;
+  return `url("${archiveCardAsset(reelId).src}")`;
 }
 
 export function archiveDeskBackgroundImage() {
-  return `url("${ARCHIVE_DESK_BG.webp}"), url("${ARCHIVE_DESK_BG.fallback}")`;
+  return `url("${ARCHIVE_DESK_BG.src}")`;
 }

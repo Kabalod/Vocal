@@ -258,7 +258,7 @@ a[aria-disabled="true"] {
 }
 
 .archive-desk-surface {
-  --archive-desk-image: url("/archive/desk/desk.webp"), url("/archive/desk/desk.svg");
+  --archive-desk-image: url("/archive/desk/desk.webp");
 }
 
 @media (min-width: 1200px) {
