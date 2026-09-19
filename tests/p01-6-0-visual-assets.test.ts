@@ -41,8 +41,24 @@ test("P01.6-0 ships 8-12 local WebP assets as the runtime source of truth", () =
   assert.ok(statSync(publicPath(ARCHIVE_DESK_BG.src)).size > 8_000);
 
   const publicArchive = join(root, "public", "archive");
-  const publicFiles = readdirSync(publicArchive, { recursive: true }).map(String);
-  assert.equal(publicFiles.some((file) => file.endsWith(".svg") || file.endsWith(".jpg")), false);
+  const publicFiles = readdirSync(publicArchive, { recursive: true })
+    .map(String)
+    .map((file) => file.replaceAll("\\", "/"))
+    .filter((file) => file.includes("."))
+    .sort();
+  assert.deepEqual(publicFiles, [
+    "cards/01.webp",
+    "cards/02.webp",
+    "cards/03.webp",
+    "cards/04.webp",
+    "cards/05.webp",
+    "cards/06.webp",
+    "cards/07.webp",
+    "cards/08.webp",
+    "cards/09.webp",
+    "cards/10.webp",
+    "desk/desk.webp",
+  ]);
   assert.equal(existsSync(join(root, "scripts", "p01-6-0-assets")), false);
   assert.equal(existsSync(join(root, "scripts", "generate-p01-6-0-archive-assets.mjs")), false);
   assert.equal(existsSync(join(root, "scripts", "generate-p01-6-0-raster.py")), false);
