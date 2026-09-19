@@ -22,6 +22,14 @@ function IconRecordings() {
   );
 }
 
+function IconMenu() {
+  return (
+    <svg aria-hidden className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.6">
+      <path d="M5 7h14M5 12h14M5 17h14" />
+    </svg>
+  );
+}
+
 function IconProfile() {
   return (
     <svg aria-hidden className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.6">
@@ -77,6 +85,7 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
   const archiveDesktop = pathname === "/reels";
   const [dateHost, setDateHost] = useState<HTMLElement | null>(null);
   const [statusHost, setStatusHost] = useState<HTMLElement | null>(null);
+  const [sheetStatusHost, setSheetStatusHost] = useState<HTMLElement | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -136,7 +145,7 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
   }, [sheetOpen]);
 
   return (
-    <ArchiveDesktopHostProvider value={{ dateHost, statusHost }}>
+    <ArchiveDesktopHostProvider value={{ dateHost, statusHost, sheetStatusHost }}>
     <div className="flex min-h-screen max-w-full overflow-x-hidden bg-bg text-text">
       <aside
         data-shell-collapsed={collapsed ? "true" : "false"}
@@ -174,17 +183,23 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className={`flex min-w-0 flex-1 flex-col ${archiveDesktop ? "shell:h-screen shell:overflow-y-auto" : ""}`}>
+      <div
+        data-archive-work={archiveDesktop ? "true" : undefined}
+        className={`flex min-w-0 flex-1 flex-col ${
+          archiveDesktop ? "archive-workspace-desk shell:h-screen shell:overflow-y-auto" : ""
+        }`}
+      >
         <header className={`flex min-h-11 items-center gap-3 border-b border-line px-4 py-3 shell:px-6 ${archiveDesktop ? "shell:hidden" : ""}`}>
           <button
             ref={menuButtonRef}
             type="button"
             className="vocal-btn min-h-11 shell:!hidden"
+            aria-label="Открыть меню"
             onClick={() => setSheetOpen(true)}
             aria-expanded={sheetOpen}
             aria-controls="vocal-mobile-sheet"
           >
-            Меню
+            <IconMenu />
           </button>
           {back ? (
             <Link
@@ -199,7 +214,9 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
         </header>
 
         <main
-          className={`mx-auto min-w-0 w-full flex-1 px-4 py-6 pb-24 shell:px-6 shell:pb-16 ${
+          className={`mx-auto min-w-0 w-full flex-1 ${
+            archiveDesktop ? "px-0 py-0" : "px-4 py-6 pb-24 shell:px-6 shell:pb-16"
+          } ${
             pathname === "/reels" ? "max-w-none" : pathname.startsWith("/reels/") ? "max-w-6xl" : "max-w-5xl"
           }`}
         >
@@ -252,7 +269,7 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
                 Закрыть
               </button>
             </div>
-            <nav className="flex-1 space-y-1 px-2" aria-label="Разделы">
+            <nav className="space-y-1 px-2" aria-label="Разделы">
               <NavItem
                 href={RECORDINGS_NAV.href}
                 label={RECORDINGS_NAV.label}
@@ -266,6 +283,7 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
                 onNavigate={closeSheet}
               />
             </nav>
+            <div ref={setSheetStatusHost} className="empty:hidden px-2 pb-4" />
             <p className="px-4 py-3 text-sm text-muted">Дубли, сценарий и вопросы — внутри записи.</p>
           </div>
         </div>
