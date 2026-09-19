@@ -179,3 +179,70 @@ test("P01.6-1 list order and old sort query stay safe", async (t) => {
     ["r-b", "r-a", "r-c"],
   );
 });
+
+test("P01.6-1 cursor pages with limit=2 keep newest/oldest complete and unique", async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vocal-p01-6-1-cursor-"));
+  const dbPath = path.join(dir, "test.db");
+  closeSync(openSync(dbPath, "a"));
+  const url = fileUrl(dbPath);
+  process.env.DATABASE_URL = url;
+  await resetPrismaClient();
+  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* windows */
+    }
+  });
+  migrateDeploy(url);
+
+  const { GET: listGet } = await import("../src/app/api/reels/route");
+  const same = new Date("2026-09-18T12:00:00.000Z");
+  for (const id of ["r-a", "r-b", "r-c", "r-d", "r-e"]) {
+    await prisma.reel.create({
+      data: {
+        id,
+        title: id,
+        status: "idea",
+        createdAt: same,
+        updatedAt: same,
+      },
+    });
+  }
+
+  async function collectPages(sort: "newest" | "oldest") {
+    const ids: string[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 8; page += 1) {
+      const params = new URLSearchParams({ status: "all", sort, limit: "2" });
+      if (cursor) params.set("cursor", cursor);
+      const res = await listGet(new Request(`http://vocal.local/api/reels?${params}`));
+      assert.equal(res.status, 200, `${sort} page ${page} status`);
+      const body = (await res.json()) as {
+        reels: Array<{ id: string }>;
+        hasMore: boolean;
+        nextCursor: string | null;
+      };
+      ids.push(...body.reels.map((row) => row.id));
+      if (!body.hasMore) {
+        assert.equal(body.nextCursor, null);
+        return ids;
+      }
+      assert.equal(body.reels.length, 2);
+      assert.ok(body.nextCursor);
+      cursor = body.nextCursor;
+    }
+    throw new Error(`${sort} pagination did not finish`);
+  }
+
+  const newestIds = await collectPages("newest");
+  const oldestIds = await collectPages("oldest");
+  assert.deepEqual(newestIds, ["r-e", "r-d", "r-c", "r-b", "r-a"]);
+  assert.deepEqual(oldestIds, ["r-a", "r-b", "r-c", "r-d", "r-e"]);
+  assert.equal(new Set(newestIds).size, 5);
+  assert.equal(new Set(oldestIds).size, 5);
+  assert.deepEqual([...newestIds].reverse(), oldestIds);
+});
