@@ -44,6 +44,7 @@ import {
 } from "@/lib/thought-archive-state";
 import {
   archiveDeskSlot,
+  archiveDeskSpreadKind,
   chunkArchiveDeskSpreads,
 } from "@/lib/archive-desk-layout";
 import {
@@ -537,8 +538,9 @@ export function ReelList() {
                   {chunkArchiveDeskSpreads(reels).map((spread, spreadIndex) => (
                     <ul
                       key={spread.map((reel) => reel.id).join("-")}
-                      className="archive-desk-spread list-none p-0"
+                      className={`archive-desk-spread archive-desk-spread-${archiveDeskSpreadKind(spread.length)} list-none p-0`}
                       data-archive-spread={spreadIndex + 1}
+                      data-archive-spread-kind={archiveDeskSpreadKind(spread.length)}
                     >
                       {spread.map((reel, indexInSpread) => {
                         const slot = archiveDeskSlot(indexInSpread);

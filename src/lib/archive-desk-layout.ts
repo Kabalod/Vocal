@@ -12,3 +12,7 @@ export function chunkArchiveDeskSpreads<T>(items: readonly T[]): T[][] {
 export function archiveDeskSlot(indexInSpread: number): ArchiveDeskSlot {
   return ((indexInSpread % ARCHIVE_DESK_SPREAD_SIZE) + 1) as ArchiveDeskSlot;
 }
+
+export function archiveDeskSpreadKind(count: number): "single" | "full" {
+  return count > 0 && count <= 3 ? "single" : "full";
+}

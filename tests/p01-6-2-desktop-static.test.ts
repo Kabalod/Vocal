@@ -12,6 +12,7 @@ import {
 import {
   ARCHIVE_DESK_SPREAD_SIZE,
   archiveDeskSlot,
+  archiveDeskSpreadKind,
   chunkArchiveDeskSpreads,
 } from "../src/lib/archive-desk-layout";
 
@@ -56,19 +57,27 @@ test("P01.6-2 large desktop splits thoughts into deterministic six-card desk spr
   ]);
   assert.equal(archiveDeskSlot(0), 1);
   assert.equal(archiveDeskSlot(5), 6);
+  assert.equal(archiveDeskSpreadKind(1), "single");
+  assert.equal(archiveDeskSpreadKind(3), "single");
+  assert.equal(archiveDeskSpreadKind(4), "full");
   const list = readFileSync(join(root, "src/components/ReelList.tsx"), "utf8");
   const css = readFileSync(join(root, "src/app/globals.css"), "utf8");
   assert.match(list, /chunkArchiveDeskSpreads/);
   assert.match(list, /data-slot=\{slot\}/);
   assert.match(list, /archive-desk-spread/);
+  assert.match(list, /archive-desk-spread-\$\{archiveDeskSpreadKind/);
   assert.equal(list.includes("Math.random"), false);
   assert.equal(css.includes("Math.random"), false);
-  assert.match(css, /\.archive-desk-slot-1[\s\S]*--archive-slot-tilt:\s*-2deg/);
-  assert.match(css, /\.archive-desk-slot-2[\s\S]*--archive-slot-tilt:\s*1deg/);
-  assert.match(css, /\.archive-desk-slot-3[\s\S]*--archive-slot-tilt:\s*2deg/);
-  assert.match(css, /\.archive-desk-slot-4[\s\S]*--archive-slot-tilt:\s*-3deg/);
+  assert.match(css, /\.archive-desk-spread \{[\s\S]*aspect-ratio:\s*16 \/ 9/);
+  assert.match(css, /\.archive-desk-spread-single[\s\S]*aspect-ratio:\s*16 \/ 5/);
+  assert.match(css, /\.archive-desk-spread \.archive-polaroid-frame[\s\S]*aspect-ratio:\s*4 \/ 3/);
+  assert.match(css, /\.archive-polaroid-frame \{[\s\S]*aspect-ratio:\s*3 \/ 4/);
+  assert.match(css, /\.archive-desk-slot-1[\s\S]*--archive-slot-tilt:\s*-3deg/);
+  assert.match(css, /\.archive-desk-slot-2[\s\S]*--archive-slot-tilt:\s*2deg/);
+  assert.match(css, /\.archive-desk-slot-3[\s\S]*--archive-slot-tilt:\s*3deg/);
+  assert.match(css, /\.archive-desk-slot-4[\s\S]*--archive-slot-tilt:\s*-4deg/);
   assert.match(css, /\.archive-desk-slot-5[\s\S]*--archive-slot-tilt:\s*1deg/);
-  assert.match(css, /\.archive-desk-slot-6[\s\S]*--archive-slot-tilt:\s*2deg/);
+  assert.match(css, /\.archive-desk-slot-6[\s\S]*--archive-slot-tilt:\s*3deg/);
   assert.match(css, /\.archive-polaroid-grid-compact[\s\S]*repeat\(4/);
 });
 
