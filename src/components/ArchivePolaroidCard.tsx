@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties } from "react";
 import {
   IconStatusDone,
   IconStatusOpen,
@@ -22,14 +22,14 @@ const STATUS_LABELS = {
   completed: "Успешно завершена",
 } as const;
 
-function PolaroidStatus({ reel }: { reel: ReelListItemDto }) {
+function PolaroidStatus({ reel, size }: { reel: ReelListItemDto; size: "desktop" | "mobile" }) {
   const userStatus = thoughtUserStatus(reel.statusGroup);
   const StatusIcon = STATUS_ICONS[userStatus];
   const statusLabel = STATUS_LABELS[userStatus];
 
   return (
     <span className="archive-polaroid-status" role="img" aria-label={statusLabel}>
-      <StatusIcon aria-hidden />
+      <StatusIcon aria-hidden className={size === "desktop" ? "h-7 w-7 shrink-0" : "h-6 w-6 shrink-0"} />
     </span>
   );
 }
@@ -37,18 +37,18 @@ function PolaroidStatus({ reel }: { reel: ReelListItemDto }) {
 function PolaroidFace({
   reel,
   compact,
-  children,
 }: {
   reel: ReelListItemDto;
   compact?: boolean;
-  children?: ReactNode;
 }) {
   return (
     <div
       className={`archive-polaroid-frame ${compact ? "archive-polaroid-frame-mobile" : ""}`}
       style={{ "--archive-card-image": archiveCardBackgroundImage(reel.id) } as CSSProperties}
     >
-      {children}
+      <span className="archive-polaroid-info" aria-hidden="true">
+        <span className="archive-polaroid-info-mark">i</span>
+      </span>
       <p className="archive-polaroid-title">{reel.title}</p>
     </div>
   );
@@ -66,68 +66,37 @@ export function ArchivePolaroidCard({
   onLeaveToStudio?: () => void;
 }) {
   const dialogHref = studioThoughtHref(reel.id, "dialog");
-
-  if (variant === "mobile") {
-    return (
-      <article className="archive-polaroid archive-polaroid-mobile" data-archive-reel={reel.id}>
-        <PolaroidStatus reel={reel} />
-        <button
-          type="button"
-          className="archive-polaroid-preview"
-          aria-label={`Открыть превью мысли «${reel.title}»`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenPreview();
-          }}
-        >
-          <PolaroidFace reel={reel} compact />
-        </button>
-        <Link
-          href={dialogHref}
-          className="archive-polaroid-footer"
-          aria-label={`Открыть диалог мысли «${reel.title}»`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onLeaveToStudio?.();
-          }}
-        >
-          <span aria-hidden="true" className="text-lg leading-none text-[#1a1424]">
-            →
-          </span>
-        </Link>
-      </article>
-    );
-  }
+  const compact = variant === "mobile";
 
   return (
-    <article className="archive-polaroid" data-archive-reel={reel.id}>
+    <article
+      className={`archive-polaroid ${compact ? "archive-polaroid-mobile" : ""}`}
+      data-archive-reel={reel.id}
+    >
+      <PolaroidStatus reel={reel} size={compact ? "mobile" : "desktop"} />
       <button
         type="button"
-        className="archive-polaroid-info"
+        className="archive-polaroid-preview"
         aria-label={`Открыть превью мысли «${reel.title}»`}
         onClick={(event) => {
           event.stopPropagation();
           onOpenPreview();
         }}
       >
-        <span className="archive-polaroid-info-mark" aria-hidden="true">
-          i
-        </span>
+        <PolaroidFace reel={reel} compact={compact} />
       </button>
       <Link
         href={dialogHref}
-        className="block min-w-0 text-left outline-none"
-        onClick={() => onLeaveToStudio?.()}
+        className="archive-polaroid-footer"
+        aria-label={`Открыть диалог мысли «${reel.title}»`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onLeaveToStudio?.();
+        }}
       >
-        <PolaroidFace reel={reel}>
-          <PolaroidStatus reel={reel} />
-        </PolaroidFace>
-        <div className="archive-polaroid-footer">
-          <span aria-hidden="true" className="text-lg leading-none text-[#1a1424]">
-            →
-          </span>
-          <span className="sr-only">Открыть диалог мысли</span>
-        </div>
+        <span aria-hidden="true" className="archive-polaroid-footer-mark">
+          →
+        </span>
       </Link>
     </article>
   );
