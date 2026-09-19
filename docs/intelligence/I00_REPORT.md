@@ -23,6 +23,8 @@
 | Docs-cleanup (`AGENTS.md`, STAGE_*, champagne deletes, `Analyz/` untracked) | не аудировались как продукт интеллекта |
 | Canvas-файлы вне git | вспомогательные, не артефакт приёмки |
 
+Review-fix I00 (этот слой документов) дополняет аудит: второй Groq-путь uploads/pipeline/analyze, фактическое покрытие `AiCall`/лимит/retry, legacy `playbook.ts`, `healStoredPortrait`, дефект scoring-v1. Код приложения не менялся.
+
 В коммите I00 только эти шесть файлов:
 
 - `docs/VOCAL_INTELLIGENCE_CURSOR_PLAN.md`
@@ -72,27 +74,75 @@ I01 с пользовательской изоляцией **заблокиро�
 
 ## Вызовы модели сейчас
 
-Один транспорт: `src/lib/ai/complete.ts` → Groq `json_object`. STT — отдельный Groq Whisper в `src/lib/stt.ts` (не всегда как `AiCall`).
+Два независимых пути Groq, не один транспорт.
 
-| kind / путь | Триггер | Confirm? |
-|---|---|---|
-| `profile_dialogue` | POST `/api/profile/dialogue` | да: `confirmProfilePortrait`, UI «Подтвердить портрет» |
-| `dialogue` | POST `/api/thoughts/[id]/dialogue` | нет |
-| `dialogue-help` | POST `.../dialogue/help` | нет |
-| `script` | POST `.../scripts/generate` | принятие предложения сценария — да, это не память профиля |
-| `review` | POST `/api/takes/[id]/review` | явная кнопка |
-| `questions` | POST `.../questions` | явная |
-| `compare` | POST `.../compare` `runAi: true` | явная |
-| `thought_title` | создание мысли из медиа | внутри явного create |
-| STT | голос / дубль | внутри явной отправки |
+### Путь A — `complete.ts` + `AiCall`
 
-Просмотр списка, фильтры, `saveProfile` черновика, GET страниц — модели не вызывают.
+`src/lib/ai/complete.ts` → Groq chat `json_object` + `withRetry` (по умолчанию 4 попытки). Запись `AiCall` делают вызывающие модули.
 
-Лимит: `VOCAL_DAILY_TOKEN_LIMIT` + `assertDailyTokenBudget` по сумме токенов `AiCall.status=done` за день. Inflight-ключ `withAiInflight`. Retry сети: `withRetry` в Groq.
+| kind / путь | Триггер | `AiCall` | `assertDailyTokenBudget` / `withAiInflight` |
+|---|---|---|---|
+| `profile_dialogue` | POST `/api/profile/dialogue` | да | да (оба) |
+| `dialogue`, `dialogue-help` | POST `.../dialogue`, `.../dialogue/help` | да | да (`help` = тот же `sendDialogueMessage`) |
+| `script` | POST `.../scripts/generate` | да | **нет** |
+| `review` | POST `/api/takes/[id]/review` | да | **нет** |
+| `questions` | POST `.../questions` | да | **нет** |
+| `compare` | POST `.../compare` `runAi: true` **и** автосравнение из pipeline после 2+ дублей | да | **нет** |
+| `thought_title` | pipeline / create из медиа | да | **нет** |
 
-Снимки: `AiCall.inputSnapshotJson` есть, но **нет** версий памяти/ThoughtState/craft. `ReelContextSnapshot.assembledJson` — живой портрет на момент сборки, не полный operation graph.
+Confirm портрета: только `profile_dialogue` (`confirmProfilePortrait`). Принятие предложения сценария — не память профиля.
+
+Дневной лимит `VOCAL_DAILY_TOKEN_LIMIT` считает **только** `AiCall.status=done`. Пути без `AiCall` в сумму не входят. Даже среди `AiCall` budget/inflight стоят только на профильном и мыслительном диалоге.
+
+### Путь B — загрузка: `/api/uploads` → `pipeline.ts` → `analyze.ts`
+
+POST `/api/uploads` создаёт `Job` (или take+job) и `enqueueJob`. `src/lib/pipeline.ts` гоняет Job: ffmpeg → `stt.ts` (Groq Whisper, `withRetry` 5) → опционально `thought_title`/`compare` через путь A → `analyzeSpeech` в `src/lib/analyze.ts`.
+
+`analyze.ts` вызывает Groq chat **напрямую** (`completeJson` + `withRetry`), **не** через `complete.ts`. **Нет** строки `AiCall`, **нет** `assertDailyTokenBudget` / `withAiInflight`. Повтор Job — `attempts`/`maxAttempts` в `jobs.ts`, отдельно от Groq retry.
+
+STT в этом пайплайне и голосовой STT диалога — Whisper, не chat JSON. Учёт токенов Whisper в `AiCall` отсутствует.
+
+Просмотр списка, фильтры, `saveProfile` черновика **сами** модель не вызывают. **GET профиля вызывает `healStoredPortrait`** (запись в БД при чтении, без LLM; см. ниже).
+
+Снимки: `AiCall.inputSnapshotJson` есть у пути A, но **нет** версий памяти/ThoughtState/craft. Путь B пишет `AnalysisResult` / транскрипт Job, не operation graph. `ReelContextSnapshot.assembledJson` — живой портрет на момент сборки.
 
 Ownership: проверок пользователя нет; доступ по id сущности на localhost.
+
+## healStoredPortrait
+
+`getProfileWorkspace` (чтение профиля / диалога) вызывает `healStoredPortrait`. Если ни одно поле портрета не заполнено (`coveredProfileKeys` пуст), код **переигрывает все** `AiCall` `kind=profile_dialogue`, `status=done` и при изменении **пишет** новую `ProfileRevision`. Это восстановление с записью при GET, не отдельный пользовательский триггер и не LLM.
+
+Следствие: сброс/очистка полей при живых старых `AiCall` **сейчас может вернуть портрет**. Целевой контракт (I05/I07): сброс и удаление не восстанавливаются replay старых вызовов; нужен watermark/tombstone. Код сейчас не менять.
+
+## Legacy playbook vs библиотека ремесла
+
+Существует `src/lib/playbook.ts` (`CONVERSATIONAL_GROWTH_PLAYBOOK` + форматы/критерии). Сейчас:
+
+- `analyze.ts` — полный список паттернов в промпте Job-разбора;
+- `ai/review.ts` — до 6 паттернов как необязательная подсказка;
+- `scoring.ts` / `scripts/score-analyz.ts` — `normalizeFormat` и id критериев, не каталог I06;
+- снимки диалога/профиля помечают `playbook: false`.
+
+Это **legacy playbook разговорного роста**, смешанный со скорингом Job. Целевая библиотека ремесла I06 — отдельный версионируемый каталог карточек (пробел, механизм, source IDs, attribution), не этот объект. **В I06 нужно явное решение: интегрировать playbook как семя/источник или отключить от runtime.** Код и дизайн в этом review-fix не меняются.
+
+## Дефект scoring-v1 (память, не `scoring.ts`)
+
+Формула §5 плана: слабый поведенческий сигнал `E=0.3` **никогда не даёт** `D ≥ 0.70` (`D ≤ 0.545` при `R→1`), то есть **не достигает `active`**. При пороге «ниже 0.45 не хранить» одиночные и даже три независимых слабых сигнала (`M ≈ 0.20…0.42` при `U=S=A=1`) **отбрасываются до накопления**.
+
+Нужен **раздельный контракт**: (1) ограниченное хранение предварительных наблюдений ниже порога active; (2) отдельное накопление уверенности до candidate/active. Прямой путь «явное полезное утверждение сразу active» слабые сигналы не закрывает.
+
+До I04 — численные примеры достижимости порогов; **коэффициенты v1 не объявлять готовыми**. `src/lib/scoring.ts` к этой политике не относится (баллы критериев Job).
+
+При `U=S=A=1`, `C=0` (гипотеза плана, не калибровка):
+
+| E | n | R | D ≈ M | vs 0.45 / 0.70 |
+|---|---|---|---|---|
+| 0.3 слабый | 1 | 0 | 0.195 | ниже 0.45 → отброс, накопить негде |
+| 0.3 | 3 | 0.632 | 0.416 | всё ещё отброс |
+| 0.3 | ∞ | 1 | 0.545 | candidate максимум, **active недостижим** |
+| 0.6 правка | 1 | 0 | 0.390 | отброс до второго независимого источника |
+
+Прямой путь «явное утверждение сразу active» на эти строки не распространяется.
 
 ## Данные vs целевые контракты
 

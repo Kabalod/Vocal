@@ -6,12 +6,16 @@
 
 | Область | Файлы | I-этап |
 |---|---|---|
-| Профиль / confirm | `src/lib/profile.ts`, `profile-dialogue.ts`, `profile-portrait.ts`, `ai/profile.ts`, `components/ProfileConversation.tsx`, `app/api/profile/**` | I05 снимает confirm; I01 миграция payload |
-| Диалог мысли | `src/lib/dialogue.ts`, `app/api/thoughts/[id]/dialogue/**` | I02 handler |
-| Сценарий | `src/lib/ai/script.ts`, `src/lib/scripts.ts`, `.../scripts/generate` | I02/I03 |
-| Разбор / вопросы / compare | `src/lib/ai/review.ts`, `questions.ts`, `compare.ts` | I02 защита |
+| Профиль / confirm | `src/lib/profile.ts`, `profile-dialogue.ts`, `profile-portrait.ts`, `ai/profile.ts`, `components/ProfileConversation.tsx`, `app/api/profile/**` | I05 снимает confirm; `healStoredPortrait` в `profile-dialogue.ts` — restore+write на GET; I01 миграция payload |
+| Диалог мысли | `src/lib/dialogue.ts`, `app/api/thoughts/[id]/dialogue/**` | I02 handler; budget+inflight есть |
+| Сценарий | `src/lib/ai/script.ts`, `src/lib/scripts.ts`, `.../scripts/generate` | I02/I03; `AiCall` без budget/inflight |
+| Разбор / вопросы / compare | `src/lib/ai/review.ts`, `questions.ts`, `compare.ts` | I02 защита; `AiCall` без budget/inflight; compare также из pipeline |
 | Контекст | `src/lib/reel-context.ts`, `ai-runtime-context.ts` | I05 snapshot |
-| Вызов / лимит | `src/lib/ai/complete.ts`, `usage-guard.ts`, `groq.ts`, `stt.ts` | I07 operationId |
+| Вызов A (`complete.ts`) | `src/lib/ai/complete.ts`, `usage-guard.ts`, `groq.ts` | I07 operationId; budget только диалоги |
+| Загрузка / Job Groq | `src/app/api/uploads/route.ts` → `src/lib/pipeline.ts` → `src/lib/analyze.ts` → прямой Groq (`completeJson`, не `complete.ts`) | нет `AiCall`; Job retry ≠ token budget; STT: `stt.ts` |
+| STT | `src/lib/stt.ts` | Whisper; `withRetry`; не `AiCall` |
+| Legacy playbook | `src/lib/playbook.ts` (ещё `analyze.ts`, `ai/review.ts`, `scoring.ts`) | **не** целевая библиотека I06; в I06 решить: интеграция или отключение |
+| Скоринг Job | `src/lib/scoring.ts` | баллы критериев видео; не memory scoring-v1 |
 | Схема | `prisma/schema.prisma` | I01 сущности памяти |
 | Типы 8 полей | `src/types/profile.ts` | сохранить как проекцию |
 | Корпус | `Analyz/_research/` | I06 файл библиотеки, не рантайм БД |
