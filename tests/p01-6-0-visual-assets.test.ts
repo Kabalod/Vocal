@@ -25,7 +25,7 @@ test("P01.6-0 assigns the same local card asset for the same reel id", () => {
   assert.notEqual(archiveCardAssetIndex("reel_abc"), archiveCardAssetIndex("reel_xyz"));
 });
 
-test("P01.6-0 ships 8-12 local WebP assets and keeps SVG only offline", () => {
+test("P01.6-0 ships 8-12 local WebP assets as the runtime source of truth", () => {
   assert.ok(ARCHIVE_CARD_ASSET_COUNT >= 8 && ARCHIVE_CARD_ASSET_COUNT <= 12);
   assert.equal(ARCHIVE_CARD_ASSETS.length, ARCHIVE_CARD_ASSET_COUNT);
 
@@ -34,17 +34,18 @@ test("P01.6-0 ships 8-12 local WebP assets and keeps SVG only offline", () => {
     assert.equal(asset.src.startsWith("https://"), false);
     assert.ok(existsSync(publicPath(asset.src)), asset.src);
     assert.ok(statSync(publicPath(asset.src)).size > 4_000, `${asset.src} too small`);
-    assert.ok(existsSync(join(root, "scripts", "p01-6-0-assets", "cards", `${asset.id}.svg`)));
   }
 
   assert.match(ARCHIVE_DESK_BG.src, /^\/archive\/desk\/desk\.webp$/);
   assert.ok(existsSync(publicPath(ARCHIVE_DESK_BG.src)));
-  assert.ok(existsSync(join(root, "scripts", "p01-6-0-assets", "desk", "desk.svg")));
   assert.ok(statSync(publicPath(ARCHIVE_DESK_BG.src)).size > 8_000);
 
   const publicArchive = join(root, "public", "archive");
   const publicFiles = readdirSync(publicArchive, { recursive: true }).map(String);
-  assert.equal(publicFiles.some((file) => file.endsWith(".svg")), false);
+  assert.equal(publicFiles.some((file) => file.endsWith(".svg") || file.endsWith(".jpg")), false);
+  assert.equal(existsSync(join(root, "scripts", "p01-6-0-assets")), false);
+  assert.equal(existsSync(join(root, "scripts", "generate-p01-6-0-archive-assets.mjs")), false);
+  assert.equal(existsSync(join(root, "scripts", "generate-p01-6-0-raster.py")), false);
 });
 
 test("P01.6-0 applies WebP to cards and the desktop work area only", () => {
@@ -59,6 +60,7 @@ test("P01.6-0 applies WebP to cards and the desktop work area only", () => {
   assert.match(card, /--archive-card-image/);
   assert.match(list, /className="archive-desk-surface min-w-0 space-y-4"/);
   assert.match(css, /url\("\/archive\/desk\/desk\.webp"\)/);
+  assert.match(css, /linear-gradient\(180deg, rgba\(11, 7, 20/);
   assert.equal(css.includes(".svg"), false);
   assert.equal(helper.includes(".svg"), false);
   assert.equal(pkg.includes("generate-p01-6-0"), false);

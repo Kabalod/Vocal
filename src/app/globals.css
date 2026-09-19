@@ -249,7 +249,7 @@ a[aria-disabled="true"] {
   border-radius: 3px;
   background-color: #2a1f3d;
   background-image:
-    linear-gradient(180deg, rgba(11, 7, 20, 0.18) 0%, rgba(11, 7, 20, 0.06) 36%, rgba(11, 7, 20, 0.46) 100%),
+    linear-gradient(180deg, rgba(11, 7, 20, 0.34) 0%, rgba(11, 7, 20, 0.08) 40%, rgba(11, 7, 20, 0.38) 100%),
     var(--archive-card-image, none);
   background-size: cover;
   background-position: center;
@@ -264,7 +264,7 @@ a[aria-disabled="true"] {
 @media (min-width: 1200px) {
   .archive-desk-surface {
     background-image:
-      linear-gradient(180deg, rgba(11, 7, 20, 0.42), rgba(11, 7, 20, 0.18)),
+      linear-gradient(180deg, rgba(11, 7, 20, 0.2), rgba(11, 7, 20, 0.06)),
       var(--archive-desk-image);
     background-size: cover;
     background-position: center top;
