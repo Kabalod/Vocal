@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024" role="img" aria-hidden="true">
+  <defs>
+    <filter id="grain03" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="3" result="n"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.18"/>
+      </feComponentTransfer>
+    </filter>
+    
+  </defs>
+  
+      <rect width="768" height="1024" fill="#0B0714"/>
+      <circle cx="384" cy="430" r="340" fill="#1A1228"/>
+      <circle cx="384" cy="430" r="220" fill="#2A1F3D"/>
+      <circle cx="384" cy="430" r="110" fill="#3D2A6B" opacity="0.85"/>
+      <ellipse cx="384" cy="900" rx="420" ry="160" fill="#8B7CFF" opacity="0.1"/>
+    
+  <rect width="768" height="1024" filter="url(#grain03)" opacity="0.35"/>
+</svg>

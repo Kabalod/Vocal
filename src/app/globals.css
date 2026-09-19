@@ -247,11 +247,28 @@ a[aria-disabled="true"] {
   justify-content: flex-start;
   overflow: hidden;
   border-radius: 3px;
-  background:
-    linear-gradient(160deg, rgba(139, 124, 255, 0.22), transparent 55%),
-    #2a1f3d;
+  background-color: #2a1f3d;
+  background-image:
+    linear-gradient(180deg, rgba(11, 7, 20, 0.18) 0%, rgba(11, 7, 20, 0.06) 36%, rgba(11, 7, 20, 0.46) 100%),
+    var(--archive-card-image, none);
+  background-size: cover;
+  background-position: center;
   color: #f5f3ff;
   padding: 2.85rem 0.8rem 0.85rem;
+}
+
+.archive-desk-surface {
+  --archive-desk-image: url("/archive/desk/desk.webp"), url("/archive/desk/desk.svg");
+}
+
+@media (min-width: 1200px) {
+  .archive-desk-surface {
+    background-image:
+      linear-gradient(180deg, rgba(11, 7, 20, 0.42), rgba(11, 7, 20, 0.18)),
+      var(--archive-desk-image);
+    background-size: cover;
+    background-position: center top;
+  }
 }
 
 .archive-polaroid-title {

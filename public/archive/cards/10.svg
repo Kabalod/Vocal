@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024" role="img" aria-hidden="true">
+  <defs>
+    <filter id="grain10" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="10" result="n"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.18"/>
+      </feComponentTransfer>
+    </filter>
+    
+      <linearGradient id="fade10" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#0B0714" stop-opacity="0.15"/>
+        <stop offset="1" stop-color="#0B0714" stop-opacity="0.45"/>
+      </linearGradient>
+    
+  </defs>
+  
+      <rect width="768" height="1024" fill="#120A1C"/>
+      <ellipse cx="384" cy="720" rx="460" ry="360" fill="#3D2A6B" opacity="0.55"/>
+      <ellipse cx="260" cy="300" rx="240" ry="260" fill="#8B7CFF" opacity="0.2"/>
+      <ellipse cx="540" cy="380" rx="180" ry="220" fill="#C4B5FD" opacity="0.12"/>
+      <rect width="768" height="1024" fill="url(#fade10)"/>
+    
+  <rect width="768" height="1024" filter="url(#grain10)" opacity="0.35"/>
+</svg>

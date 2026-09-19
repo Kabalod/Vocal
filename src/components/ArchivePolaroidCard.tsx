@@ -1,10 +1,12 @@
 import Link from "next/link";
+import type { CSSProperties, ReactNode } from "react";
 import {
   IconStatusDone,
   IconStatusOpen,
   IconStatusProgress,
 } from "@/components/vocal-ui/icons";
 import { studioThoughtHref } from "@/components/reel-studio";
+import { archiveCardBackgroundImage } from "@/lib/archive-visual-assets";
 import { thoughtUserStatus } from "@/lib/thought-preview";
 import type { ReelListItemDto } from "@/types/reel";
 
@@ -35,12 +37,18 @@ function PolaroidStatus({ reel }: { reel: ReelListItemDto }) {
 function PolaroidFace({
   reel,
   compact,
+  children,
 }: {
   reel: ReelListItemDto;
   compact?: boolean;
+  children?: ReactNode;
 }) {
   return (
-    <div className={`archive-polaroid-frame ${compact ? "archive-polaroid-frame-mobile" : ""}`}>
+    <div
+      className={`archive-polaroid-frame ${compact ? "archive-polaroid-frame-mobile" : ""}`}
+      style={{ "--archive-card-image": archiveCardBackgroundImage(reel.id) } as CSSProperties}
+    >
+      {children}
       <p className="archive-polaroid-title">{reel.title}</p>
     </div>
   );
@@ -109,10 +117,9 @@ export function ArchivePolaroidCard({
         className="block min-w-0 text-left outline-none"
         onClick={() => onLeaveToStudio?.()}
       >
-        <div className="archive-polaroid-frame">
+        <PolaroidFace reel={reel}>
           <PolaroidStatus reel={reel} />
-          <p className="archive-polaroid-title">{reel.title}</p>
-        </div>
+        </PolaroidFace>
         <div className="archive-polaroid-footer">
           <span aria-hidden="true" className="text-lg leading-none text-[#1a1424]">
             →

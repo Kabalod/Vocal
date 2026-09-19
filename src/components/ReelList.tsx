@@ -421,7 +421,7 @@ export function ReelList() {
           </div>
         </aside>
 
-        <div className="min-w-0 space-y-4">
+        <div className="archive-desk-surface min-w-0 space-y-4">
           <div className="hidden shell:block">
             <h1 className="font-[family-name:var(--font-display)] text-4xl">Мысли</h1>
           </div>

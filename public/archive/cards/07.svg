@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024" role="img" aria-hidden="true">
+  <defs>
+    <filter id="grain07" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" result="n"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.18"/>
+      </feComponentTransfer>
+    </filter>
+    
+  </defs>
+  
+      <rect width="768" height="1024" fill="#1A1228"/>
+      <path d="M768 0 L768 420 L0 820 L0 0 Z" fill="#2A1F3D"/>
+      <path d="M0 700 L768 280 L768 1024 L0 1024 Z" fill="#0B0714" opacity="0.72"/>
+      <ellipse cx="260" cy="260" rx="200" ry="160" fill="#62DBC6" opacity="0.08"/>
+    
+  <rect width="768" height="1024" filter="url(#grain07)" opacity="0.35"/>
+</svg>
