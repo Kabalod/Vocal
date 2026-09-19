@@ -83,6 +83,9 @@ function NavItem({
 
 export function VocalAppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
+  if (isAuthShellPath(pathname)) {
+    return <>{children}</>;
+  }
   const archiveDesktop = pathname === "/reels";
   const [dateHost, setDateHost] = useState<HTMLElement | null>(null);
   const [statusHost, setStatusHost] = useState<HTMLElement | null>(null);
