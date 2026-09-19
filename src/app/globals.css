@@ -210,6 +210,78 @@ a[aria-disabled="true"] {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.archive-desk-spreads {
+  display: flex;
+  flex-direction: column;
+  gap: 4.5rem;
+}
+
+.archive-desk-spread {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 10 / 11;
+  overflow: visible;
+}
+
+.archive-desk-slot {
+  position: absolute;
+  z-index: 1;
+  margin: 0;
+  transform: rotate(var(--archive-slot-tilt, 0deg));
+  transform-origin: 50% 42%;
+}
+
+.archive-desk-slot .archive-polaroid {
+  width: 100%;
+}
+
+.archive-desk-slot-1 {
+  left: 2%;
+  top: 1%;
+  width: 32%;
+  --archive-slot-tilt: -2deg;
+}
+
+.archive-desk-slot-2 {
+  left: 38%;
+  top: 6.5%;
+  width: 26%;
+  --archive-slot-tilt: 1deg;
+}
+
+.archive-desk-slot-3 {
+  left: 70%;
+  top: 1.8%;
+  width: 26%;
+  --archive-slot-tilt: 2deg;
+}
+
+.archive-desk-slot-4 {
+  left: 10%;
+  top: 52.5%;
+  width: 22%;
+  --archive-slot-tilt: -3deg;
+}
+
+.archive-desk-slot-5 {
+  left: 38%;
+  top: 48%;
+  width: 26%;
+  --archive-slot-tilt: 1deg;
+}
+
+.archive-desk-slot-6 {
+  left: 72%;
+  top: 55.5%;
+  width: 22%;
+  --archive-slot-tilt: 2deg;
+}
+
+.archive-desk-slot-4 .archive-polaroid-title,
+.archive-desk-slot-6 .archive-polaroid-title {
+  font-size: 0.92rem;
+}
+
 .archive-polaroid {
   position: relative;
   background: #efe8dc;
@@ -240,6 +312,11 @@ a[aria-disabled="true"] {
     transform: translateY(-5px) rotate(-1.25deg);
     box-shadow: 0 18px 34px rgba(11, 7, 20, 0.45);
     color: #100b1a;
+  }
+
+  .archive-desk-spread .archive-polaroid:hover,
+  .archive-desk-spread .archive-polaroid:focus-within {
+    transform: translateY(-6px);
   }
 }
 

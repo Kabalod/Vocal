@@ -9,6 +9,11 @@ import {
   readArchiveDensity,
   writeArchiveDensity,
 } from "../src/lib/archive-density";
+import {
+  ARCHIVE_DESK_SPREAD_SIZE,
+  archiveDeskSlot,
+  chunkArchiveDeskSpreads,
+} from "../src/lib/archive-desk-layout";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -42,6 +47,31 @@ test("P01.6-2 density stays local and defaults to large", (t) => {
   assert.equal(readArchiveDensity(), "compact");
 });
 
+test("P01.6-2 large desktop splits thoughts into deterministic six-card desk spreads", () => {
+  assert.equal(ARCHIVE_DESK_SPREAD_SIZE, 6);
+  assert.deepEqual(chunkArchiveDeskSpreads([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]), [
+    [1, 2, 3, 4, 5, 6],
+    [7, 8, 9, 10, 11, 12],
+    [13],
+  ]);
+  assert.equal(archiveDeskSlot(0), 1);
+  assert.equal(archiveDeskSlot(5), 6);
+  const list = readFileSync(join(root, "src/components/ReelList.tsx"), "utf8");
+  const css = readFileSync(join(root, "src/app/globals.css"), "utf8");
+  assert.match(list, /chunkArchiveDeskSpreads/);
+  assert.match(list, /data-slot=\{slot\}/);
+  assert.match(list, /archive-desk-spread/);
+  assert.equal(list.includes("Math.random"), false);
+  assert.equal(css.includes("Math.random"), false);
+  assert.match(css, /\.archive-desk-slot-1[\s\S]*--archive-slot-tilt:\s*-2deg/);
+  assert.match(css, /\.archive-desk-slot-2[\s\S]*--archive-slot-tilt:\s*1deg/);
+  assert.match(css, /\.archive-desk-slot-3[\s\S]*--archive-slot-tilt:\s*2deg/);
+  assert.match(css, /\.archive-desk-slot-4[\s\S]*--archive-slot-tilt:\s*-3deg/);
+  assert.match(css, /\.archive-desk-slot-5[\s\S]*--archive-slot-tilt:\s*1deg/);
+  assert.match(css, /\.archive-desk-slot-6[\s\S]*--archive-slot-tilt:\s*2deg/);
+  assert.match(css, /\.archive-polaroid-grid-compact[\s\S]*repeat\(4/);
+});
+
 test("P01.6-2 desktop composition moves calendar/status left and toolbar into the work area", () => {
   const list = readFileSync(join(root, "src/components/ReelList.tsx"), "utf8");
   const shell = readFileSync(join(root, "src/components/VocalAppShell.tsx"), "utf8");
@@ -62,7 +92,7 @@ test("P01.6-2 desktop composition moves calendar/status left and toolbar into th
   assert.match(shell, /shell:overflow-y-auto/);
   assert.match(shell, /setDateHost/);
   assert.match(shell, /setStatusHost/);
-  assert.match(css, /\.archive-polaroid-grid[\s\S]*repeat\(3/);
+  assert.match(css, /\.archive-desk-spread[\s\S]*position:\s*relative/);
   assert.match(css, /\.archive-polaroid-grid-compact[\s\S]*repeat\(4/);
   assert.match(css, /\.archive-polaroid-title[\s\S]*text-align:\s*center/);
   assert.match(css, /\.archive-polaroid-info[\s\S]*min-height:\s*2\.75rem/);

@@ -43,6 +43,10 @@ import {
   type ArchiveListUrlState,
 } from "@/lib/thought-archive-state";
 import {
+  archiveDeskSlot,
+  chunkArchiveDeskSpreads,
+} from "@/lib/archive-desk-layout";
+import {
   readArchiveDensity,
   writeArchiveDensity,
   type ArchiveDensity,
@@ -515,12 +519,8 @@ export function ReelList() {
 
           {!loading && !listError && reels.length > 0 ? (
             <div className="space-y-4">
-              {isDesktop ? (
-                <ul
-                  className={`archive-polaroid-grid ${
-                    density === "compact" ? "archive-polaroid-grid-compact" : ""
-                  } list-none p-0`}
-                >
+              {isDesktop && density === "compact" ? (
+                <ul className="archive-polaroid-grid archive-polaroid-grid-compact list-none p-0">
                   {reels.map((reel) => (
                     <li key={reel.id} className="min-w-0">
                       <ArchivePolaroidCard
@@ -532,6 +532,34 @@ export function ReelList() {
                     </li>
                   ))}
                 </ul>
+              ) : isDesktop ? (
+                <div className="archive-desk-spreads">
+                  {chunkArchiveDeskSpreads(reels).map((spread, spreadIndex) => (
+                    <ul
+                      key={spread.map((reel) => reel.id).join("-")}
+                      className="archive-desk-spread list-none p-0"
+                      data-archive-spread={spreadIndex + 1}
+                    >
+                      {spread.map((reel, indexInSpread) => {
+                        const slot = archiveDeskSlot(indexInSpread);
+                        return (
+                          <li
+                            key={reel.id}
+                            data-slot={slot}
+                            className={`archive-desk-slot archive-desk-slot-${slot}`}
+                          >
+                            <ArchivePolaroidCard
+                              reel={reel}
+                              variant="desktop"
+                              onOpenPreview={() => openPreview(reel.id)}
+                              onLeaveToStudio={() => rememberArchiveFocus(reel.id)}
+                            />
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ))}
+                </div>
               ) : (
                 <ul className="archive-polaroid-grid-mobile list-none p-0">
                   {reels.map((reel) => (
