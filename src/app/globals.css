@@ -273,6 +273,16 @@ a[aria-disabled="true"] {
     background-size: cover;
     background-position: center top;
   }
+
+  .archive-workspace-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    margin: -0.25rem 0 0;
+    padding: 0.75rem 0 1rem;
+    background:
+      linear-gradient(180deg, rgba(11, 7, 20, 0.94) 0%, rgba(11, 7, 20, 0.86) 72%, rgba(11, 7, 20, 0) 100%);
+  }
 }
 
 .archive-polaroid-title {
@@ -348,12 +358,23 @@ a[aria-disabled="true"] {
   justify-content: center;
   min-height: 2.75rem;
   min-width: 2.75rem;
-  border-radius: 999px;
-  border: 1px solid rgba(245, 243, 255, 0.35);
-  background: rgba(11, 7, 20, 0.35);
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #f5f3ff;
-  font-size: 1.25rem;
-  font-weight: 600;
+}
+
+.archive-polaroid-info-mark {
+  display: inline-flex;
+  height: 1.875rem;
+  width: 1.875rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 243, 255, 0.22);
+  background: rgba(11, 7, 20, 0.28);
+  font-size: 0.8125rem;
+  font-weight: 500;
   line-height: 1;
 }
 

@@ -398,10 +398,12 @@ export function ReelList() {
               from={urlState.from}
               to={urlState.to}
               open={calendarOpen}
-              onOpen={() => {
-                if (!urlStateRef.current.calendarOpen) {
-                  pushUrl(openArchiveCalendar(urlStateRef.current));
+              onToggle={() => {
+                if (urlStateRef.current.calendarOpen) {
+                  closeCalendar();
+                  return;
                 }
+                pushUrl(openArchiveCalendar(urlStateRef.current));
               }}
             />
             {calendarOpen ? (

@@ -35,11 +35,11 @@ export function ArchiveStatusFilters({
                 type="button"
                 aria-pressed={active}
                 onClick={() => onChange(item.id)}
-                className={`flex min-h-11 w-full items-center gap-3 rounded-control px-2 text-left text-sm ${
-                  active ? "bg-accent/15 text-accent-soft" : "text-muted hover:bg-accent-dim hover:text-text"
+                className={`flex min-h-11 w-full items-center gap-2 rounded-control px-2 text-left text-sm ${
+                  active ? "bg-accent/12 text-accent-soft" : "text-muted hover:bg-accent-dim hover:text-text"
                 }`}
               >
-                <Icon className={active ? "text-accent-soft" : "text-muted"} />
+                <Icon className={`h-5 w-5 shrink-0 ${active ? "text-accent-soft" : "text-muted"}`} />
                 <span className="archive-status-label">{item.label}</span>
               </button>
             </li>

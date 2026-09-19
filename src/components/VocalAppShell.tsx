@@ -174,7 +174,7 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className={`flex min-w-0 flex-1 flex-col ${archiveDesktop ? "shell:h-screen shell:overflow-y-auto" : ""}`}>
         <header className={`flex min-h-11 items-center gap-3 border-b border-line px-4 py-3 shell:px-6 ${archiveDesktop ? "shell:hidden" : ""}`}>
           <button
             ref={menuButtonRef}

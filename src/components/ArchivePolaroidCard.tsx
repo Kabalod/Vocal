@@ -110,7 +110,9 @@ export function ArchivePolaroidCard({
           onOpenPreview();
         }}
       >
-        i
+        <span className="archive-polaroid-info-mark" aria-hidden="true">
+          i
+        </span>
       </button>
       <Link
         href={dialogHref}

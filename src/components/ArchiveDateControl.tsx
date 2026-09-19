@@ -12,12 +12,12 @@ export function ArchiveDateControl({
   from,
   to,
   open,
-  onOpen,
+  onToggle,
 }: {
   from: string | null;
   to: string | null;
   open: boolean;
-  onOpen: () => void;
+  onToggle: () => void;
 }) {
   const [view, setView] = useState({
     title: "Календарь",
@@ -43,8 +43,8 @@ export function ArchiveDateControl({
       className="archive-date-control min-h-11 w-full rounded-control px-2 py-2 text-left hover:bg-field"
       aria-haspopup="dialog"
       aria-expanded={open}
-      aria-label="Открыть календарь"
-      onClick={onOpen}
+      aria-label={open ? "Скрыть календарь" : "Открыть календарь"}
+      onClick={onToggle}
     >
       {view.showToday ? <span className="archive-date-eyebrow block text-xs text-muted">Сегодня</span> : null}
       <span className="flex items-start justify-between gap-2">
