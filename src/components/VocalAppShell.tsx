@@ -11,6 +11,7 @@ import {
 } from "@/components/shell-layout";
 import { getSheetFocusableElements, trapSheetTab } from "@/components/shell-sheet";
 import { ArchiveDesktopHostProvider } from "@/components/ArchiveDesktopChrome";
+import { isAuthShellPath } from "@/lib/auth/paths";
 import { isShellNavActive, SHELL_NAV, shellBack, shellHeaderTitle } from "@/components/shell-nav";
 
 function IconRecordings() {
