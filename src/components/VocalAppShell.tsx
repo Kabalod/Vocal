@@ -10,6 +10,7 @@ import {
   writeStoredShellCollapsed,
 } from "@/components/shell-layout";
 import { getSheetFocusableElements, trapSheetTab } from "@/components/shell-sheet";
+import { ArchiveDesktopHostProvider } from "@/components/ArchiveDesktopChrome";
 import { isShellNavActive, SHELL_NAV, shellBack, shellHeaderTitle } from "@/components/shell-nav";
 
 function IconRecordings() {
@@ -73,6 +74,9 @@ function NavItem({
 
 export function VocalAppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
+  const archiveDesktop = pathname === "/reels";
+  const [dateHost, setDateHost] = useState<HTMLElement | null>(null);
+  const [statusHost, setStatusHost] = useState<HTMLElement | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -132,10 +136,12 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
   }, [sheetOpen]);
 
   return (
+    <ArchiveDesktopHostProvider value={{ dateHost, statusHost }}>
     <div className="flex min-h-screen max-w-full overflow-x-hidden bg-bg text-text">
       <aside
-        className={`hidden border-r border-line bg-surface shell:flex shell:flex-col ${
-          collapsed ? "w-16" : "w-[200px]"
+        data-shell-collapsed={collapsed ? "true" : "false"}
+        className={`hidden border-r border-line bg-surface shell:sticky shell:top-0 shell:flex shell:h-screen shell:shrink-0 shell:flex-col shell:overflow-y-auto ${
+          collapsed ? "w-16" : archiveDesktop ? "w-60" : "w-[200px]"
         }`}
       >
         <div className={`flex min-h-11 items-center gap-2 px-3 py-5 ${collapsed ? "justify-center" : ""}`}>
@@ -143,9 +149,11 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
             {collapsed ? "V" : "Vocal"}
           </Link>
         </div>
-        <nav className="flex-1 px-2" aria-label="Разделы">
+        <div ref={setDateHost} className="empty:hidden px-2 pb-3" />
+        <nav className="px-2" aria-label="Разделы">
           <NavItem href={RECORDINGS_NAV.href} label={RECORDINGS_NAV.label} collapsed={collapsed} />
         </nav>
+        <div ref={setStatusHost} className="empty:hidden px-2 pt-4" />
         <div className="mt-auto space-y-2 p-2">
           <nav aria-label="Профиль">
             <NavItem href={PROFILE_NAV.href} label={PROFILE_NAV.label} collapsed={collapsed} />
@@ -167,7 +175,7 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex min-h-11 items-center gap-3 border-b border-line px-4 py-3 shell:px-6">
+        <header className={`flex min-h-11 items-center gap-3 border-b border-line px-4 py-3 shell:px-6 ${archiveDesktop ? "shell:hidden" : ""}`}>
           <button
             ref={menuButtonRef}
             type="button"
@@ -192,7 +200,7 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
 
         <main
           className={`mx-auto min-w-0 w-full flex-1 px-4 py-6 pb-24 shell:px-6 shell:pb-16 ${
-            pathname === "/reels" || pathname.startsWith("/reels/") ? "max-w-6xl" : "max-w-5xl"
+            pathname === "/reels" ? "max-w-none" : pathname.startsWith("/reels/") ? "max-w-6xl" : "max-w-5xl"
           }`}
         >
           {children}
@@ -263,5 +271,6 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
         </div>
       ) : null}
     </div>
+    </ArchiveDesktopHostProvider>
   );
 }

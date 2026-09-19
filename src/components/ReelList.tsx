@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { NewThoughtSheet } from "@/components/NewThoughtSheet";
 import { ArchiveCalendar } from "@/components/ArchiveCalendar";
 import { ArchiveCalendarSheet } from "@/components/ArchiveCalendarSheet";
+import { ArchiveDateControl } from "@/components/ArchiveDateControl";
+import { ArchiveDensityToggle } from "@/components/ArchiveDensityToggle";
+import { ArchiveDesktopSlot } from "@/components/ArchiveDesktopChrome";
 import { ArchivePolaroidCard } from "@/components/ArchivePolaroidCard";
 import { ArchiveStatusFilters } from "@/components/ArchiveStatusFilters";
 import { ArchiveThoughtPreview } from "@/components/ArchiveThoughtPreview";
@@ -39,6 +42,11 @@ import {
   resolveArchiveEmptyKind,
   type ArchiveListUrlState,
 } from "@/lib/thought-archive-state";
+import {
+  readArchiveDensity,
+  writeArchiveDensity,
+  type ArchiveDensity,
+} from "@/lib/archive-density";
 import { resetThoughtListQuery } from "@/lib/thought-preview";
 import { type ReelListItemDto, type ReelListResult } from "@/types/reel";
 
@@ -51,7 +59,7 @@ function NewThoughtButton({
 }) {
   return (
     <ActionButton variant="primary" className={className} onClick={onClick}>
-      Новая мысль
+      + Новая мысль
     </ActionButton>
   );
 }
@@ -73,6 +81,7 @@ export function ReelList() {
   const [listError, setListError] = useState<string | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [density, setDensity] = useState<ArchiveDensity>("large");
   const calendarOpen = Boolean(urlState.calendarOpen);
   const previewId = urlState.previewId?.trim() || null;
   const [dateHeading, setDateHeading] = useState({
@@ -97,6 +106,10 @@ export function ReelList() {
   useEffect(() => {
     setDraftQ(urlState.q);
   }, [urlState.q]);
+
+  useEffect(() => {
+    setDensity(readArchiveDensity());
+  }, []);
 
   const replaceUrl = useCallback(
     (next: ArchiveListUrlState) => {
@@ -308,6 +321,56 @@ export function ReelList() {
 
   const endReached = !loading && !listError && !hasMore && reels.length > 0;
 
+  function changeDensity(next: ArchiveDensity) {
+    setDensity(next);
+    writeArchiveDensity(next);
+  }
+
+  const searchField = (
+    <div className="relative min-w-0 flex-1">
+      <Field
+        value={draftQ}
+        onChange={(e) => setDraftQ(e.target.value)}
+        placeholder="Найти мысль"
+        aria-label="Найти мысль"
+        className="pr-12"
+      />
+      {draftQ ? (
+        <button
+          type="button"
+          className="absolute right-2 top-1/2 min-h-11 -translate-y-1/2 px-2 text-sm text-muted hover:text-text"
+          aria-label="Очистить поиск"
+          onClick={() => {
+            setDraftQ("");
+            applyFilters({ q: "" });
+          }}
+        >
+          Очистить
+        </button>
+      ) : null}
+    </div>
+  );
+
+  const sortControl = (
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Сортировка">
+      {ARCHIVE_LIST_SORTS.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          onClick={() => applyFilters({ sort: item.id })}
+          aria-pressed={urlState.sort === item.id}
+          className={`min-h-11 rounded-full px-3 text-sm ${
+            urlState.sort === item.id
+              ? "border border-accent bg-bg text-text"
+              : "border border-line bg-surface text-muted hover:text-text"
+          }`}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-6 pb-[env(safe-area-inset-bottom)]">
       <div className="flex items-start justify-between gap-3 shell:hidden">
@@ -328,67 +391,51 @@ export function ReelList() {
         <NewThoughtButton onClick={() => setCreateOpen(true)} />
       </div>
 
-      <div className="grid gap-6 shell:grid-cols-[minmax(14rem,17rem)_minmax(0,1fr)] shell:items-start">
-        <aside className="flex flex-col gap-4" aria-label="Поиск и фильтры">
-          <div className="hidden shell:block">
-            <NewThoughtButton className="w-full" onClick={() => setCreateOpen(true)} />
-          </div>
-          <div className="relative">
-            <Field
-              value={draftQ}
-              onChange={(e) => setDraftQ(e.target.value)}
-              placeholder="Найти мысль"
-              aria-label="Найти мысль"
-              className="pr-12"
+      {isDesktop ? (
+        <>
+          <ArchiveDesktopSlot slot="date">
+            <ArchiveDateControl
+              from={urlState.from}
+              to={urlState.to}
+              open={calendarOpen}
+              onOpen={() => {
+                if (!urlStateRef.current.calendarOpen) {
+                  pushUrl(openArchiveCalendar(urlStateRef.current));
+                }
+              }}
             />
-            {draftQ ? (
-              <button
-                type="button"
-                className="absolute right-2 top-1/2 min-h-11 -translate-y-1/2 px-2 text-sm text-muted hover:text-text"
-                aria-label="Очистить поиск"
-                onClick={() => {
-                  setDraftQ("");
-                  applyFilters({ q: "" });
-                }}
-              >
-                Очистить
-              </button>
+            {calendarOpen ? (
+              <div className="pt-2">
+                <ArchiveCalendar
+                  state={urlState}
+                  onApplyRange={({ from, to }) => applyFilters({ from, to, dateField: null })}
+                  onClearDate={clearDateFilter}
+                />
+              </div>
             ) : null}
-          </div>
-
-          {isDesktop ? (
-            <ArchiveCalendar
-              state={urlState}
-              onApplyRange={({ from, to }) => applyFilters({ from, to, dateField: null })}
-              onClearDate={clearDateFilter}
-            />
-          ) : null}
-
-          {!isDesktop && calendarOpen ? (
-            <ArchiveCalendarSheet
-              open
-              state={urlState}
-              onClose={closeCalendar}
-              onApplyRange={(range) => replaceUrl(applyArchiveCalendarRange(urlStateRef.current, range))}
-              onClearDate={clearDateFilter}
-            />
-          ) : null}
-
-          {previewId ? (
-            <ArchiveThoughtPreview
-              open
-              reelId={previewId}
-              onClose={closePreview}
-              onLeaveToStudio={() => rememberArchiveFocus(previewId)}
-            />
-          ) : null}
-
-          {isDesktop ? (
+          </ArchiveDesktopSlot>
+          <ArchiveDesktopSlot slot="statuses">
             <ArchiveStatusFilters
               value={urlState.status}
               onChange={(id) => applyFilters({ status: id })}
             />
-          ) : (
+          </ArchiveDesktopSlot>
+        </>
+      ) : null}
+
+      <div className="grid gap-6 shell:grid-cols-1">
+        {!isDesktop ? (
+          <aside className="flex flex-col gap-4" aria-label="Поиск и фильтры">
+            {searchField}
+            {calendarOpen ? (
+              <ArchiveCalendarSheet
+                open
+                state={urlState}
+                onClose={closeCalendar}
+                onApplyRange={(range) => replaceUrl(applyArchiveCalendarRange(urlStateRef.current, range))}
+                onClearDate={clearDateFilter}
+              />
+            ) : null}
             <FilterControl
               items={RECORDING_FILTERS}
               value={urlState.status}
@@ -398,31 +445,35 @@ export function ReelList() {
                 if (isRecordingFilterId(id)) applyFilters({ status: id });
               }}
             />
-          )}
+            {sortControl}
+          </aside>
+        ) : null}
 
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Сортировка">
-            {ARCHIVE_LIST_SORTS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => applyFilters({ sort: item.id })}
-                aria-pressed={urlState.sort === item.id}
-                className={`min-h-11 rounded-full px-3 text-sm ${
-                  urlState.sort === item.id
-                    ? "border border-accent bg-bg text-text"
-                    : "border border-line bg-surface text-muted hover:text-text"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </aside>
+        {previewId ? (
+          <ArchiveThoughtPreview
+            open
+            reelId={previewId}
+            onClose={closePreview}
+            onLeaveToStudio={() => rememberArchiveFocus(previewId)}
+          />
+        ) : null}
 
         <div className="archive-desk-surface min-w-0 space-y-4">
-          <div className="hidden shell:block">
-            <h1 className="font-[family-name:var(--font-display)] text-4xl">Мысли</h1>
-          </div>
+          {isDesktop ? (
+            <div className="archive-workspace-toolbar space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h1 className="font-[family-name:var(--font-display)] text-4xl">Мысли</h1>
+                <div className="flex flex-wrap items-center gap-2">
+                  <NewThoughtButton onClick={() => setCreateOpen(true)} />
+                  <ArchiveDensityToggle value={density} onChange={changeDensity} />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {searchField}
+                {sortControl}
+              </div>
+            </div>
+          ) : null}
 
           {listError ? <ShellError message={listError} onRetry={() => void loadFirst()} /> : null}
           {loading ? <ShellLoading label="Загрузка мыслей…" /> : null}
@@ -463,7 +514,11 @@ export function ReelList() {
           {!loading && !listError && reels.length > 0 ? (
             <div className="space-y-4">
               {isDesktop ? (
-                <ul className="archive-polaroid-grid list-none p-0">
+                <ul
+                  className={`archive-polaroid-grid ${
+                    density === "compact" ? "archive-polaroid-grid-compact" : ""
+                  } list-none p-0`}
+                >
                   {reels.map((reel) => (
                     <li key={reel.id} className="min-w-0">
                       <ArchivePolaroidCard

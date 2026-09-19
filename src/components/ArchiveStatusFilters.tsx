@@ -40,7 +40,7 @@ export function ArchiveStatusFilters({
                 }`}
               >
                 <Icon className={active ? "text-accent-soft" : "text-muted"} />
-                <span>{item.label}</span>
+                <span className="archive-status-label">{item.label}</span>
               </button>
             </li>
           );
