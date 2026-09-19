@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { canWriteSharedCriteria } from "@/lib/auth/session";
 import { z } from "zod";
 import { ensureCriteria, prisma, resetCriteria } from "@/lib/db";
 import { toCriterionDto } from "@/lib/serialize";
@@ -27,6 +28,12 @@ const patchSchema = z.object({
 
 export async function PUT(request: Request) {
   try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+  if (!canWriteSharedCriteria()) {
+    return NextResponse.json(
+      { error: "Общие критерии может менять только администратор.", code: "CRITERIA_READONLY" },
+      { status: 403 },
+    );
+  }
   await ensureCriteria();
   let body: z.infer<typeof patchSchema>;
   try {
@@ -59,6 +66,12 @@ export async function PUT(request: Request) {
 
 export async function POST() {
   try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+  if (!canWriteSharedCriteria()) {
+    return NextResponse.json(
+      { error: "Общие критерии может менять только администратор.", code: "CRITERIA_READONLY" },
+      { status: 403 },
+    );
+  }
   await resetCriteria();
   const rows = await prisma.criterion.findMany({
     orderBy: [{ categoryOrder: "asc" }, { sortOrder: "asc" }],

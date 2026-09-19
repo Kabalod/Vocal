@@ -52,6 +52,16 @@ export async function resolveRequestUser(): Promise<AuthUser> {
   return { id: data.user.id, email: data.user.email ?? null };
 }
 
+export function canWriteSharedCriteria(): boolean {
+  const raw = process.env.VOCAL_CRITERIA_ADMIN_USER_IDS ?? "";
+  const allow = raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (allow.length === 0) return false;
+  return allow.includes(ownerUserId());
+}
+
 export function legacyOwnerUserId(): string {
   const id = process.env.VOCAL_LEGACY_OWNER_USER_ID?.trim();
   if (!id) {
