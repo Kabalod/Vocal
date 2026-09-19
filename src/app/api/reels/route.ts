@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { normalizeArchiveListSort } from "@/lib/reel-archive-query";
 import { ReelError, createReel, listReels } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
 import { parseReelStatusInput, type ReelListQuery } from "@/types/reel";
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const q = url.searchParams.get("q") ?? undefined;
     const statusRaw = url.searchParams.get("status") ?? "open";
-    const sortRaw = url.searchParams.get("sort") ?? "updated";
+    const sortRaw = url.searchParams.get("sort") ?? "newest";
     const cursor = url.searchParams.get("cursor") ?? undefined;
     const limitRaw = url.searchParams.get("limit");
     const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
@@ -27,8 +28,7 @@ export async function GET(request: Request) {
     const to = url.searchParams.get("to") ?? undefined;
     const dateFieldRaw = url.searchParams.get("dateField");
     const dateField = dateFieldRaw === null || dateFieldRaw === "" ? undefined : dateFieldRaw;
-    const sort =
-      sortRaw === "title" || sortRaw === "created" || sortRaw === "updated" ? sortRaw : "updated";
+    const sort = normalizeArchiveListSort(sortRaw);
     let status: ReelListQuery["status"] = "open";
     if (statusRaw === "all" || statusRaw === "open") status = statusRaw;
     else {

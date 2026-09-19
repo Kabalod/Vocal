@@ -166,7 +166,7 @@ export interface UpdateTakeInput {
 export interface ReelListQuery {
   q?: string;
   status?: ReelStatus | "all" | "open";
-  sort?: "updated" | "created" | "title";
+  sort?: "newest" | "oldest" | "updated" | "created" | "title";
   limit?: number;
   cursor?: string;
   /** Absolute ISO instant; half-open with `to`. */

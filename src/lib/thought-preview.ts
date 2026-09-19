@@ -42,10 +42,10 @@ export function pickThoughtPreviewFragment(input: {
 export function resetThoughtListQuery(): {
   q: "";
   status: "all";
-  sort: "updated";
+  sort: "newest";
   from: null;
   to: null;
   dateField: null;
 } {
-  return { q: "", status: "all", sort: "updated", from: null, to: null, dateField: null };
+  return { q: "", status: "all", sort: "newest", from: null, to: null, dateField: null };
 }

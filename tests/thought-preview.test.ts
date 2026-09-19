@@ -73,7 +73,7 @@ test("reset clears search and filter together without AI", () => {
   assert.deepEqual(resetThoughtListQuery(), {
     q: "",
     status: "all",
-    sort: "updated",
+    sort: "newest",
     from: null,
     to: null,
     dateField: null,

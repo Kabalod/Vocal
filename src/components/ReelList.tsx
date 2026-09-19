@@ -68,7 +68,6 @@ export function ReelList() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
-  const [matchCount, setMatchCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -158,7 +157,6 @@ export function ReelList() {
     setNextCursor(data.nextCursor);
     setHasMore(data.hasMore);
     setTotalCount(data.totalCount);
-    setMatchCount(data.matchCount);
     setReels((prev) => mergeReelListPages(prev, data.reels, append));
   }, []);
 
@@ -176,7 +174,7 @@ export function ReelList() {
     setReels([]);
     setNextCursor(null);
     setHasMore(false);
-    setMatchCount(0);
+    setTotalCount(0);
 
     const queryString = listQueryString;
     try {
@@ -195,7 +193,7 @@ export function ReelList() {
       setReels([]);
       setNextCursor(null);
       setHasMore(false);
-      setMatchCount(0);
+      setTotalCount(0);
     } finally {
       if (req.isCurrent() && epoch === listEpoch.current) setLoading(false);
     }
@@ -425,12 +423,6 @@ export function ReelList() {
           <div className="hidden shell:block">
             <h1 className="font-[family-name:var(--font-display)] text-4xl">Мысли</h1>
           </div>
-
-          {!listError && !loading && reels.length > 0 ? (
-            <p className="text-sm text-muted">
-              Всего мыслей: {totalCount}. Найдено: {matchCount}.
-            </p>
-          ) : null}
 
           {listError ? <ShellError message={listError} onRetry={() => void loadFirst()} /> : null}
           {loading ? <ShellLoading label="Загрузка мыслей…" /> : null}

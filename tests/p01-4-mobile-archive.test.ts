@@ -119,7 +119,7 @@ test("P01.4 Back/Escape/overlay pops calendar=1 and leaves filters unchanged", (
     ...defaultArchiveListUrlState(),
     q: "бета",
     status: "completed",
-    sort: "title",
+    sort: "oldest",
     from: day.from,
     to: day.to,
   });
@@ -131,7 +131,7 @@ test("P01.4 Back/Escape/overlay pops calendar=1 and leaves filters unchanged", (
   assert.equal(after.calendarOpen, false);
   assert.equal(after.q, "бета");
   assert.equal(after.status, "completed");
-  assert.equal(after.sort, "title");
+  assert.equal(after.sort, "oldest");
   assert.equal(after.from, day.from);
   assert.equal(after.to, day.to);
 });

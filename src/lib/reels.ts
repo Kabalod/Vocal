@@ -23,6 +23,7 @@ import {
   ArchiveQueryError,
   archiveFilterFingerprint,
   bucketCalendarDays,
+  normalizeArchiveListSort,
   monthRangeForOffset,
   parseArchiveRange,
   resolveArchiveDateField,
@@ -95,7 +96,7 @@ export async function getReel(id: string): Promise<ReelDto | null> {
 }
 
 type ListCursor = {
-  sort: "updated" | "created" | "title";
+  sort: "newest" | "oldest";
   k: string;
   id: string;
   /** Fingerprint of status/sort/q/from/to/dateField; required for every cursor. */
@@ -109,7 +110,7 @@ function encodeListCursor(cursor: ListCursor): string {
 function decodeListCursor(raw: string): ListCursor | null {
   try {
     const parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as ListCursor;
-    if (parsed?.sort !== "updated" && parsed?.sort !== "created" && parsed?.sort !== "title") {
+    if (parsed?.sort !== "newest" && parsed?.sort !== "oldest") {
       return null;
     }
     if (typeof parsed.k !== "string" || typeof parsed.id !== "string" || !parsed.id) {
@@ -149,21 +150,17 @@ function reelListDateWhere(range: NonNullable<ReturnType<typeof parseArchiveRang
 }
 
 function reelListCursorWhere(sort: ListCursor["sort"], cursor: ListCursor): Prisma.ReelWhereInput {
-  if (sort === "title") {
-    return {
-      OR: [
-        { title: { gt: cursor.k } },
-        { AND: [{ title: cursor.k }, { id: { gt: cursor.id } }] },
-      ],
-    };
-  }
-  const field = sort === "created" ? "createdAt" : "updatedAt";
   const at = new Date(cursor.k);
   if (Number.isNaN(at.getTime())) {
     throw new ReelError("Некорректный курсор списка.", "LIST_CURSOR", 400);
   }
+  if (sort === "oldest") {
+    return {
+      OR: [{ createdAt: { gt: at } }, { AND: [{ createdAt: at }, { id: { gt: cursor.id } }] }],
+    };
+  }
   return {
-    OR: [{ [field]: { lt: at } }, { AND: [{ [field]: at }, { id: { lt: cursor.id } }] }],
+    OR: [{ createdAt: { lt: at } }, { AND: [{ createdAt: at }, { id: { lt: cursor.id } }] }],
   };
 }
 
@@ -181,7 +178,7 @@ export async function listReels(query: ReelListQuery = {}): Promise<ReelListResu
     const limit = Math.min(Math.max(query.limit ?? REEL_LIST_PAGE, 1), REEL_LIST_LIMIT);
     const q = query.q?.trim();
     const status = query.status ?? "open";
-    const sort = query.sort ?? "updated";
+    const sort = normalizeArchiveListSort(query.sort);
     const range = parseArchiveRange({
       from: query.from,
       to: query.to,
@@ -213,11 +210,7 @@ export async function listReels(query: ReelListQuery = {}): Promise<ReelListResu
 
     const where: Prisma.ReelWhereInput = { AND: pageFilters };
     const orderBy: Prisma.ReelOrderByWithRelationInput[] =
-      sort === "title"
-        ? [{ title: "asc" }, { id: "asc" }]
-        : sort === "created"
-          ? [{ createdAt: "desc" }, { id: "desc" }]
-          : [{ updatedAt: "desc" }, { id: "desc" }];
+      sort === "oldest" ? [{ createdAt: "asc" }, { id: "asc" }] : [{ createdAt: "desc" }, { id: "desc" }];
 
     const [rows, totalCount, matchCount] = await Promise.all([
       prisma.reel.findMany({
@@ -248,7 +241,7 @@ export async function listReels(query: ReelListQuery = {}): Promise<ReelListResu
         ? encodeListCursor({
             sort,
             id: last.id,
-            k: sort === "title" ? last.title : last[sort === "created" ? "createdAt" : "updatedAt"],
+            k: last.createdAt,
             fp: fingerprint,
           })
         : null;

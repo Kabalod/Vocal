@@ -91,8 +91,12 @@ test("P01.1 pure helpers: range, month bounds, day keys, fingerprint", () => {
   const b = archiveFilterFingerprint({ status: "all", q: "x", from: "a", to: "c" });
   assert.notEqual(a, b);
   assert.notEqual(
+    archiveFilterFingerprint({ status: "all", sort: "newest" }),
+    archiveFilterFingerprint({ status: "all", sort: "oldest" }),
+  );
+  assert.equal(
     archiveFilterFingerprint({ status: "all", sort: "created" }),
-    archiveFilterFingerprint({ status: "all", sort: "updated" }),
+    archiveFilterFingerprint({ status: "all", sort: "newest" }),
   );
 });
 

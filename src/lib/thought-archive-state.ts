@@ -4,15 +4,15 @@
  */
 
 import { isRecordingFilterId, type RecordingFilterId } from "@/components/reel-filters";
+import { normalizeArchiveListSort, type ArchiveListSortId } from "@/lib/reel-archive-query";
 import { REEL_LIST_PAGE, type ReelListItemDto } from "@/types/reel";
 
 export const ARCHIVE_LIST_SORTS = [
-  { id: "updated", label: "По обновлению" },
-  { id: "created", label: "По созданию" },
-  { id: "title", label: "По названию" },
+  { id: "newest", label: "Новые" },
+  { id: "oldest", label: "Старые" },
 ] as const;
 
-export type ArchiveListSort = (typeof ARCHIVE_LIST_SORTS)[number]["id"];
+export type ArchiveListSort = ArchiveListSortId;
 
 export type ArchiveListUrlState = {
   q: string;
@@ -34,7 +34,7 @@ export function defaultArchiveListUrlState(): ArchiveListUrlState {
   return {
     q: "",
     status: "all",
-    sort: "updated",
+    sort: "newest",
     from: null,
     to: null,
     dateField: null,
@@ -56,8 +56,7 @@ export function parseArchiveListUrl(params: URLSearchParams): ArchiveListUrlStat
   const q = (params.get("q") ?? "").trim();
   const statusRaw = params.get("status") ?? defaults.status;
   const status = isRecordingFilterId(statusRaw) ? statusRaw : defaults.status;
-  const sortRaw = params.get("sort") ?? defaults.sort;
-  const sort = isArchiveListSort(sortRaw) ? sortRaw : defaults.sort;
+  const sort = normalizeArchiveListSort(params.get("sort"));
   const from = params.get("from")?.trim() || null;
   const to = params.get("to")?.trim() || null;
   const dateFieldRaw = params.get("dateField");
@@ -81,7 +80,7 @@ export function serializeArchiveListUrl(state: ArchiveListUrlState): URLSearchPa
   const q = state.q.trim();
   if (q) params.set("q", q);
   if (state.status !== "all") params.set("status", state.status);
-  if (state.sort !== "updated") params.set("sort", state.sort);
+  if (state.sort !== "newest") params.set("sort", state.sort);
   if (state.from?.trim() && state.to?.trim()) {
     params.set("from", state.from.trim());
     params.set("to", state.to.trim());

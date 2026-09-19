@@ -88,11 +88,18 @@ export function parseArchiveRange(input: {
   };
 }
 
+export type ArchiveListSortId = "newest" | "oldest";
+
+/** Old `updated` / `created` / `title` and unknown values collapse to newest. */
+export function normalizeArchiveListSort(value?: string | null): ArchiveListSortId {
+  return value === "oldest" ? "oldest" : "newest";
+}
+
 export function archiveFilterFingerprint(input: ArchiveListFilters): string {
   const dateField = resolveArchiveDateField(input.dateField);
   return [
     input.status || "open",
-    (input.sort || "updated").trim(),
+    normalizeArchiveListSort(input.sort),
     (input.q ?? "").trim(),
     (input.from ?? "").trim(),
     (input.to ?? "").trim(),

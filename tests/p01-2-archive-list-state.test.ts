@@ -37,7 +37,7 @@ test("P01.2 URL state round-trip keeps search, status, date and sort", () => {
   const state = {
     q: "альфа",
     status: "in_progress" as const,
-    sort: "created" as const,
+    sort: "oldest" as const,
     from: "2026-09-15T00:00:00.000+03:00",
     to: "2026-09-16T00:00:00.000+03:00",
     dateField: "createdAt" as const,
@@ -45,7 +45,7 @@ test("P01.2 URL state round-trip keeps search, status, date and sort", () => {
   const params = serializeArchiveListUrl(state);
   assert.equal(params.get("q"), "альфа");
   assert.equal(params.get("status"), "in_progress");
-  assert.equal(params.get("sort"), "created");
+  assert.equal(params.get("sort"), "oldest");
   assert.equal(params.get("from"), state.from);
   assert.equal(params.get("to"), state.to);
   // createdAt is server default — omitted from URL
@@ -54,7 +54,7 @@ test("P01.2 URL state round-trip keeps search, status, date and sort", () => {
   const parsed = parseArchiveListUrl(params);
   assert.equal(parsed.q, "альфа");
   assert.equal(parsed.status, "in_progress");
-  assert.equal(parsed.sort, "created");
+  assert.equal(parsed.sort, "oldest");
   assert.equal(parsed.from, state.from);
   assert.equal(parsed.to, state.to);
   assert.equal(parsed.dateField, null);
