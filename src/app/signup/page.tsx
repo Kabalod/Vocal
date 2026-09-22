@@ -1,5 +1,11 @@
 import { AuthScreen } from "@/components/AuthScreen";
+import { safeReturnTo } from "@/lib/auth/return-to";
 
-export default function SignupPage() {
-  return <AuthScreen mode="signup" />;
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
+  return <AuthScreen mode="signup" next={safeReturnTo(next)} />;
 }

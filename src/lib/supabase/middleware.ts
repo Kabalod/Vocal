@@ -1,15 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isPublicPagePath } from "@/lib/auth/paths";
 import { getSupabasePublicEnv } from "@/lib/supabase/env";
 
 export async function updateSupabaseSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
   const env = getSupabasePublicEnv();
   if (!env) {
-    if (process.env.NODE_ENV === "production") {
-      return NextResponse.json({ error: "Нужен вход.", code: "UNAUTHENTICATED" }, { status: 401 });
-    }
-    return supabaseResponse;
+    if (process.env.NODE_ENV === "test") return supabaseResponse;
+    return NextResponse.json({ error: "Нужен вход.", code: "UNAUTHENTICATED" }, { status: 401 });
   }
 
   const supabase = createServerClient(env.url, env.publishableKey, {
@@ -35,11 +34,7 @@ export async function updateSupabaseSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isAuthPage =
-    path === "/login" ||
-    path === "/signup" ||
-    path === "/forgot-password" ||
-    path.startsWith("/auth/");
+  const isAuthPage = isPublicPagePath(path);
   const isPublicApi = path === "/api/health" || path.startsWith("/auth/callback");
   const isApi = path.startsWith("/api/");
 

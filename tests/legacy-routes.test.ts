@@ -41,7 +41,8 @@ test("legacy history and jobs redirect to thoughts without loops; settings stay"
   assert.equal(settings.includes("redirect("), false);
   assert.match(settings, /\/api\/criteria/);
   assert.equal(home.includes("redirect("), false);
-  assert.match(home, /UploadDropzone/);
+  assert.match(home, /LandingPage/);
+  assert.equal(home.includes("UploadDropzone"), false);
   assert.match(nav, /href: "\/reels", label: "Мысли"/);
   assert.equal(nav.includes('href: "/history"'), false);
 });
