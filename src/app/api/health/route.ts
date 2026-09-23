@@ -1,36 +1,38 @@
 import { NextResponse } from "next/server";
 import { ffmpegAvailable } from "@/lib/ffmpeg";
-import { VOCAL_SUPABASE_PROJECT_REF, resolveAppDatabaseUrl } from "@/lib/db-target";
+import { resolveAppDatabaseUrl } from "@/lib/db-target";
+import { logApiError } from "@/lib/safe-log";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   let ffmpeg = true;
-  let ffmpegError: string | null = null;
   try {
     ffmpegAvailable();
   } catch (error) {
     ffmpeg = false;
-    ffmpegError = error instanceof Error ? error.message : "FFmpeg недоступен";
+    logApiError("health/ffmpeg", error);
   }
 
   let postgres = false;
-  let postgresError: string | null = null;
   try {
     resolveAppDatabaseUrl();
+    const { assertGeneratedPrismaProvider } = await import("@/lib/prisma-provider");
+    assertGeneratedPrismaProvider();
     const { prisma } = await import("@/lib/db");
     await prisma.$queryRaw`select 1`;
     postgres = true;
   } catch (error) {
-    postgresError = error instanceof Error ? error.message : "Postgres недоступен";
+    logApiError("health/postgres", error);
   }
 
-  return NextResponse.json({
-    ffmpeg,
-    ffmpegError,
-    groq: Boolean(process.env.GROQ_API_KEY?.trim()),
-    postgres,
-    postgresError,
-    project: VOCAL_SUPABASE_PROJECT_REF,
-  });
+  return NextResponse.json(
+    {
+      ffmpeg,
+      groq: Boolean(process.env.GROQ_API_KEY?.trim()),
+      postgres,
+      postgresStatus: postgres ? "ok" : "unavailable",
+    },
+    { status: postgres ? 200 : 503 },
+  );
 }

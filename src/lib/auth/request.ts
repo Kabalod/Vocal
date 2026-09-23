@@ -8,9 +8,9 @@ export function authErrorResponse(error: unknown): NextResponse | null {
   return null;
 }
 
-type AppRouteHandler<C> = (request: Request, context: C) => Promise<Response> | Response;
-
-export function withApiUser<C>(handler: AppRouteHandler<C>): AppRouteHandler<C> {
+export function withApiUser<C>(
+  handler: (request: Request, context: C) => Promise<Response> | Response,
+): (request: Request, context: C) => Promise<Response> {
   return async (request, context) => {
     try {
       const user = await resolveRequestUser();
