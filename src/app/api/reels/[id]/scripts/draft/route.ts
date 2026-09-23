@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { withApiUser } from "@/lib/auth/request";
 import { ReelError } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
 import { deleteScriptDraft, openScriptDraft, parseSourceRefs, patchScriptDraft, ScriptError } from "@/lib/scripts";
@@ -15,8 +15,7 @@ function errorResponse(error: unknown) {
   return NextResponse.json({ error: "Не удалось обработать черновик.", code: "INTERNAL" }, { status: 500 });
 }
 
-export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const POST = withApiUser(async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     let baseVersionId: string | null | undefined;
@@ -31,10 +30,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const PATCH = withApiUser(async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     const body = (await request.json()) as Record<string, unknown>;
@@ -51,10 +49,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const DELETE = withApiUser(async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     const workspace = await deleteScriptDraft(id);
@@ -62,4 +59,4 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

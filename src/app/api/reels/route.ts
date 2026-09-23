@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { withApiUser } from "@/lib/auth/request";
 import { normalizeArchiveListSort } from "@/lib/reel-archive-query";
 import { ReelError, createReel, listReels } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
@@ -16,8 +16,7 @@ function errorResponse(error: unknown) {
   return NextResponse.json({ error: "Не удалось обработать запрос.", code: "INTERNAL" }, { status: 500 });
 }
 
-export async function GET(request: Request) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const GET = withApiUser(async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const q = url.searchParams.get("q") ?? undefined;
@@ -54,10 +53,9 @@ export async function GET(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function POST(request: Request) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const POST = withApiUser(async function POST(request: Request) {
   try {
     const body = (await request.json()) as { title?: unknown; initialNote?: unknown };
     if (typeof body.title !== "string") {
@@ -71,4 +69,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

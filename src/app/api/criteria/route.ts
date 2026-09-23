@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { withApiUser } from "@/lib/auth/request";
 import { canWriteSharedCriteria } from "@/lib/auth/session";
 import { z } from "zod";
 import { ensureCriteria, prisma, resetCriteria } from "@/lib/db";
@@ -7,14 +7,13 @@ import { toCriterionDto } from "@/lib/serialize";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const GET = withApiUser(async function GET() {
   await ensureCriteria();
   const rows = await prisma.criterion.findMany({
     orderBy: [{ categoryOrder: "asc" }, { sortOrder: "asc" }],
   });
   return NextResponse.json({ criteria: rows.map(toCriterionDto) });
-}
+});
 
 const patchSchema = z.object({
   criteria: z.array(
@@ -26,8 +25,7 @@ const patchSchema = z.object({
   ),
 });
 
-export async function PUT(request: Request) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const PUT = withApiUser(async function PUT(request: Request) {
   if (!canWriteSharedCriteria()) {
     return NextResponse.json(
       { error: "Общие критерии может менять только администратор.", code: "CRITERIA_READONLY" },
@@ -62,10 +60,9 @@ export async function PUT(request: Request) {
     orderBy: [{ categoryOrder: "asc" }, { sortOrder: "asc" }],
   });
   return NextResponse.json({ criteria: rows.map(toCriterionDto) });
-}
+});
 
-export async function POST() {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const POST = withApiUser(async function POST() {
   if (!canWriteSharedCriteria()) {
     return NextResponse.json(
       { error: "Общие критерии может менять только администратор.", code: "CRITERIA_READONLY" },
@@ -77,4 +74,4 @@ export async function POST() {
     orderBy: [{ categoryOrder: "asc" }, { sortOrder: "asc" }],
   });
   return NextResponse.json({ criteria: rows.map(toCriterionDto) });
-}
+});

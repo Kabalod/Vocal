@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { withApiUser } from "@/lib/auth/request";
 import { ReelError, createTake, getReel } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
 import { getTakeDto, listTakeDtos } from "@/lib/takes";
@@ -15,8 +15,7 @@ function errorResponse(error: unknown) {
   return NextResponse.json({ error: "Не удалось обработать дубль.", code: "INTERNAL" }, { status: 500 });
 }
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const GET = withApiUser(async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   try {
     const takes = await listTakeDtos(id);
@@ -24,10 +23,9 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const POST = withApiUser(async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   try {
     const reel = await getReel(id);
@@ -63,4 +61,4 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

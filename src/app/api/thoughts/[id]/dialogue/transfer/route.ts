@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { withApiUser } from "@/lib/auth/request";
 import { DialogueError, transferDialogueProposal } from "@/lib/dialogue";
 import { ReelError } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
@@ -8,8 +8,7 @@ import { ScriptError } from "@/lib/scripts";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const POST = withApiUser(async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     const body = (await request.json()) as { messageId?: string };
@@ -25,4 +24,4 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     logApiError("thoughts/dialogue/transfer", error);
     return NextResponse.json({ error: "Не удалось перенести предложение.", code: "INTERNAL" }, { status: 500 });
   }
-}
+});

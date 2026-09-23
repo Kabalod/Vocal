@@ -1,6 +1,6 @@
 import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
-import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { withApiUser } from "@/lib/auth/request";
 import { createReelComparison } from "@/lib/ai/compare";
 import { CompareError, listComparisons, previewTextDiff } from "@/lib/compare";
 import { ReelError } from "@/lib/reels";
@@ -16,8 +16,7 @@ function errorResponse(error: unknown) {
   return NextResponse.json({ error: "Не удалось сравнить дубли." }, { status: 500 });
 }
 
-export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const GET = withApiUser(async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     const url = new URL(request.url);
@@ -37,10 +36,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const POST = withApiUser(async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     const body = (await request.json()) as Record<string, unknown>;
@@ -56,4 +54,4 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

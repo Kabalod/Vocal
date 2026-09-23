@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { isAppTestRuntime } from "@/lib/db-target";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export class AuthError extends Error {
@@ -16,10 +17,19 @@ export type AuthUser = { id: string; email: string | null };
 
 const ownerContext = new AsyncLocalStorage<AuthUser>();
 
+function isTestRuntime() {
+  return isAppTestRuntime();
+}
+
 export function ownerUserId(): string {
   const stored = ownerContext.getStore()?.id;
-  if (stored) return stored;
-  if (process.env.NODE_ENV === "test") {
+  if (stored) {
+    if (stored === "local" && !isTestRuntime()) {
+      throw new AuthError("Нужен вход.", "UNAUTHENTICATED", 401);
+    }
+    return stored;
+  }
+  if (isTestRuntime()) {
     return process.env.VOCAL_TEST_USER_ID?.trim() || "local";
   }
   throw new AuthError();
@@ -42,7 +52,7 @@ export function ownedReelWhere(id: string) {
 }
 
 export async function resolveRequestUser(): Promise<AuthUser> {
-  if (process.env.NODE_ENV === "test" && process.env.VOCAL_REQUIRE_SUPABASE_AUTH !== "1") {
+  if (isTestRuntime() && process.env.VOCAL_REQUIRE_SUPABASE_AUTH !== "1") {
     return { id: process.env.VOCAL_TEST_USER_ID?.trim() || "local", email: "test@vocal.local" };
   }
   const supabase = await createServerSupabaseClient();

@@ -1,12 +1,15 @@
 import { PrismaClient } from "@prisma/client";
 import { DEFAULT_CRITERIA, LEGACY_CRITERION_IDS } from "@/lib/framework";
 import type { CriterionDto } from "@/types/analysis";
+import { resolveAppDatabaseUrl } from "@/lib/db-target";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function createPrisma() {
+  const url = resolveAppDatabaseUrl();
   return new PrismaClient({
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+    datasources: { db: { url } },
   });
 }
 

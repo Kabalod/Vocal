@@ -28,3 +28,9 @@ export async function bindApiUser(): Promise<AuthUser> {
   enterWithOwner(user);
   return user;
 }
+
+/** Keeps owner ALS across awaits. Prefer this over bindApiUser + enterWith. */
+export async function asApiUser<T>(fn: () => Promise<T> | T): Promise<T> {
+  const user = await resolveRequestUser();
+  return runWithOwner(user, fn);
+}

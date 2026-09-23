@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { withApiUser } from "@/lib/auth/request";
 import { ReelError } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
 import { getScriptVersion, ScriptError } from "@/lib/scripts";
@@ -7,8 +7,7 @@ import { getScriptVersion, ScriptError } from "@/lib/scripts";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string; scriptId: string }> }) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const GET = withApiUser(async function GET(_request: Request, context: { params: Promise<{ id: string; scriptId: string }> }) {
   try {
     const { id, scriptId } = await context.params;
     const version = await getScriptVersion(id, scriptId);
@@ -20,4 +19,4 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     logApiError("reels/scripts/[scriptId]", error);
     return NextResponse.json({ error: "Не удалось загрузить версию сценария.", code: "INTERNAL" }, { status: 500 });
   }
-}
+});

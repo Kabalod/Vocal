@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { withApiUser } from "@/lib/auth/request";
 import { writeFile } from "fs/promises";
 import path from "path";
 import { ALLOWED_EXTENSIONS, MAX_UPLOAD_MB } from "@/lib/config";
@@ -17,8 +17,7 @@ import { isTakeInputType } from "@/types/reel";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const POST = withApiUser(async function POST(request: Request) {
   try {
     await ensureStorageDirs();
     const form = await request.formData();
@@ -107,4 +106,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
+});

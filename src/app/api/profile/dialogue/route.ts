@@ -1,6 +1,6 @@
 import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
-import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { withApiUser } from "@/lib/auth/request";
 import { AiBudgetError } from "@/lib/ai/usage-guard";
 import { ProfileError } from "@/lib/profile";
 import {
@@ -25,8 +25,7 @@ function errorResponse(error: unknown) {
   return NextResponse.json({ error: "Не удалось обработать анкету." }, { status: 500 });
 }
 
-export async function GET(request: Request) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const GET = withApiUser(async function GET(request: Request) {
   try {
     const cursor = new URL(request.url).searchParams.get("cursor");
     const workspace = await getProfileWorkspace({ cursor });
@@ -34,10 +33,9 @@ export async function GET(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function POST(request: Request) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const POST = withApiUser(async function POST(request: Request) {
   try {
     const contentType = request.headers.get("content-type") ?? "";
     if (contentType.includes("multipart/form-data")) {
@@ -80,4 +78,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { withApiUser } from "@/lib/auth/request";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
 import { JOB_LEASE_MS } from "@/lib/jobs";
@@ -8,11 +8,10 @@ import { toJobDto } from "@/lib/serialize";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(
+export const POST = withApiUser(async function POST(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   const { id } = await context.params;
   const job = await prisma.job.findFirst({ where: { id, ownerUserId: ownerUserId() } });
   if (!job) {
@@ -57,4 +56,4 @@ export async function POST(
     enqueueJob(id);
   });
   return NextResponse.json({ job: toJobDto(updated), leaseMs: JOB_LEASE_MS });
-}
+});

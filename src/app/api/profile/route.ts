@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { withApiUser } from "@/lib/auth/request";
 import { ProfileError, getProfile, saveProfile } from "@/lib/profile";
 import { logApiError } from "@/lib/safe-log";
 
@@ -14,18 +14,16 @@ function errorResponse(error: unknown) {
   return NextResponse.json({ error: "Не удалось обработать анкету.", code: "INTERNAL" }, { status: 500 });
 }
 
-export async function GET() {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const GET = withApiUser(async function GET() {
   try {
     const profile = await getProfile();
     return NextResponse.json({ profile });
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function PUT(request: Request) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const PUT = withApiUser(async function PUT(request: Request) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     if (body.fields === undefined) {
@@ -36,4 +34,4 @@ export async function PUT(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

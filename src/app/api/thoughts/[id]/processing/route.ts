@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { withApiUser } from "@/lib/auth/request";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
 import { toJobDto } from "@/lib/serialize";
@@ -8,8 +8,7 @@ import { thoughtProcessingPhase } from "@/lib/thought-media";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const GET = withApiUser(async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   const reel = await prisma.reel.findFirst({
     where: { id, ownerUserId: ownerUserId() },
@@ -65,4 +64,4 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
           }
         : null,
   });
-}
+});

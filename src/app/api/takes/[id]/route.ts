@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { withApiUser } from "@/lib/auth/request";
 import { ReelError } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
 import { getTakeDto, updateTake } from "@/lib/takes";
@@ -14,18 +14,16 @@ function errorResponse(error: unknown) {
   return NextResponse.json({ error: "Не удалось обработать дубль.", code: "INTERNAL" }, { status: 500 });
 }
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const GET = withApiUser(async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   const take = await getTakeDto(id);
   if (!take) {
     return NextResponse.json({ error: "Дубль не найден.", code: "TAKE_NOT_FOUND" }, { status: 404 });
   }
   return NextResponse.json({ take });
-}
+});
 
-export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
+export const PATCH = withApiUser(async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   try {
     const body = (await request.json()) as Record<string, unknown>;
@@ -46,4 +44,4 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

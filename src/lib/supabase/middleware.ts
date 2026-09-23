@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isPublicPagePath } from "@/lib/auth/paths";
+import { safeReturnTo } from "@/lib/auth/return-to";
 import { getSupabasePublicEnv } from "@/lib/supabase/env";
 
 export async function updateSupabaseSession(request: NextRequest) {
@@ -47,7 +48,8 @@ export async function updateSupabaseSession(request: NextRequest) {
   }
 
   if (user && (path === "/login" || path === "/signup")) {
-    return NextResponse.redirect(new URL("/reels", request.url));
+    const next = safeReturnTo(request.nextUrl.searchParams.get("next"));
+    return NextResponse.redirect(new URL(next, request.url));
   }
 
   return supabaseResponse;

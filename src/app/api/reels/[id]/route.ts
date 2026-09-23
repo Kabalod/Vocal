@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authErrorResponse, bindApiUser } from "@/lib/auth/request";
+import { withApiUser } from "@/lib/auth/request";
 import { ReelError, getReel, updateReel } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
 import { parseReelStatusInput, type UpdateReelInput } from "@/types/reel";
@@ -15,11 +15,10 @@ function errorResponse(error: unknown) {
   return NextResponse.json({ error: "Не удалось обработать запрос.", code: "INTERNAL" }, { status: 500 });
 }
 
-export async function GET(
+export const GET = withApiUser(async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     const reel = await getReel(id);
@@ -30,13 +29,12 @@ export async function GET(
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function PATCH(
+export const PATCH = withApiUser(async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  try { await bindApiUser(); } catch (error) { const denied = authErrorResponse(error); if (denied) return denied; throw error; }
   try {
     const { id } = await context.params;
     const body = (await request.json()) as Record<string, unknown>;
@@ -95,4 +93,4 @@ export async function PATCH(
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
