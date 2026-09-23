@@ -1,23 +1,31 @@
 "use client";
 
+import { IBM_Plex_Mono } from "next/font/google";
 import Link from "next/link";
 import { authHref } from "@/lib/auth/return-to";
 import { landingCopy, landingDesktopNav } from "@/lib/landing-content";
 import { Benefits } from "@/components/landing/Benefits";
 import { ConversationDemo } from "@/components/landing/ConversationDemo";
-import { FeedbackExample, LandingFaq, ResultExample } from "@/components/landing/LandingExtras";
+import { FeedbackExample, FeedbackMobileCard, LandingFaq, ResultExample } from "@/components/landing/LandingExtras";
 import { LandingHeader } from "@/components/landing/LandingHeader";
 import { PolaroidVideo } from "@/components/landing/PolaroidVideo";
 import { useLandingSignedIn } from "@/components/landing/useLandingSignedIn";
 import "@/components/landing/landing.css";
 
+const paperMono = IBM_Plex_Mono({
+  subsets: ["latin", "cyrillic"],
+  weight: "400",
+  display: "swap",
+  variable: "--font-ibm-plex-mono",
+});
+
 export function LandingPage() {
-  const signedIn = useLandingSignedIn();
-  const ctaHref = signedIn ? "/reels" : authHref("/signup", "/reels");
+  const session = useLandingSignedIn();
+  const ctaHref = session.signedIn ? "/reels" : authHref("/signup", "/reels");
 
   return (
-    <div className="landing">
-      <LandingHeader signedIn={signedIn} />
+    <div className={`landing ${paperMono.variable}`}>
+      <LandingHeader session={session} />
       <main>
         <section className="landing-wrap landing-section landing-hero" aria-labelledby="landing-h1">
           <h1 id="landing-h1">
@@ -53,7 +61,7 @@ export function LandingPage() {
                 <span className="landing-mobile-only">{landingCopy.conversationMobileTitle}</span>
                 <span className="landing-desktop-only">{landingCopy.conversationDesktopTitle}</span>
               </h2>
-              <p className="landing-kicker landing-mobile-only">{landingCopy.conversationKicker}</p>
+              <p className="landing-lead landing-mobile-only">{landingCopy.conversationMobileLead}</p>
               <p className="landing-lead landing-desktop-only">{landingCopy.conversationDesktopLead}</p>
               <ul className="landing-stages">
                 {landingCopy.stages.map((stage, index) => (
@@ -67,10 +75,10 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section id="result" className="landing-wrap landing-section landing-desktop-only" aria-labelledby="landing-result">
+        <section id="result" className="landing-wrap landing-section">
           <div className="landing-split landing-section-grid">
             <ResultExample />
-            <div className="landing-split-copy">
+            <div className="landing-split-copy landing-desktop-only">
               <p className="landing-kicker">{landingCopy.resultKicker}</p>
               <h2 id="landing-result" className="landing-h2">
                 {landingCopy.resultTitle}
@@ -80,17 +88,19 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section id="feedback" className="landing-wrap landing-section landing-desktop-only" aria-labelledby="landing-feedback">
-          <div className="landing-split landing-section-grid">
+        <section id="feedback" className="landing-wrap landing-section">
+          <div className="landing-split landing-section-grid landing-desktop-only">
             <div className="landing-split-copy">
               <p className="landing-kicker">{landingCopy.feedbackKicker}</p>
               <h2 id="landing-feedback" className="landing-h2">
-                {landingCopy.feedbackTitle}
+                <span className="landing-h2-line">{landingCopy.feedbackTitleLines[0]}</span>{" "}
+                <span className="landing-h2-line">{landingCopy.feedbackTitleLines[1]}</span>
               </h2>
               <p className="landing-lead">{landingCopy.feedbackLead}</p>
             </div>
             <FeedbackExample />
           </div>
+          <FeedbackMobileCard />
         </section>
 
         <section id="faq" className="landing-wrap landing-section landing-desktop-only" aria-labelledby="landing-faq">
@@ -129,9 +139,15 @@ export function LandingPage() {
             </a>
           ))}
         </nav>
-        <Link className="landing-login landing-desktop-only" href={signedIn ? "/reels" : authHref("/login")}>
-          {signedIn ? landingCopy.toThoughts : landingCopy.login}
-        </Link>
+        {session.signedIn ? (
+          <Link className="landing-login landing-desktop-only" href="/reels">
+            {landingCopy.toThoughts}
+          </Link>
+        ) : (
+          <Link className="landing-login landing-desktop-only" href={authHref("/login", "/")}>
+            {landingCopy.login}
+          </Link>
+        )}
       </footer>
     </div>
   );

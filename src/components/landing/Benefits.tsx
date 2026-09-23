@@ -3,23 +3,23 @@ import { landingBenefits } from "@/lib/landing-content";
 function BenefitIcon({ id }: { id: string }) {
   if (id === "dialogue") {
     return (
-      <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4.8 8.2A4.4 4.4 0 0 1 9.2 3.8h5.6A4.4 4.4 0 0 1 19.2 8.2v4.6A4.4 4.4 0 0 1 14.8 17.2H10l-4.8 3.2V8.2Z" />
+      <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M7.5 17.7 4.2 20.2V7.8A3.3 3.3 0 0 1 7.5 4.5h9A3.3 3.3 0 0 1 19.8 7.8v6.1A3.3 3.3 0 0 1 16.5 17.2H7.5Z" />
       </svg>
     );
   }
   if (id === "style") {
     return (
-      <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M7.2 3.2h7.6L19.8 8.2v12.6H7.2V3.2Z" />
-        <path d="M14.8 3.2v5h5" />
-        <path d="M10.2 12.2h6M10.2 15.6h4.2" />
+      <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8 4.5h6.2L19 9.3V19.5H8A1.5 1.5 0 0 1 6.5 18V6A1.5 1.5 0 0 1 8 4.5Z" />
+        <path d="M14.1 4.5v4.2H19" />
+        <path d="M9.6 12.6h6.2M9.6 15.8h4.4" />
       </svg>
     );
   }
   return (
-    <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-      <path d="M6.5 18.2v-5.2M12 18.2V6.8M17.5 18.2v-8" />
+    <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6.2 18.6V12M12 18.6V6.4M17.8 18.6v-8.4" />
     </svg>
   );
 }

@@ -1,6 +1,8 @@
 export const LANDING_VIDEO_SRC = process.env.NEXT_PUBLIC_LANDING_VIDEO_SRC?.trim() ?? "";
 export const LANDING_POSTER_SRC =
   process.env.NEXT_PUBLIC_LANDING_POSTER_SRC?.trim() || "/landing/demo-poster.jpg";
+export const LANDING_AVATAR_SRC =
+  process.env.NEXT_PUBLIC_LANDING_AVATAR_SRC?.trim() || "/landing/demo-avatar.jpg";
 export const LANDING_DEMO_POSTER_ALT =
   "Иллюстративный демо-кадр с макета: человек говорит в микрофон. Это не портрет основателя Vocal.";
 
@@ -17,9 +19,11 @@ export const landingCopy = {
   ctaHint: "Начните с мысли — текстом или голосом",
   polaroidCaption: "От моей мысли до записи",
   login: "Войти",
+  logout: "Выйти",
   toThoughts: "К мыслям",
   conversationKicker: "Пример диалога",
-  conversationMobileTitle: "Начните с разговора",
+  conversationMobileTitle: "Найдите, что хотите сказать",
+  conversationMobileLead: "Начните с мысли. Vocal поможет раскрыть её вопросами",
   conversationDesktopTitle: "От общей идеи — к вашей истории",
   conversationDesktopLead:
     "Vocal задаёт вопросы, чтобы найти конкретный случай и главное, что вы хотите сказать",
@@ -32,12 +36,18 @@ export const landingCopy = {
   resultMarker: "Иллюстративный пример",
   feedbackKicker: "Обратная связь",
   feedbackTitle: "Записали дубль? Найдите следующий шаг",
+  feedbackTitleLines: ["Записали дубль?", "Найдите следующий шаг"] as const,
   feedbackLead: "Посмотрите, что получилось и что стоит уточнить перед новой записью",
   feedbackCardTitle: "Пример обратной связи",
   feedbackKeepTitle: "Что получилось",
   feedbackKeep: "Личный случай сразу раскрывает тему",
   feedbackTryTitle: "Что попробовать",
   feedbackTry: "Поясните, почему снова выбрали обучение вместо записи",
+  feedbackMobileTitle: "Каждый дубль — понятнее",
+  feedbackMobileKeepTitle: "Уже получилось",
+  feedbackMobileKeep: "Личный случай раскрывает тему",
+  feedbackMobileTryTitle: "В следующем дубле",
+  feedbackMobileTry: "Расскажите, почему снова выбрали обучение вместо записи",
   faqKicker: "Вопросы",
   faqTitle: "Перед первой записью",
   faqLead: "Короткие ответы на частые вопросы.",
@@ -79,6 +89,20 @@ export const landingConversation = [
   { role: "agent" as const, text: "Был случай, когда вы выбрали обучение вместо записи?" },
   { role: "user" as const, text: "Купил третий курс по съёмке, хотя ещё не записал ни одного ролика." },
   { role: "agent" as const, text: "Попробуйте начать с этого случая. Что вы тогда поняли?" },
+];
+
+export const landingDesktopConversation = [
+  { role: "user" as const, text: "Хочу рассказать, почему всё время учусь, но не начинаю." },
+  { role: "agent" as const, text: "Когда вы заметили это за собой?" },
+  { role: "user" as const, text: "Купил третий курс по съёмке, хотя ещё не записал ни одного ролика." },
+  { role: "agent" as const, text: "Начните с этого случая. Что вы тогда поняли?" },
+];
+
+export const landingMobileConversation = [
+  { role: "user" as const, text: "Хочу рассказать, почему всё время учусь, но не начинаю." },
+  { role: "agent" as const, text: "Когда вы заметили это за собой?" },
+  { role: "user" as const, text: "Купил третий курс по съёмке, но ещё не записал ни одного ролика." },
+  { role: "agent" as const, text: "Начните с этого случая. Что вы тогда поняли?" },
 ];
 
 export const landingFaq = [
