@@ -1,56 +1,62 @@
 # V00 — карта файлов ядра мысли
 
-Карта описывает дерево **`4ac2863`** (кандидат, не назначенный BASE). После приёмки V00 и назначения BASE обновить эту карту, если SHA другой.
+Дерево **`AUDITED_APP_SHA`** `4ac28630692860a3092cf6c4cbc05ed791eb549d` (кандидат, не BASE). Матрица: [`PLAN.md`](./PLAN.md).
 
-Не создавать до V01+ логические модули плана: `thought-state` reducer, `suggest_take` handler, отдельный `workingTake`.
+Не создавать в V00: ThoughtState, четыре действия агента, `workingTakeId`, снятие confirm.
 
-## Существующие ядра (читать, расширять на V01+)
+## Матрица этапов
 
-| Область | Файлы на `4ac2863` | Этап плана |
+- **V01** — актуальный дубль, точная ревизия, изоляция запросов.
+- **V02** — ThoughtState.
+- **V03** — четыре действия агента и решение о готовности.
+- **V04** — портрет и персонализация вопросов.
+- **V05** — UI перехода к записи и роль сценария.
+- **V06** — разбор следующего дубля и завершение.
+- **V07** — библиотека приёмов и полный цикл.
+
+## Существующие ядра
+
+| Область | Файлы на `4ac2863` | Этап |
 |---|---|---|
-| Диалог мысли | `src/lib/dialogue.ts`, `src/app/api/thoughts/[id]/dialogue/**` | V01 handler / лимиты; V02 сценарий в том же ходе |
-| Помощь сценарием | `requestScriptHelp` в `dialogue.ts`; `src/lib/ai/script.ts`, `src/lib/scripts.ts`, `.../scripts/generate` | V02 |
-| Статус мысли / завершение | `Reel.status`, `src/lib/reels.ts`, `src/lib/thought-completion.ts` (backfill `finalTakeId`), UI `CompletionSummary.tsx`, `ReelStudio.tsx` | V03 reducer; V05 complete |
-| Дубли | `Take`, `selectedTakeId`, `finalTakeId`, `src/lib/thought-media.ts` | V04 `workingTake` / `suggest_take` |
-| Профиль / confirm | `src/lib/profile.ts`, `profile-dialogue.ts`, `profile-portrait.ts`, `ai/profile.ts`, `components/ProfileConversation.tsx`, `app/api/profile/**` | **не этот цикл** (I05) |
-| Контекст | `src/lib/reel-context.ts`, `ai-runtime-context.ts` | читать; не ломать snapshot |
-| Вызов A | `src/lib/ai/complete.ts`, `usage-guard.ts`, `groq.ts` | V01 ключи inflight; не новый транспорт |
-| Загрузка / Job | `uploads` → `pipeline.ts` → `analyze.ts` / `stt.ts` | не ядро диалога; не смешивать с V01 |
-| Схема | `prisma/schema.postgres.prisma` (+ sqlite-схемы для тестов, если есть в репо) | V03/V04 колонки только по плану |
+| Диалог мысли | `src/lib/dialogue.ts`, `src/app/api/thoughts/[id]/dialogue/**` | V01 контекст и ключи; V03 контракт действий |
+| Актуальный дубль / ревизия | `Take`, `TranscriptRevision`, `selectedTakeId`, `finalTakeId` | V01 |
+| Помощь сценарием | `requestScriptHelp` в `dialogue.ts`; `src/lib/ai/script.ts`, `src/lib/scripts.ts`, generate API | V05 |
+| Статус карточки | `src/types/reel.ts`, `src/lib/reels.ts` | читать; пользовательские группы не расширять |
+| Завершение | `thoughtCompletionGate` и `backfillFinalTakeIds` в `src/lib/thought-completion.ts`; UI `CompletionSummary.tsx`, `ReelStudio.tsx` | V06; backfill — служебная функция |
+| Разбор дубля | `src/lib/ai/review.ts`, `questions.ts`, pipeline STT | V06 согласовать с циклом; не драйвер баллов |
+| Портрет | `src/lib/profile.ts`, `profile-dialogue.ts`, `profile-portrait.ts`, `ai/profile.ts`, `ProfileConversation.tsx`, `app/api/profile/**` | **V04** |
+| Контекст сборки | `src/lib/reel-context.ts`, `ai-runtime-context.ts` | V01 / V04 не ломать snapshot |
+| Вызов A | `src/lib/ai/complete.ts`, `usage-guard.ts`, `groq.ts` | V01 inflight |
+| Загрузка / Job | `uploads` → `pipeline.ts` → `analyze.ts` / `stt.ts` | не смешивать транспорт в V01 |
+| Схема | `prisma/schema.postgres.prisma` | колонки ThoughtState — V02; completion — V06 |
 | Auth | `src/lib/auth/**`, `src/lib/supabase/**` | не переписывать в ядре |
 | Лендинг | `src/app/page.tsx`, `src/components/landing/**` | не трогать |
 | Канон UI | `docs/design/references-new/` экраны 01–09; `/reels` = 09 | визуал не этот цикл |
+| Документы цикла | `docs/core-loop/*` | V00 |
 
-## Локальные файлы вне `4ac2863` (не расширять как канон V00)
+## Локальные файлы вне `4ac2863`
 
-Появились в грязном дереве после лендинг-коммита. До отдельной приёмки **не** считать существующим ядром:
+Не канон V00, пока не приняты отдельным коммитом:
 
 - `src/lib/dialogue-reply.ts`
 - `src/lib/thought-opening.ts`
-- `src/lib/thought-completion-gate.ts`
-
-Если пользователь примет их отдельным коммитом до V01, обновить карту.
+- `src/lib/thought-completion-gate.ts` (на кандидате gate живёт в `thought-completion.ts`)
 
 ## Новые модули (не создавать в V00)
 
-Имена плана, не обязательно отдельные процессы:
+- ThoughtState / reducer (**V02**)
+- действия `ask_question` / `suggest_take` / `content_sufficient` / `redirect_to_task` (**V03**)
+- `workingTakeId` (**V01**)
+- библиотека приёмов (**V07**)
 
-- `thought-state` / reducer статусов мысли
-- `suggest_take`
-- колонка `workingTakeId`
-- отдельный «второй чат» или экран выбора дубля вне текущего studio
+## Тесты
 
-## Тесты, которые затронет ядро (не отключать suite)
+Ожидаемые переписывания по этапам: диалог и третий дубль (V01), состояние (V02), действия (V03), портрет без confirm (V04), запись/сценарий (V05), разбор и завершение без `finalScriptId` (V06), полный цикл (V07).
 
-Ожидаемые переписывания на V01+: диалог (`tests` вокруг `dialogue`), завершение мысли / `reels` status, e2e матрица мысли.
+Оставить зелёными без ослабления: `test:reels`, lint, typecheck, build. I01 не начинать.
 
-Оставить зелёными без ослабления: `package.json` `test:reels`, lint, typecheck, build.
+## Не трогать в V00
 
-Не чинить «заодно» красный `profile-dialogue` и не начинать I01.
-
-## Не трогать в этом цикле
-
-- `docs/design/references-new/`, champagne/STAGE/Desktop-архивы
-- лендинг L00–L07 и его приёмка
-- I01 память / operation handler / scoring-v1
-- подтверждение профиля (снятие confirm — I05)
+- визуальный канон, champagne/STAGE/Desktop-архивы
+- лендинг и Auth-приёмка
+- I01 память / scoring-v1 как отдельный интеллект-цикл
