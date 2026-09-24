@@ -412,7 +412,7 @@ async function applyReelUpdate(id: string, input: UpdateReelInput): Promise<Reel
     if (nextFinalScript) await assertFinalScriptReady(id, nextFinalScript);
   }
 
-  const data: Prisma.ReelUpdateManyMutationInput = {};
+  const data: Prisma.ReelUncheckedUpdateManyInput = {};
   if (input.title !== undefined) {
     const title = input.title.trim();
     if (!title) throw new ReelError("Нужно название карточки.", "TITLE_REQUIRED");
@@ -445,15 +445,14 @@ async function applyReelUpdate(id: string, input: UpdateReelInput): Promise<Reel
     }
   }
   if (input.workingTakeId !== undefined) {
-    if (input.workingTakeId === null) {
-      data.workingTakeId = null;
-    } else {
-      const take = await prisma.take.findUnique({ where: { id: input.workingTakeId } });
-      if (!take || take.reelId !== id) {
-        throw new ReelError("Рабочий дубль должен принадлежать этой карточке.", "TAKE_NOT_IN_REEL");
-      }
-      data.workingTakeId = take.id;
+    if (!input.workingTakeId) {
+      throw new ReelError("Нужен явный рабочий дубль.", "WORKING_TAKE_REQUIRED", 409);
     }
+    const take = await prisma.take.findUnique({ where: { id: input.workingTakeId } });
+    if (!take || take.reelId !== id) {
+      throw new ReelError("Рабочий дубль должен принадлежать этой карточке.", "TAKE_NOT_IN_REEL");
+    }
+    data.workingTakeId = take.id;
   }
   if (input.finalTakeId !== undefined) {
     if (input.finalTakeId === null) {
@@ -473,12 +472,14 @@ async function applyReelUpdate(id: string, input: UpdateReelInput): Promise<Reel
     input.title === undefined &&
     input.initialNote === undefined &&
     input.status === undefined &&
-    input.selectedTakeId === undefined;
+    input.selectedTakeId === undefined &&
+    input.workingTakeId === undefined;
   const statusOnlyPatch =
     input.status !== undefined &&
     input.title === undefined &&
     input.initialNote === undefined &&
     input.selectedTakeId === undefined &&
+    input.workingTakeId === undefined &&
     input.finalTakeId === undefined;
 
   if (takeOnlyPatch && current.finalTakeId === (input.finalTakeId ?? null)) {

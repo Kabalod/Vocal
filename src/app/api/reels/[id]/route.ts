@@ -70,6 +70,15 @@ export const PATCH = withApiUser(async function PATCH(
       }
       input.selectedTakeId = body.selectedTakeId as string | null;
     }
+    if ("workingTakeId" in body) {
+      if (typeof body.workingTakeId !== "string") {
+        return NextResponse.json(
+          { error: "Рабочий дубль должен принадлежать этой карточке.", code: "TAKE_NOT_IN_REEL" },
+          { status: 400 },
+        );
+      }
+      input.workingTakeId = body.workingTakeId;
+    }
     if ("finalTakeId" in body) {
       if (body.finalTakeId !== null && typeof body.finalTakeId !== "string") {
         return NextResponse.json(

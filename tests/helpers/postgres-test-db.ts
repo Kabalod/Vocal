@@ -46,6 +46,7 @@ function applyBaseline(baseUrl: string, schema: string) {
   const extras = [
     "prisma/migrations/1_postgres_rls_revoke/migration.sql",
     "prisma/migrations/2_v01_working_take/migration.sql",
+    "prisma/migrations/3_v01_working_take_fk/migration.sql",
   ];
   for (const rel of extras) {
     const file = path.join(repoRoot, rel);

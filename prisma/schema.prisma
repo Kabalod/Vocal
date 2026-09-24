@@ -22,10 +22,12 @@ model Reel {
   selectedScriptId String?
   finalScriptId    String?
   ownerUserId      String
+  workingTake      Take?                  @relation("ReelWorkingTake", fields: [workingTakeId], references: [id], onDelete: Restrict)
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
 
   @@index([ownerUserId, createdAt])
+  @@index([workingTakeId])
   takes            Take[]
   contextSnapshots ReelContextSnapshot[]
   reviews          Review[]
@@ -98,6 +100,7 @@ model Take {
   jobs                  Job[]
   transcripts           TranscriptRevision[]
   reviews               Review[]
+  workingForReels       Reel[]                @relation("ReelWorkingTake")
 
   @@unique([reelId, number])
   @@unique([reelId, idempotencyKey])
