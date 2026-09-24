@@ -7,23 +7,11 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { assembleReelContext } from "../src/lib/reel-context";
 import { emptyProfileFields, type ProfileFieldValue } from "../src/types/profile";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 function fields(patch: Partial<Record<string, { text: string; usage: "in_text" | "understanding" }>>): ProfileFieldValue[] {
   return emptyProfileFields().map((field) => {
@@ -66,11 +54,8 @@ test("assembleReelContext is deterministic and respects selection and usage", ()
 
 test("profile and reel context API: save, skip, snapshot survives profile change", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+      t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -79,7 +64,6 @@ test("profile and reel context API: save, skip, snapshot survives profile change
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { GET: getProfile, PUT: putProfile } = await import("../src/app/api/profile/route");
   const { POST: createReel } = await import("../src/app/api/reels/route");

@@ -7,32 +7,17 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { assertOwnedObjectPath, PRIVATE_MEDIA_PREFIX } from "../src/lib/media-access";
 import { AuthError, legacyOwnerUserId, runWithOwner } from "../src/lib/auth/session";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
-
 test("A/B isolation: read, change, export, files, job retry; ID spoofing fails", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-auth-iso-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+    (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -41,7 +26,6 @@ test("A/B isolation: read, change, export, files, job retry; ID spoofing fails",
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { POST } = await import("../src/app/api/reels/route");
   const { GET: itemGet, PATCH } = await import("../src/app/api/reels/[id]/route");

@@ -7,22 +7,10 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import type { AnalysisResultPayload } from "../src/types/analysis";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 function fakePayload(transcript: string): AnalysisResultPayload {
   return {
@@ -58,12 +46,9 @@ function fakePayload(transcript: string): AnalysisResultPayload {
 
 test("thought media create validates, is idempotent, and builds script after STT", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-thought-media-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  process.env.VOCAL_SKIP_JOB_ENQUEUE = "1";
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+    process.env.VOCAL_SKIP_JOB_ENQUEUE = "1";
+    t.after(async () => {
     delete process.env.VOCAL_SKIP_JOB_ENQUEUE;
     await prisma.$disconnect();
     await resetPrismaClient();
@@ -73,7 +58,6 @@ test("thought media create validates, is idempotent, and builds script after STT
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { POST } = await import("../src/app/api/thoughts/media/route");
   const { GET: getProcessing } = await import("../src/app/api/thoughts/[id]/processing/route");

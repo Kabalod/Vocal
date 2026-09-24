@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import {
   encodeDialogueCursor,
   pageDialogueItems,
@@ -25,19 +26,6 @@ import { finishVoiceRecording } from "../src/lib/media-session";
 import { createThoughtFromText } from "../src/lib/thought-create";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 test("dialogue cursor pages last N and older without duplicates", () => {
   const items = Array.from({ length: 5 }, (_, index) => ({
@@ -65,13 +53,11 @@ test("dialogue cursor pages last N and older without duplicates", () => {
 
 test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-dialogue-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  const { prisma, url } = await withPostgresTestDb(t);
+    delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
@@ -81,7 +67,6 @@ test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", asy
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { reel } = await createThoughtFromText({
     title: "Диалог",

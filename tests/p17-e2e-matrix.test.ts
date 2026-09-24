@@ -9,6 +9,7 @@ import { test } from "node:test";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { runtimePortraitFields } from "../src/lib/ai-runtime-context";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { jobDeepLinkHref, legacyHistoryHref, legacyUserRedirect } from "../src/lib/legacy-routes";
 import { markJobFailed } from "../src/lib/jobs";
 import { readStoredProfilePayload } from "../src/lib/profile";
@@ -20,19 +21,6 @@ import {
 import { studioRecordGate } from "../src/lib/recording-session";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 function src(rel: string) {
   return readFileSync(path.join(repoRoot, rel), "utf8");
@@ -59,15 +47,13 @@ test("P17 matrix: thought without profile through finals, upload, compare, expor
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-p17-"));
   const storage = path.join(dir, "storage");
   mkdirSync(storage, { recursive: true });
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  process.env.VOCAL_STORAGE_ROOT = storage;
+  const { prisma, url } = await withPostgresTestDb(t);
+    process.env.VOCAL_STORAGE_ROOT = storage;
   process.env.VOCAL_SKIP_JOB_ENQUEUE = "1";
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
@@ -78,7 +64,6 @@ test("P17 matrix: thought without profile through finals, upload, compare, expor
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { getProfileWorkspace } = await import("../src/lib/profile-dialogue");
   const { listReels, updateReel, getReel, createTake } = await import("../src/lib/reels");

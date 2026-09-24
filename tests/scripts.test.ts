@@ -7,29 +7,14 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
-
 test("scripts: manual save, versions, generate, restore, sources, take link", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-scripts-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+      t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -38,7 +23,6 @@ test("scripts: manual save, versions, generate, restore, sources, take link", as
       /* windows */
     }
   });
-  migrateDeploy(url);
 
   const { createReel, createTake, getReel } = await import("../src/lib/reels");
   const { ensureOriginalFromText } = await import("../src/lib/transcripts");

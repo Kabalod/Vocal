@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import {
   P13_P16_TO_R_PHASE,
   productUserStatusLabels,
@@ -17,19 +18,6 @@ import { STALE_PROCESSING_MS, STALE_PROCESSING_USER_MESSAGE, studioShouldSilentR
 import { emptyProfileFields } from "../src/types/profile";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 test("R3 keeps R1 mapping and reconnect/reload helpers", () => {
   assert.deepEqual(P13_P16_TO_R_PHASE, {
@@ -59,12 +47,9 @@ test("R3 keeps R1 mapping and reconnect/reload helpers", () => {
 
 test("R3 fails stale dialogue processing and recovers expired or exhausted jobs", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-r3-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  process.env.VOCAL_SKIP_JOB_ENQUEUE = "1";
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+    process.env.VOCAL_SKIP_JOB_ENQUEUE = "1";
+    t.after(async () => {
     delete process.env.VOCAL_SKIP_JOB_ENQUEUE;
     await prisma.$disconnect();
     await resetPrismaClient();
@@ -74,7 +59,6 @@ test("R3 fails stale dialogue processing and recovers expired or exhausted jobs"
       /* windows */
     }
   });
-  migrateDeploy(url);
 
   const { createReel, createTake } = await import("../src/lib/reels");
   const { listDialoguePage, ensureReelThread } = await import("../src/lib/dialogue");

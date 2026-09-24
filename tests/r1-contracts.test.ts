@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import {
   P13_P16_TO_R_PHASE,
   finalsStayIndependent,
@@ -18,19 +19,6 @@ import {
 import { emptyProfileFields } from "../src/types/profile";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 test("R1 maps P13–P16 later and locks user statuses, scriptless record and amend", () => {
   assert.deepEqual(P13_P16_TO_R_PHASE, {
@@ -75,11 +63,8 @@ test("R1 maps P13–P16 later and locks user statuses, scriptless record and ame
 
 test("API keeps final take and final script on separate writes", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-r1-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+      t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -88,7 +73,6 @@ test("API keeps final take and final script on separate writes", async (t) => {
       /* windows */
     }
   });
-  migrateDeploy(url);
 
   const { createReel, createTake, getReel, updateReel } = await import("../src/lib/reels");
   const { saveManualScript, setFinalScript } = await import("../src/lib/scripts");

@@ -15,22 +15,10 @@ import {
   sanitizeExportFilename,
 } from "../src/lib/canonical-export";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { P13_P16_TO_R_PHASE } from "../src/lib/product-contracts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 test("R7 builds a .txt of the chosen script and keeps text on copy failure", async () => {
   assert.equal(P13_P16_TO_R_PHASE.P16, "R7");
@@ -89,11 +77,8 @@ test("R7 builds a .txt of the chosen script and keeps text on copy failure", asy
 
 test("canonical txt export is idempotent and does not include another thought", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-r7-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+      t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -102,7 +87,6 @@ test("canonical txt export is idempotent and does not include another thought", 
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { createReel } = await import("../src/lib/reels");
   const { saveManualScript } = await import("../src/lib/scripts");

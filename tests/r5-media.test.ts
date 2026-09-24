@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { clientThoughtMediaError } from "../src/lib/media-session";
 import { classifyPipelineError } from "../src/lib/pipeline";
 import { P13_P16_TO_R_PHASE, scriptlessTakeProcessAllowed } from "../src/lib/product-contracts";
@@ -17,19 +18,6 @@ import {
 import { TAKE_UPLOAD_STALE_MS, takeUploadClaimable } from "../src/lib/takes";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 test("R5 classifies take limits, stale pending reclaim, and scriptless process", () => {
   assert.equal(P13_P16_TO_R_PHASE.P15, "R5+R8");
@@ -93,13 +81,10 @@ test("R5 classifies take limits, stale pending reclaim, and scriptless process",
 test("stale pending take upload is reclaimed on retry", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-r5-stale-"));
   const storage = path.join(dir, "storage");
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  process.env.VOCAL_STORAGE_ROOT = storage;
+  const { prisma, url } = await withPostgresTestDb(t);
+    process.env.VOCAL_STORAGE_ROOT = storage;
   process.env.VOCAL_SKIP_JOB_ENQUEUE = "1";
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+    t.after(async () => {
     delete process.env.VOCAL_SKIP_JOB_ENQUEUE;
     await prisma.$disconnect();
     await resetPrismaClient();
@@ -109,7 +94,6 @@ test("stale pending take upload is reclaimed on retry", async (t) => {
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { createReel } = await import("../src/lib/reels");
   const { saveUploadedTake, TAKE_UPLOAD_STALE_MS: staleMs } = await import("../src/lib/takes");

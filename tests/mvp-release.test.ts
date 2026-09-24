@@ -8,6 +8,7 @@ import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { SHELL_NAV } from "../src/components/shell-nav";
 import { VOCAL_USER_STATUSES } from "../src/components/vocal-ui/kit";
 import { createAppBackup, restoreAppBackup, sha256File } from "../src/lib/backup";
@@ -15,19 +16,6 @@ import { assertThoughtMediaFile } from "../src/lib/thought-media";
 import { existsSync } from "node:fs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 test("user statuses, nav and media errors stay inside the MVP dictionary", () => {
   assert.deepEqual(
@@ -46,14 +34,12 @@ test("user statuses, nav and media errors stay inside the MVP dictionary", () =>
 test("release routes: thought, dialogue, draft, finals, profile context, usage, backup", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-release-"));
   const dbPath = path.join(dir, "test.db");
-  const url = fileUrl(dbPath);
-  process.env.DATABASE_URL = url;
-  process.env.VOCAL_STORAGE_ROOT = dir;
+  const { prisma, url } = await withPostgresTestDb(t);
+    process.env.VOCAL_STORAGE_ROOT = dir;
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
@@ -63,7 +49,6 @@ test("release routes: thought, dialogue, draft, finals, profile context, usage, 
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { listReels, updateReel, getReel } = await import("../src/lib/reels");
   const { createThoughtFromText } = await import("../src/lib/thought-create");

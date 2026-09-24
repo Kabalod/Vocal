@@ -7,22 +7,10 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import type { AnalysisResultPayload } from "../src/types/analysis";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 function fakePayload(transcript: string): AnalysisResultPayload {
   return {
@@ -58,11 +46,8 @@ function fakePayload(transcript: string): AnalysisResultPayload {
 
 test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versions", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-jobs-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+      t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -71,7 +56,6 @@ test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versi
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { createReel, createTake } = await import("../src/lib/reels");
   const { processJob } = await import("../src/lib/pipeline");

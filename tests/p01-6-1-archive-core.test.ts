@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { normalizeArchiveListSort } from "../src/lib/reel-archive-query";
 import {
   applyArchiveCalendarRange,
@@ -18,19 +19,6 @@ import {
 } from "../src/lib/thought-archive-state";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string) {
-  return `file:${dbPath.replaceAll("\\", "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: root,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 test("P01.6-1 newest/oldest stay stable and old sort params collapse to newest", () => {
   assert.equal(normalizeArchiveListSort("newest"), "newest");
@@ -106,11 +94,8 @@ test("P01.6-1 list order and old sort query stay safe", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-p01-6-1-"));
   const dbPath = path.join(dir, "test.db");
   closeSync(openSync(dbPath, "a"));
-  const url = fileUrl(dbPath);
-  process.env.DATABASE_URL = url;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+      t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -119,7 +104,6 @@ test("P01.6-1 list order and old sort query stay safe", async (t) => {
       /* windows */
     }
   });
-  migrateDeploy(url);
 
   const { GET: listGet } = await import("../src/app/api/reels/route");
   const { listReels } = await import("../src/lib/reels");
@@ -184,11 +168,9 @@ test("P01.6-1 cursor pages with limit=2 keep newest/oldest complete and unique",
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-p01-6-1-cursor-"));
   const dbPath = path.join(dir, "test.db");
   closeSync(openSync(dbPath, "a"));
-  const url = fileUrl(dbPath);
-  process.env.DATABASE_URL = url;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+    await resetPrismaClient();
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -197,7 +179,6 @@ test("P01.6-1 cursor pages with limit=2 keep newest/oldest complete and unique",
       /* windows */
     }
   });
-  migrateDeploy(url);
 
   const { GET: listGet } = await import("../src/app/api/reels/route");
   const same = new Date("2026-09-18T12:00:00.000Z");

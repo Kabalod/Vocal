@@ -8,6 +8,7 @@ import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { assembleReelContext } from "../src/lib/reel-context";
 import {
   applyFieldOperations,
@@ -21,19 +22,6 @@ import { fallbackProfileReply, parseProfileAiReply } from "../src/lib/ai/profile
 import { emptyProfileFields, LOCAL_PROFILE_ID } from "../src/types/profile";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 test("merge keeps confirmed meanings and empty patch does not wipe", () => {
   const current = emptyProfileFields().map((field) =>
@@ -160,13 +148,11 @@ test("sanitize and parse accept live Groq value patch and empty reply", () => {
 
 test("profile dialogue covers keys, voice skips confirm, reload and snapshots stay", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-dlg-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  const { prisma, url } = await withPostgresTestDb(t);
+    delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
@@ -176,7 +162,6 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const {
     startProfileDialogue,
@@ -469,13 +454,11 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
 
 test("parallel profile answers rematch onto the latest portrait", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-race-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  const { prisma, url } = await withPostgresTestDb(t);
+    delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
@@ -485,7 +468,6 @@ test("parallel profile answers rematch onto the latest portrait", async (t) => {
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { startProfileDialogue, sendProfileMessage, getProfileWorkspace } = await import(
     "../src/lib/profile-dialogue"
@@ -563,12 +545,11 @@ test("parallel profile answers rematch onto the latest portrait", async (t) => {
 
 test("late answer for the same field does not overwrite a newer value", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-stale-"));
-  const url = fileUrl(path.join(dir, "test.db"));
+  const { prisma, url } = await withPostgresTestDb(t);
   process.env.DATABASE_URL = url;
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
   t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
@@ -579,7 +560,6 @@ test("late answer for the same field does not overwrite a newer value", async (t
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { startProfileDialogue, sendProfileMessage, getProfileWorkspace } = await import(
     "../src/lib/profile-dialogue"
@@ -633,12 +613,11 @@ test("late answer for the same field does not overwrite a newer value", async (t
 
 test("stale ready reply cannot complete after a newer clarify", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-stale-complete-"));
-  const url = fileUrl(path.join(dir, "test.db"));
+  const { prisma, url } = await withPostgresTestDb(t);
   process.env.DATABASE_URL = url;
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
   t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
@@ -649,7 +628,6 @@ test("stale ready reply cannot complete after a newer clarify", async (t) => {
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { startProfileDialogue, sendProfileMessage, getProfileWorkspace } = await import(
     "../src/lib/profile-dialogue"
@@ -722,12 +700,11 @@ test("stale ready reply cannot complete after a newer clarify", async (t) => {
 
 test("incomplete intake resume keeps the current question", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-resume-"));
-  const url = fileUrl(path.join(dir, "test.db"));
+  const { prisma, url } = await withPostgresTestDb(t);
   process.env.DATABASE_URL = url;
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
   t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
@@ -738,7 +715,6 @@ test("incomplete intake resume keeps the current question", async (t) => {
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const {
     startProfileDialogue,
@@ -816,12 +792,11 @@ test("incomplete intake resume keeps the current question", async (t) => {
 
 test("unresolved contradiction does not publish a portrait", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-conflict-"));
-  const url = fileUrl(path.join(dir, "test.db"));
+  const { prisma, url } = await withPostgresTestDb(t);
   process.env.DATABASE_URL = url;
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
   t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
@@ -832,7 +807,6 @@ test("unresolved contradiction does not publish a portrait", async (t) => {
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { startProfileDialogue, sendProfileMessage } = await import("../src/lib/profile-dialogue");
   await startProfileDialogue();

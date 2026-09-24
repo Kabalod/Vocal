@@ -7,32 +7,17 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { emptyThoughtDraft, newThoughtIdempotencyKey } from "../src/lib/thought-draft";
 import { thoughtUserStatus } from "../src/lib/thought-preview";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
-
 test("text thought create is one transaction, idempotent, and keeps draft on error", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-thought-text-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  delete process.env.VOCAL_FAIL_THOUGHT_CREATE;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+    delete process.env.VOCAL_FAIL_THOUGHT_CREATE;
+    t.after(async () => {
     delete process.env.VOCAL_FAIL_THOUGHT_CREATE;
     await prisma.$disconnect();
     await resetPrismaClient();
@@ -42,7 +27,6 @@ test("text thought create is one transaction, idempotent, and keeps draft on err
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { POST } = await import("../src/app/api/thoughts/route");
   const { GET: getReel } = await import("../src/app/api/reels/[id]/route");
@@ -158,12 +142,10 @@ test("text thought create is one transaction, idempotent, and keeps draft on err
 
 test("concurrent thought create with the same key returns one thought", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-thought-race-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  delete process.env.VOCAL_FAIL_THOUGHT_CREATE;
+  const { prisma, url } = await withPostgresTestDb(t);
+    delete process.env.VOCAL_FAIL_THOUGHT_CREATE;
   await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -172,7 +154,6 @@ test("concurrent thought create with the same key returns one thought", async (t
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { POST } = await import("../src/app/api/thoughts/route");
   const key = "idem-thought-race-1";

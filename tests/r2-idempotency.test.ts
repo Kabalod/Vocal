@@ -8,6 +8,7 @@ import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import {
   P13_P16_TO_R_PHASE,
   finalsStayIndependent,
@@ -18,19 +19,6 @@ import {
 import { emptyProfileFields } from "../src/types/profile";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 test("R2 keeps R1 mapping and product invariants", () => {
   assert.deepEqual(P13_P16_TO_R_PHASE, {
@@ -46,11 +34,8 @@ test("R2 keeps R1 mapping and product invariants", () => {
 
 test("R2 retries do not duplicate thought, take, message, finals or export rows", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-r2-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+      t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -59,7 +44,6 @@ test("R2 retries do not duplicate thought, take, message, finals or export rows"
       /* windows */
     }
   });
-  migrateDeploy(url);
 
   const { createThoughtFromText } = await import("../src/lib/thought-create");
   const { createTake, getReel, updateReel, ReelError } = await import("../src/lib/reels");
@@ -218,13 +202,11 @@ test("R2 retries do not duplicate thought, take, message, finals or export rows"
 
 test("R2 profile amend retry with the same key does not publish twice", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-r2-profile-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  const { prisma, url } = await withPostgresTestDb(t);
+    delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
@@ -234,7 +216,6 @@ test("R2 profile amend retry with the same key does not publish twice", async (t
       /* windows */
     }
   });
-  migrateDeploy(url);
 
   const { startProfileDialogue, sendProfileMessage, supplementProfileDialogue, getProfileWorkspace, confirmProfilePortrait } = await import(
     "../src/lib/profile-dialogue"

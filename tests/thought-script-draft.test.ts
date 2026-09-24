@@ -7,23 +7,11 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { GenerationGuard } from "../src/lib/generation-guard";
 import { scriptOriginLabel } from "../src/types/script";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 test("script origin labels cover take, author and Vocal", () => {
   assert.equal(scriptOriginLabel("accepted_ai", []), "Создана с Vocal");
@@ -48,11 +36,8 @@ test("generation guard ignores a stale fetch token", () => {
 
 test("script draft autosave does not create a ready version until finalize", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-script-draft-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+      t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -61,7 +46,6 @@ test("script draft autosave does not create a ready version until finalize", asy
       /* windows */
     }
   });
-  migrateDeploy(url);
 
   const { createReel, createTake } = await import("../src/lib/reels");
   const { ensureOriginalFromText } = await import("../src/lib/transcripts");
@@ -160,11 +144,9 @@ test("script draft autosave does not create a ready version until finalize", asy
 
 test("draft finalize keeps latest body, rejects stale token, and transfer bumps saveToken", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-script-draft-stale-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+    await resetPrismaClient();
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -173,7 +155,6 @@ test("draft finalize keeps latest body, rejects stale token, and transfer bumps 
       /* windows */
     }
   });
-  migrateDeploy(url);
 
   const { createReel, createTake } = await import("../src/lib/reels");
   const { ensureOriginalFromText } = await import("../src/lib/transcripts");
@@ -240,11 +221,9 @@ test("draft finalize keeps latest body, rejects stale token, and transfer bumps 
 
 test("new transcribed take creates the next ready script and leaves the draft", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-take-script-"));
-  const url = fileUrl(path.join(dir, "test.db"));
+  const { prisma, url } = await withPostgresTestDb(t);
   process.env.DATABASE_URL = url;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -253,7 +232,6 @@ test("new transcribed take creates the next ready script and leaves the draft", 
       /* windows */
     }
   });
-  migrateDeploy(url);
 
   const { createReel, createTake } = await import("../src/lib/reels");
   const { ensureOriginalFromText } = await import("../src/lib/transcripts");

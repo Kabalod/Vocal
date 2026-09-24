@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import {
   ARCHIVE_DATE_FIELD_DEFAULT,
   archiveFilterFingerprint,
@@ -18,19 +19,6 @@ import {
 } from "../src/lib/reel-archive-query";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 test("P01.1 pure helpers: range, month bounds, day keys, fingerprint", () => {
   assert.equal(ARCHIVE_DATE_FIELD_DEFAULT, "createdAt");
@@ -104,11 +92,8 @@ test("P01.1 list date filters, calendar facets, cursor fingerprint, no duplicate
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-p01-1-"));
   const dbPath = path.join(dir, "test.db");
   closeSync(openSync(dbPath, "a"));
-  const url = fileUrl(dbPath);
-  process.env.DATABASE_URL = url;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+      t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -117,7 +102,6 @@ test("P01.1 list date filters, calendar facets, cursor fingerprint, no duplicate
       /* windows */
     }
   });
-  migrateDeploy(url);
 
   const { GET: listGet } = await import("../src/app/api/reels/route");
   const { GET: calendarGet } = await import("../src/app/api/reels/calendar/route");

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import {
   archivePreviewHonesty,
   archiveScriptVersionNumber,
@@ -25,19 +26,6 @@ import {
 } from "../src/lib/thought-archive-state";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: root,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 class ArchiveHistory {
   stack: string[] = ["/reels"];
@@ -139,11 +127,8 @@ test("P01.5 preview endpoint returns summary without N+1 list fields", async (t)
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-p01-5-"));
   const dbPath = path.join(dir, "test.db");
   closeSync(openSync(dbPath, "a"));
-  const url = fileUrl(dbPath);
-  process.env.DATABASE_URL = url;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+      t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -152,7 +137,6 @@ test("P01.5 preview endpoint returns summary without N+1 list fields", async (t)
       /* windows */
     }
   });
-  migrateDeploy(url);
 
   const { GET } = await import("../src/app/api/reels/[id]/archive-preview/route");
   const { GET: listGet } = await import("../src/app/api/reels/route");

@@ -8,24 +8,12 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { isPathInsideRoot } from "../src/lib/storage";
 import { parseByteRange } from "../src/lib/take-media";
 import { canPlayInBrowser, extensionFromName, mimeFromName } from "../src/lib/take-playback";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 test("byte range and browser playback helpers", () => {
   assert.deepEqual(parseByteRange(null, 10), { start: 0, end: 9, partial: false });
@@ -46,12 +34,9 @@ test("byte range and browser playback helpers", () => {
 test("take media API: types, idempotency, range, path deny, no auto-final, no job", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-takes-"));
   const storage = path.join(dir, "storage");
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  process.env.VOCAL_STORAGE_ROOT = storage;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+  const { prisma, url } = await withPostgresTestDb(t);
+    process.env.VOCAL_STORAGE_ROOT = storage;
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -60,7 +45,6 @@ test("take media API: types, idempotency, range, path deny, no auto-final, no jo
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { POST: createReel } = await import("../src/app/api/reels/route");
   const { GET: getReel, PATCH: patchReel } = await import("../src/app/api/reels/[id]/route");
@@ -244,12 +228,10 @@ test("take media API: types, idempotency, range, path deny, no auto-final, no jo
 test("createTake stores pending; parallel same-key upload writes once", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-takes-race-"));
   const storage = path.join(dir, "storage");
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  process.env.VOCAL_STORAGE_ROOT = storage;
+  const { prisma, url } = await withPostgresTestDb(t);
+    process.env.VOCAL_STORAGE_ROOT = storage;
   await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -258,7 +240,6 @@ test("createTake stores pending; parallel same-key upload writes once", async (t
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { createReel } = await import("../src/lib/reels");
   const { saveUploadedTake } = await import("../src/lib/takes");
@@ -314,12 +295,10 @@ test("createTake stores pending; parallel same-key upload writes once", async (t
 test("failed parallel upload does not delete a sibling success path; only claimer writes", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-takes-fail-"));
   const storage = path.join(dir, "storage");
-  const url = fileUrl(path.join(dir, "test.db"));
+  const { prisma, url } = await withPostgresTestDb(t);
   process.env.DATABASE_URL = url;
   process.env.VOCAL_STORAGE_ROOT = storage;
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -328,7 +307,6 @@ test("failed parallel upload does not delete a sibling success path; only claime
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { createReel } = await import("../src/lib/reels");
   const { saveUploadedTake } = await import("../src/lib/takes");
@@ -383,12 +361,11 @@ test("failed parallel upload does not delete a sibling success path; only claime
 test("backfilled job take plays in browser and serves Range", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-takes-legacy-"));
   const storage = path.join(dir, "storage");
-  const url = fileUrl(path.join(dir, "test.db"));
+  const { prisma, url } = await withPostgresTestDb(t);
   process.env.DATABASE_URL = url;
   process.env.VOCAL_STORAGE_ROOT = storage;
   await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -397,7 +374,6 @@ test("backfilled job take plays in browser and serves Range", async (t) => {
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const videos = path.join(storage, "storage", "videos");
   mkdirSync(videos, { recursive: true });
@@ -445,12 +421,11 @@ test("backfilled job take plays in browser and serves Range", async (t) => {
 test("voice upload stores scriptVersionId and does not auto-select final take", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-takes-script-"));
   const storage = path.join(dir, "storage");
-  const url = fileUrl(path.join(dir, "test.db"));
+  const { prisma, url } = await withPostgresTestDb(t);
   process.env.DATABASE_URL = url;
   process.env.VOCAL_STORAGE_ROOT = storage;
   process.env.VOCAL_SKIP_JOB_ENQUEUE = "1";
   await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
   t.after(async () => {
     delete process.env.VOCAL_SKIP_JOB_ENQUEUE;
     await prisma.$disconnect();
@@ -461,7 +436,6 @@ test("voice upload stores scriptVersionId and does not auto-select final take", 
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { createReel, createTake } = await import("../src/lib/reels");
   const { saveManualScript } = await import("../src/lib/scripts");

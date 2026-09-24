@@ -9,22 +9,10 @@ import { test } from "node:test";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { runtimePortraitFields } from "../src/lib/ai-runtime-context";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { readStoredProfilePayload } from "../src/lib/profile";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function fileUrl(dbPath: string): string {
-  return `file:${dbPath.replace(/\\/g, "/")}`;
-}
-
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
 
 function src(rel: string) {
   return readFileSync(path.join(repoRoot, rel), "utf8");
@@ -50,13 +38,11 @@ test("P10–P12 UI keeps labels, 44px targets, and no profile guard on thoughts"
 
 test("P11 resume, explicit confirm, voice≠take, unfinished amend stays off AI", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-p10-p12-"));
-  const url = fileUrl(path.join(dir, "test.db"));
-  process.env.DATABASE_URL = url;
-  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  const { prisma, url } = await withPostgresTestDb(t);
+    delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
@@ -66,7 +52,6 @@ test("P11 resume, explicit confirm, voice≠take, unfinished amend stays off AI"
       /* windows */
     }
   });
-  migrateDeploy(url);
 
   const {
     startProfileDialogue,

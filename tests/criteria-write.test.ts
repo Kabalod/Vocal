@@ -7,28 +7,17 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-function migrateDeploy(url: string) {
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-    shell: true,
-  });
-}
-
 test("regular user cannot write shared criteria", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-criteria-"));
-  const url = `file:${path.join(dir, "test.db").replace(/\\/g, "/")}`;
-  process.env.DATABASE_URL = url;
-  (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
+  const { prisma, url } = await withPostgresTestDb(t);
+    (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
   delete process.env.VOCAL_CRITERIA_ADMIN_USER_IDS;
   process.env.VOCAL_TEST_USER_ID = "user-b";
-  await resetPrismaClient();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
-  t.after(async () => {
+    t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     try {
@@ -37,7 +26,6 @@ test("regular user cannot write shared criteria", async (t) => {
       /* windows lock */
     }
   });
-  migrateDeploy(url);
 
   const { GET, PUT, POST } = await import("../src/app/api/criteria/route");
   const loaded = await GET();
