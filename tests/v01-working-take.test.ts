@@ -7,6 +7,7 @@ import { runWithOwner } from "../src/lib/auth/session";
 import { createReel, createTake, getReel, updateReel, ReelError } from "../src/lib/reels";
 import { createThoughtFromText } from "../src/lib/thought-create";
 import { createEditedRevision, ensureOriginalFromText, listTranscriptBundle } from "../src/lib/transcripts";
+import { v01TestSeams } from "../src/lib/v01-test-seams";
 
 test("working take is the third take by id, not the first two", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
@@ -427,4 +428,108 @@ test("AiCall snapshot stores working take, revision, reel and dialogue versions"
   assert.ok(snap.dialogueVersion.threadId);
   assert.ok(snap.dialogueVersion.messageCount >= 2);
   assert.ok(snap.dialogueVersion.lastMessageId);
+});
+
+test("snapshot stays on the take used in the prompt if the pointer moves after the read", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  resetAiInflightForTests();
+  const dialogue = await import("../src/lib/dialogue");
+  t.after(() => {
+    resetAiInflightForTests();
+    v01TestSeams.afterWorkingTakeRead = null;
+  });
+
+  const { reel } = await createThoughtFromText({
+    title: "Гонка чтения",
+    body: "PROMPT_TAKE_A_MARKER исходный рабочий",
+    idempotencyKey: "v01-read-race-thought",
+  });
+  const takeA = reel.workingTakeId;
+  assert.ok(takeA);
+  const takeB = await createTake(reel.id, { inputType: "text", bodyText: "PROMPT_TAKE_B_SHOULD_NOT_BE_IN_CALL" });
+  v01TestSeams.afterWorkingTakeRead = async () => {
+    await prisma.reel.update({ where: { id: reel.id }, data: { workingTakeId: takeB.id } });
+  };
+
+  await assert.rejects(
+    () =>
+      dialogue.sendDialogueMessage(
+        reel.id,
+        { text: "после чтения", idempotencyKey: "v01-read-race-send" },
+        async () => ({
+          text: JSON.stringify({ reply: "STALE_AFTER_READ", scriptProposal: null }),
+          usage: { promptTokens: 1, completionTokens: 1 },
+        }),
+      ),
+    (error: unknown) => error instanceof StateVersionError,
+  );
+  const call = await prisma.aiCall.findFirstOrThrow({
+    where: { reelId: reel.id, kind: "dialogue" },
+    orderBy: { createdAt: "desc" },
+  });
+  const snap = JSON.parse(call.inputSnapshotJson) as { workingTakeId: string };
+  assert.equal(snap.workingTakeId, takeA);
+  assert.match(call.promptText, /PROMPT_TAKE_A_MARKER/);
+  assert.equal(call.promptText.includes("PROMPT_TAKE_B_SHOULD_NOT_BE_IN_CALL"), false);
+  assert.equal(call.status, "error");
+  const page = await dialogue.listDialoguePage(reel.id);
+  assert.equal(page.messages.some((item) => item.body === "STALE_AFTER_READ"), false);
+});
+
+test("state change after CAS check and before write is not saved", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  resetAiInflightForTests();
+  t.after(() => {
+    resetAiInflightForTests();
+    v01TestSeams.afterMaterialCheck = null;
+  });
+
+  const { reel } = await createThoughtFromText({
+    title: "Гонка записи",
+    body: "текст до записи",
+    idempotencyKey: "v01-write-race-thought",
+  });
+  v01TestSeams.afterMaterialCheck = async () => {
+    const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId: reel.id } });
+    await prisma.dialogueMessage.create({
+      data: {
+        threadId: thread.id,
+        role: "user",
+        kind: "text",
+        body: "вставка между check и write",
+        status: "done",
+      },
+    });
+  };
+  const { sendDialogueMessage, listDialoguePage } = await import("../src/lib/dialogue");
+  await assert.rejects(
+    () =>
+      sendDialogueMessage(
+        reel.id,
+        { text: "между check и write", idempotencyKey: "v01-write-race-send" },
+        async () => ({
+          text: JSON.stringify({ reply: "STALE_AFTER_CHECK", scriptProposal: null }),
+          usage: { promptTokens: 1, completionTokens: 1 },
+        }),
+      ),
+    (error: unknown) => error instanceof StateVersionError,
+  );
+  const page = await listDialoguePage(reel.id);
+  assert.equal(page.messages.some((item) => item.body === "STALE_AFTER_CHECK"), false);
+});
+
+test("database rejects a working take from another thought", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  const reelA = await createReel({ title: "A" });
+  const reelB = await createReel({ title: "B" });
+  await createTake(reelA.id, { inputType: "text", bodyText: "A1" });
+  const takeB = await createTake(reelB.id, { inputType: "text", bodyText: "B1" });
+  await assert.rejects(() =>
+    prisma.reel.update({
+      where: { id: reelA.id },
+      data: { workingTakeId: takeB.id },
+    }),
+  );
 });
