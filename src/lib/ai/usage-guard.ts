@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { ownerUserId } from "@/lib/auth/session";
 
 const inflight = new Map<string, Promise<unknown>>();
 
@@ -20,6 +21,33 @@ export class AiInflightError extends Error {
   }
 }
 
+export class StateVersionError extends Error {
+  readonly code = "STATE_VERSION";
+  readonly status = 409;
+  constructor(message = "Состояние мысли уже изменилось. Обновите и повторите.") {
+    super(message);
+    this.name = "StateVersionError";
+  }
+}
+
+export type AiOperationKeyInput = {
+  ownerUserId: string;
+  objectType: string;
+  objectId: string;
+  operationType: string;
+  idempotencyKey: string;
+};
+
+export function aiOperationKey(input: AiOperationKeyInput): string {
+  return [
+    input.ownerUserId,
+    input.objectType,
+    input.objectId,
+    input.operationType,
+    input.idempotencyKey,
+  ].join(":");
+}
+
 export function dailyTokenLimit(): number {
   const raw = Number(process.env.VOCAL_DAILY_TOKEN_LIMIT ?? 0);
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
@@ -30,8 +58,9 @@ export async function assertDailyTokenBudget(): Promise<void> {
   if (limit <= 0) return;
   const start = new Date();
   start.setHours(0, 0, 0, 0);
+  const owner = ownerUserId();
   const rows = await prisma.aiCall.aggregate({
-    where: { status: "done", createdAt: { gte: start } },
+    where: { status: "done", createdAt: { gte: start }, ownerUserId: owner },
     _sum: { promptTokens: true, completionTokens: true },
   });
   const used = (rows._sum.promptTokens ?? 0) + (rows._sum.completionTokens ?? 0);

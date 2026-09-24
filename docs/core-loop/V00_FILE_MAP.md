@@ -1,6 +1,6 @@
 # V00 — карта файлов ядра мысли
 
-Дерево **`AUDITED_APP_SHA`** `f971a7fb43c2fdd9df6b1824620491500972736a` (кандидат для будущего BASE, не BASE). Матрица: [`PLAN.md`](./PLAN.md).
+Дерево **`AUDITED_APP_SHA`** `f971a7fb43c2fdd9df6b1824620491500972736a`. BASE_SHA = `34abcd78c70b2fa31bd717aeff56acc31577c0d1` (документы V00). Матрица: [`PLAN.md`](./PLAN.md).
 
 Не создавать в V00: ThoughtState, четыре действия агента, `workingTakeId`, снятие confirm.
 

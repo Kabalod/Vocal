@@ -1,7 +1,7 @@
 import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
 import { withApiUser } from "@/lib/auth/request";
-import { AiBudgetError } from "@/lib/ai/usage-guard";
+import { AiBudgetError, AiInflightError, StateVersionError } from "@/lib/ai/usage-guard";
 import { DialogueError, listDialoguePage, sendDialogueMessage, sendDialogueVoice } from "@/lib/dialogue";
 import { ReelError } from "@/lib/reels";
 
@@ -9,7 +9,13 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 function errorResponse(error: unknown) {
-  if (error instanceof ReelError || error instanceof DialogueError || error instanceof AiBudgetError) {
+  if (
+    error instanceof ReelError ||
+    error instanceof DialogueError ||
+    error instanceof AiBudgetError ||
+    error instanceof AiInflightError ||
+    error instanceof StateVersionError
+  ) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
   }
   console.error(safeAiLog({ kind: "dialogue" }));
@@ -41,6 +47,8 @@ export const POST = withApiUser(async function POST(request: Request, context: {
         file,
         idempotencyKey: String(form.get("idempotencyKey") ?? ""),
         voiceDurationLabel: String(form.get("voiceDurationLabel") ?? "") || undefined,
+        expectedUpdatedAt: String(form.get("expectedUpdatedAt") ?? "") || undefined,
+        expectedWorkingTakeId: String(form.get("expectedWorkingTakeId") ?? "") || undefined,
       });
       return NextResponse.json(page, { status: 201 });
     }
@@ -48,11 +56,15 @@ export const POST = withApiUser(async function POST(request: Request, context: {
       text?: string;
       idempotencyKey?: string;
       voiceDurationLabel?: string;
+      expectedUpdatedAt?: string;
+      expectedWorkingTakeId?: string;
     };
     const page = await sendDialogueMessage(id, {
       text: body.text ?? "",
       idempotencyKey: body.idempotencyKey ?? "",
       voiceDurationLabel: body.voiceDurationLabel,
+      expectedUpdatedAt: body.expectedUpdatedAt,
+      expectedWorkingTakeId: body.expectedWorkingTakeId,
     });
     return NextResponse.json(page, { status: 201 });
   } catch (error) {

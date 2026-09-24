@@ -35,6 +35,7 @@ const dbTests = [
   "tests/thought-media-create.test.ts",
   "tests/thought-script-draft.test.ts",
   "tests/thought-dialogue.test.ts",
+  "tests/v01-working-take.test.ts",
   "tests/thought-completion.test.ts",
   "tests/r1-contracts.test.ts",
   "tests/r2-idempotency.test.ts",
@@ -81,6 +82,7 @@ const reelsTests = [
   "tests/reel-studio.test.ts",
   "tests/script-timeline.test.ts",
   "tests/thought-dialogue.test.ts",
+  "tests/v01-working-take.test.ts",
   "tests/thought-script-draft.test.ts",
   "tests/script-draft-save.test.ts",
   "tests/recording-view.test.ts",
@@ -107,6 +109,8 @@ const reelsTests = [
 ];
 
 function selectedTests() {
+  const extra = process.argv.filter((arg) => arg.endsWith(".test.ts"));
+  if (extra.length) return extra;
   if (process.argv.includes("--auth")) return authTests;
   if (process.argv.includes("--reels")) return reelsTests;
   return dbTests;

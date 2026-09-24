@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { ZodError } from "zod";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
 import { PROFILE_DIALOGUE_KIND, PROFILE_DIALOGUE_SYSTEM, parseProfileAiReply, profileChecklistPrompt } from "@/lib/ai/profile";
-import { assertDailyTokenBudget, withAiInflight } from "@/lib/ai/usage-guard";
+import { aiOperationKey, assertDailyTokenBudget, withAiInflight } from "@/lib/ai/usage-guard";
 import { extractAudio } from "@/lib/ffmpeg";
 import { transcribeAudio } from "@/lib/stt";
 import { decodeDialogueCursor, pageDialogueItems } from "@/lib/dialogue-cursor";
@@ -533,7 +533,15 @@ export async function sendProfileMessage(
   });
   if (existing) return getProfileWorkspace();
 
-  return withAiInflight(`profile-dialogue:${key}`, async () => {
+  return withAiInflight(
+    aiOperationKey({
+      ownerUserId: ownerUserId(),
+      objectType: "profile",
+      objectId: portraitProfileId(),
+      operationType: "dialogue",
+      idempotencyKey: key,
+    }),
+    async () => {
     const raced = await prisma.dialogueMessage.findFirst({
       where: { threadId: thread.id, idempotencyKey: key },
     });

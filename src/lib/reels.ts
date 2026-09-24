@@ -444,6 +444,17 @@ async function applyReelUpdate(id: string, input: UpdateReelInput): Promise<Reel
       data.selectedTakeId = take.id;
     }
   }
+  if (input.workingTakeId !== undefined) {
+    if (input.workingTakeId === null) {
+      data.workingTakeId = null;
+    } else {
+      const take = await prisma.take.findUnique({ where: { id: input.workingTakeId } });
+      if (!take || take.reelId !== id) {
+        throw new ReelError("Рабочий дубль должен принадлежать этой карточке.", "TAKE_NOT_IN_REEL");
+      }
+      data.workingTakeId = take.id;
+    }
+  }
   if (input.finalTakeId !== undefined) {
     if (input.finalTakeId === null) {
       data.finalTakeId = null;
@@ -627,6 +638,16 @@ export async function createTake(reelId: string, input: CreateTakeInput): Promis
         });
 
         if (jobId) await bindJobToTakeOrThrow(tx, jobId, take.id);
+        const pointer = await tx.reel.findUnique({
+          where: { id: reelId },
+          select: { workingTakeId: true },
+        });
+        if (!pointer?.workingTakeId) {
+          await tx.reel.update({
+            where: { id: reelId },
+            data: { workingTakeId: take.id },
+          });
+        }
         return take;
       });
     } catch (error) {

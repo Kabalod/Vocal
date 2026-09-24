@@ -3,14 +3,14 @@
 V00 — аудит. Он **не** снимает блокеры ниже. Матрица: [`PLAN.md`](./PLAN.md).
 
 AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
-BASE_SHA: **not assigned**.
-V01: **not started**.
-V00: ready for external final review, **not accepted**.
+BASE_SHA: `34abcd78c70b2fa31bd717aeff56acc31577c0d1`.
+V01: **in progress** from BASE_SHA.
+V00: **accepted**.
 
 ## Условия перед V01
 
 1. **Внешняя приёмка обновлённых документов V00.** Пока нет — код ядра не менять.
-2. **Явное назначение BASE_SHA.** Сейчас **not assigned**. Кандидат для будущего назначения (не BASE): `f971a7fb43c2fdd9df6b1824620491500972736a`.
+2. **Явное назначение BASE_SHA.** Назначен: `34abcd78c70b2fa31bd717aeff56acc31577c0d1`. AUDITED_APP_SHA остаётся `f971a7fb43c2fdd9df6b1824620491500972736a`.
 
 Других условий перед V01 нет.
 
@@ -47,8 +47,8 @@ Next 15, Prisma 6, PostgreSQL для приложения и тестов, Groq,
 
 ## Документы после приёмки V00
 
-- `AGENTS.md` — текущий цикл → V01 по [`PLAN.md`](./PLAN.md).
-- Карта I00 — обновить под назначенный BASE, не в этом коммите.
+- `AGENTS.md` — текущий цикл V01, BASE и AUDITED_APP_SHA записаны.
+- Карта I00 (BASE для I01) — отдельный контур, этим назначением не закрывается.
 
 ## Расход
 

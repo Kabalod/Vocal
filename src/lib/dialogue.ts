@@ -7,12 +7,13 @@ import { ownerUserId } from "@/lib/auth/session";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
 import { extractAudio } from "@/lib/ffmpeg";
 import { transcribeAudio } from "@/lib/stt";
-import { assertDailyTokenBudget, withAiInflight } from "@/lib/ai/usage-guard";
+import { aiOperationKey, assertDailyTokenBudget, StateVersionError, withAiInflight } from "@/lib/ai/usage-guard";
 import { pageDialogueItems, decodeDialogueCursor } from "@/lib/dialogue-cursor";
 import { getReelContext } from "@/lib/reel-context";
 import { ReelError } from "@/lib/reels";
 import { replaceScriptDraft } from "@/lib/scripts";
 import { listTranscriptBundle } from "@/lib/transcripts";
+import { resolveWorkingTake } from "@/lib/working-take";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
 
@@ -213,12 +214,12 @@ export async function buildThoughtMaterialContext(reelId: string): Promise<strin
   const reel = await prisma.reel.findFirst({
     where: { id: reelId, ownerUserId: ownerUserId() },
     include: {
-      takes: { orderBy: { number: "asc" }, take: 2 },
+      takes: { orderBy: { number: "asc" } },
       scripts: { orderBy: { createdAt: "desc" }, take: 4 },
     },
   });
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
-  const take = reel.takes.find((row) => row.id === reel.selectedTakeId) ?? reel.takes[0];
+  const take = resolveWorkingTake(reel);
   const transcript = take ? await listTranscriptBundle(take.id) : null;
   const selectedText = transcript?.revisions.find((row) => row.id === transcript.selectedId)?.text;
   const script =
@@ -228,6 +229,8 @@ export async function buildThoughtMaterialContext(reelId: string): Promise<strin
   return [
     `Мысль: ${reel.id}`,
     `Название: ${reel.title ?? ""}`,
+    take ? `Рабочий дубль: ${take.id}` : "",
+    transcript?.selectedId ? `Ревизия: ${transcript.selectedId}` : "",
     selectedText ? `Материал:\n${selectedText.slice(0, 4000)}` : "Материала пока нет.",
     script?.body ? `Сценарий:\n${script.body.slice(0, 2000)}` : "",
     `Цель ролика: ${live.reelGoal || "не указана"}`,
@@ -251,12 +254,32 @@ async function recentStoredText(threadId: string): Promise<string> {
     .join("\n");
 }
 
+async function assertDialogueStateVersion(
+  reelId: string,
+  input: { expectedUpdatedAt?: string; expectedWorkingTakeId?: string },
+) {
+  if (!input.expectedUpdatedAt && input.expectedWorkingTakeId === undefined) return;
+  const reel = await prisma.reel.findFirst({
+    where: { id: reelId, ownerUserId: ownerUserId() },
+    select: { updatedAt: true, workingTakeId: true },
+  });
+  if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+  if (input.expectedUpdatedAt && reel.updatedAt.toISOString() !== input.expectedUpdatedAt) {
+    throw new StateVersionError();
+  }
+  if (input.expectedWorkingTakeId !== undefined && reel.workingTakeId !== input.expectedWorkingTakeId) {
+    throw new StateVersionError();
+  }
+}
+
 export async function sendDialogueMessage(
   reelId: string,
   input: {
     text: string;
     idempotencyKey: string;
     voiceDurationLabel?: string;
+    expectedUpdatedAt?: string;
+    expectedWorkingTakeId?: string;
   },
   complete: CompleteJsonFn = defaultCompleteJson,
 ): Promise<DialoguePageDto> {
@@ -264,13 +287,22 @@ export async function sendDialogueMessage(
   if (!text) throw new DialogueError("Введите сообщение.", "EMPTY");
   const key = input.idempotencyKey.trim();
   if (!key) throw new DialogueError("Нужен ключ повтора.", "IDEMPOTENCY");
+  await assertDialogueStateVersion(reelId, input);
   const thread = await ensureReelThread(reelId);
   const existing = await prisma.dialogueMessage.findFirst({
     where: { threadId: thread.id, idempotencyKey: key },
   });
   if (existing) return listDialoguePage(reelId);
 
-  return withAiInflight(`dialogue:${reelId}:${key}`, async () => {
+  return withAiInflight(
+    aiOperationKey({
+      ownerUserId: ownerUserId(),
+      objectType: "thought",
+      objectId: reelId,
+      operationType: "dialogue",
+      idempotencyKey: key,
+    }),
+    async () => {
     const raced = await prisma.dialogueMessage.findFirst({
       where: { threadId: thread.id, idempotencyKey: key },
     });
@@ -371,7 +403,13 @@ JSON: {"reply":"","scriptProposal":null}`;
 
 export async function sendDialogueVoice(
   reelId: string,
-  input: { file: File; idempotencyKey: string; voiceDurationLabel?: string },
+  input: {
+    file: File;
+    idempotencyKey: string;
+    voiceDurationLabel?: string;
+    expectedUpdatedAt?: string;
+    expectedWorkingTakeId?: string;
+  },
   complete: CompleteJsonFn = defaultCompleteJson,
   transcribe: typeof transcribeAudio = transcribeAudio,
   extract: typeof extractAudio = extractAudio,
@@ -405,6 +443,8 @@ export async function sendDialogueVoice(
         text,
         idempotencyKey: input.idempotencyKey,
         voiceDurationLabel: input.voiceDurationLabel,
+        expectedUpdatedAt: input.expectedUpdatedAt,
+        expectedWorkingTakeId: input.expectedWorkingTakeId,
       },
       complete,
     );

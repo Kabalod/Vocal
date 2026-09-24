@@ -103,7 +103,7 @@ export async function createThoughtFromText(input: {
       });
       await tx.reel.update({
         where: { id: reel.id },
-        data: { selectedScriptId: script.id },
+        data: { selectedScriptId: script.id, workingTakeId: take.id },
       });
       return reel.id;
     });

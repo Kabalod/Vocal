@@ -109,6 +109,7 @@ export interface ReelDto {
   initialNote: string;
   status: ReelStatus;
   selectedTakeId: string | null;
+  workingTakeId: string | null;
   finalTakeId: string | null;
   finalScriptId: string | null;
   createdAt: string;
@@ -140,6 +141,7 @@ export interface UpdateReelInput {
   initialNote?: string;
   status?: ReelStatus;
   selectedTakeId?: string | null;
+  workingTakeId?: string | null;
   finalTakeId?: string | null;
   expectedUpdatedAt?: string;
 }

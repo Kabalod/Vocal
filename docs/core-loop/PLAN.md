@@ -2,10 +2,10 @@
 
 Канон этапов в репозитории. Продуктовые правила: [`CONTRACT.md`](./CONTRACT.md). Решения аудита: [`V00_ADR.md`](./V00_ADR.md). Отчёт: [`V00_REPORT.md`](./V00_REPORT.md).
 
-V00: ready for external final review, **not accepted**.
-BASE_SHA: **not assigned**.
-V01: **not started**.
-AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`. Код на этом SHA матрице ещё не следует.
+V00: **accepted**.
+BASE_SHA: `34abcd78c70b2fa31bd717aeff56acc31577c0d1`.
+V01: **in progress** on `feat/v01-from-base`, branched from BASE_SHA.
+AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 
 | Этап | Содержание |
 |---|---|
@@ -20,4 +20,4 @@ AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`. Код на это�
 
 Путь процесса — в [`CONTRACT.md`](./CONTRACT.md). Действия агента (`ask_question`, `suggest_take`, `content_sufficient`, `redirect_to_task`) не являются статусами мысли.
 
-Перед стартом V01 нужны только: внешняя приёмка этих документов и явное назначение BASE_SHA.
+V00 принят. BASE_SHA назначен. V01 начат в отдельной ветке от BASE. Baseline и `migrate resolve` на live Supabase не применять.

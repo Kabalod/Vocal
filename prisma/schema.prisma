@@ -14,6 +14,7 @@ model Reel {
   initialNote      String                 @default("")
   status           String                 @default("draft")
   selectedTakeId   String?
+  workingTakeId    String?
   finalTakeId      String?
   reelGoal         String                 @default("")
   reelAudience     String                 @default("")
