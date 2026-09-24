@@ -279,6 +279,7 @@ model DialogueThread {
   profile   CreatorProfile?   @relation(fields: [profileId], references: [id], onDelete: Restrict)
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
+  headEpoch Int               @default(0)
   messages  DialogueMessage[]
 }
 

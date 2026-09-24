@@ -13,6 +13,7 @@ export type DialogueMaterialSnapshot = {
     threadId: string;
     messageCount: number;
     lastMessageId: string | null;
+    headEpoch: number;
   };
 };
 
@@ -42,7 +43,8 @@ export async function requireWorkingTake(reelId: string) {
 }
 
 export async function readDialogueVersion(threadId: string, db: Prisma.TransactionClient | typeof prisma = prisma) {
-  const [messageCount, last] = await Promise.all([
+  const [thread, messageCount, last] = await Promise.all([
+    db.dialogueThread.findUnique({ where: { id: threadId }, select: { headEpoch: true } }),
     db.dialogueMessage.count({ where: { threadId } }),
     db.dialogueMessage.findFirst({
       where: { threadId },
@@ -50,10 +52,14 @@ export async function readDialogueVersion(threadId: string, db: Prisma.Transacti
       select: { id: true },
     }),
   ]);
+  if (!thread) {
+    throw new ReelError("Диалог не найден.", "REEL_NOT_FOUND", 404);
+  }
   return {
     threadId,
     messageCount,
     lastMessageId: last?.id ?? null,
+    headEpoch: thread.headEpoch,
   };
 }
 
@@ -80,7 +86,8 @@ export function materialSnapshotChanged(
     current.reelUpdatedAt !== snapshot.reelUpdatedAt ||
     current.dialogueVersion.threadId !== snapshot.dialogueVersion.threadId ||
     current.dialogueVersion.messageCount !== snapshot.dialogueVersion.messageCount ||
-    current.dialogueVersion.lastMessageId !== snapshot.dialogueVersion.lastMessageId
+    current.dialogueVersion.lastMessageId !== snapshot.dialogueVersion.lastMessageId ||
+    current.dialogueVersion.headEpoch !== snapshot.dialogueVersion.headEpoch
   );
 }
 
@@ -119,6 +126,7 @@ export async function commitDialogueReply(input: {
   completionTokens: number | null;
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "DialogueThread" WHERE id = ${input.threadId} FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM "Reel" WHERE id = ${input.reelId} FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM "Take" WHERE id = ${input.snapshot.workingTakeId} FOR UPDATE`;
 
@@ -130,6 +138,7 @@ export async function commitDialogueReply(input: {
     if (!(await matches())) throw new StateVersionError();
     if (v01TestSeams.afterMaterialCheck) await v01TestSeams.afterMaterialCheck();
     if (!(await matches())) throw new StateVersionError();
+    if (v01TestSeams.afterLastMaterialCheck) await v01TestSeams.afterLastMaterialCheck();
 
     await tx.aiCall.update({
       where: { id: input.callId },
