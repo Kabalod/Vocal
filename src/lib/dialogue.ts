@@ -13,7 +13,11 @@ import { getReelContext } from "@/lib/reel-context";
 import { ReelError } from "@/lib/reels";
 import { replaceScriptDraft } from "@/lib/scripts";
 import { listTranscriptBundle } from "@/lib/transcripts";
-import { resolveWorkingTake } from "@/lib/working-take";
+import {
+  captureDialogueMaterial,
+  dialogueMaterialChanged,
+  requireWorkingTake,
+} from "@/lib/working-take";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
 
@@ -211,26 +215,23 @@ export async function listDialoguePage(
 }
 
 export async function buildThoughtMaterialContext(reelId: string): Promise<string> {
-  const reel = await prisma.reel.findFirst({
-    where: { id: reelId, ownerUserId: ownerUserId() },
-    include: {
-      takes: { orderBy: { number: "asc" } },
-      scripts: { orderBy: { createdAt: "desc" }, take: 4 },
-    },
+  const { reel, take } = await requireWorkingTake(reelId);
+  const scripts = await prisma.scriptVersion.findMany({
+    where: { reelId },
+    orderBy: { createdAt: "desc" },
+    take: 4,
   });
-  if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
-  const take = resolveWorkingTake(reel);
-  const transcript = take ? await listTranscriptBundle(take.id) : null;
+  const transcript = await listTranscriptBundle(take.id);
   const selectedText = transcript?.revisions.find((row) => row.id === transcript.selectedId)?.text;
   const script =
-    reel.scripts.find((row) => row.id === reel.selectedScriptId) ??
-    reel.scripts.find((row) => row.kind !== "ai_proposal" && row.kind !== "draft");
+    scripts.find((row) => row.id === reel.selectedScriptId) ??
+    scripts.find((row) => row.kind !== "ai_proposal" && row.kind !== "draft");
   const live = (await getReelContext(reelId)).live;
   return [
     `Мысль: ${reel.id}`,
     `Название: ${reel.title ?? ""}`,
-    take ? `Рабочий дубль: ${take.id}` : "",
-    transcript?.selectedId ? `Ревизия: ${transcript.selectedId}` : "",
+    `Рабочий дубль: ${take.id}`,
+    transcript.selectedId ? `Ревизия: ${transcript.selectedId}` : "",
     selectedText ? `Материал:\n${selectedText.slice(0, 4000)}` : "Материала пока нет.",
     script?.body ? `Сценарий:\n${script.body.slice(0, 2000)}` : "",
     `Цель ролика: ${live.reelGoal || "не указана"}`,
@@ -339,6 +340,7 @@ ${await recentStoredText(thread.id)}
 
 JSON: {"reply":"","scriptProposal":null}`;
 
+    const material = await captureDialogueMaterial(reelId, thread.id);
     const call = await prisma.aiCall.create({
       data: {
         kind: "dialogue",
@@ -347,7 +349,14 @@ JSON: {"reply":"","scriptProposal":null}`;
         status: "running",
         ownerUserId: ownerUserId(),
         promptText: userPrompt,
-        inputSnapshotJson: JSON.stringify({ text, playbook: false }),
+        inputSnapshotJson: JSON.stringify({
+          text,
+          playbook: false,
+          workingTakeId: material.workingTakeId,
+          transcriptRevisionId: material.transcriptRevisionId,
+          reelUpdatedAt: material.reelUpdatedAt,
+          dialogueVersion: material.dialogueVersion,
+        }),
       },
     });
 
@@ -359,6 +368,9 @@ JSON: {"reply":"","scriptProposal":null}`;
         label: "dialogue",
       });
       const parsed = replySchema.parse(parseJsonObject(raw.text));
+      if (await dialogueMaterialChanged(reelId, thread.id, material)) {
+        throw new StateVersionError();
+      }
       await prisma.aiCall.update({
         where: { id: call.id },
         data: {
@@ -387,15 +399,24 @@ JSON: {"reply":"","scriptProposal":null}`;
         });
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Не удалось ответить.";
+      const stale = error instanceof StateVersionError || error instanceof ReelError;
+      const message = stale
+        ? error instanceof StateVersionError
+          ? error.message
+          : "Состояние мысли уже изменилось. Обновите и повторите."
+        : error instanceof Error
+          ? error.message
+          : "Не удалось ответить.";
       await prisma.aiCall.update({
         where: { id: call.id },
-        data: { status: "error", errorMessage: message },
+        data: { status: "error", errorMessage: stale ? "STATE_VERSION" : message },
       });
       await prisma.dialogueMessage.update({
         where: { id: processing.id },
         data: { kind: "error", body: message, status: "error" },
       });
+      if (error instanceof StateVersionError) throw error;
+      if (error instanceof ReelError) throw new StateVersionError();
     }
     return listDialoguePage(reelId);
   });
