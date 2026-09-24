@@ -5,7 +5,7 @@ BASE: `34abcd78c70b2fa31bd717aeff56acc31577c0d1`. Код аудита: `f971a7f`
 | Зона | Файлы |
 |---|---|
 | Схема | `prisma/schema.prisma` (`workingTakeId`, FK `ReelWorkingTake`, `@@index`) |
-| Миграции (не на live) | `prisma/migrations/2_v01_working_take/`, `3_v01_working_take_fk/` |
+| Миграции (не на live) | `2_v01_working_take`, `3_v01_working_take_fk`, `4_v01_working_take_same_reel` |
 | Резолв и снимок | `src/lib/working-take.ts` |
 | Диалог | `src/lib/dialogue.ts`, `src/app/api/thoughts/[id]/dialogue/route.ts` |
 | Указатель при создании | `src/lib/thought-create.ts`, `src/lib/reels.ts` |

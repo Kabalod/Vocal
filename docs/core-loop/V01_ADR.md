@@ -14,17 +14,19 @@ V01: **не принят**. Live baseline / `migrate resolve` на Supabase не
 
 ## FK и индекс
 
-**Решение:** FK `Reel.workingTakeId → Take.id` (`ON DELETE RESTRICT`). Без FK база принимала id чужой мысли. Write-time проверка в `updateReel` остаётся. Цикл Reel↔Take допустим: сначала Reel, затем Take, затем указатель.
+Миграция `3_v01_working_take_fk` даёт только `workingTakeId → Take.id`: несуществующий id нельзя, **дубль другой мысли база ещё пропускала**.
 
-**Индекс:** `@@index([workingTakeId])` совпадает с `Reel_workingTakeId_idx` из `2_v01_working_take`. Prisma diff не должен снимать индекс.
+**Решение:** миграция `4_v01_working_take_same_reel` — составной FK `Reel(workingTakeId, id) → Take(id, reelId)` и уникальность `Take(id, reelId)`. Это DB-инвариант принадлежности той же мысли. В `schema.prisma` связь остаётся `workingTakeId → Take.id`: Prisma не умеет включить собственный `Reel.id` в relation без поломки `@default(cuid())`. `prisma migrate diff` не должен откатывать миграцию 4. Write-path `updateReel` остаётся.
+
+**Индекс:** `@@index([workingTakeId])` из `2_v01_working_take` сохраняется.
 
 ## Точная ревизия и снимок
 
-**Решение:** в промпт идёт `selectedTranscriptId` рабочего дубля. `AiCall.inputSnapshotJson` хранит `text`, `playbook`, `workingTakeId`, `transcriptRevisionId`, `reelUpdatedAt`, `dialogueVersion` (`threadId`, `messageCount`, `lastMessageId`).
+**Решение:** один проход `freezeThoughtPrompt`: читает рабочий дубль, затем из этих же значений собирает промпт и `AiCall.inputSnapshotJson` (`text`, `playbook`, `workingTakeId`, `transcriptRevisionId`, `reelUpdatedAt`, `dialogueVersion`). Снимок не читается заново после сборки промпта.
 
 ## Версия состояния
 
-**Решение:** клиентский `expectedUpdatedAt` / `expectedWorkingTakeId` проверяется до вызова. После ответа модели снимок сравнивается снова. Если рабочий дубль, ревизия, `Reel.updatedAt` или голова диалога изменились — ответ модели **не** пишется как done, `AiCall` = error `STATE_VERSION`, сообщение processing = error, наружу **409**.
+**Решение:** клиентский `expectedUpdatedAt` / `expectedWorkingTakeId` до вызова. После модели `commitDialogueReply` в одной транзакции: `FOR UPDATE` на Reel, Take и DialogueThread, сверка снимка, повторная сверка после test-seam, затем запись `AiCall` + processing + optional proposal. Расхождение → 409, stale reply не пишется.
 
 ## Inflight
 
