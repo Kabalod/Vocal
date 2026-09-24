@@ -4,7 +4,7 @@ Start here:
 1. `docs/design/README.md`
 2. `docs/design/SOURCE_OF_TRUTH_2026-09-15.md`
 3. Visual source of truth: `docs/design/references-new/` (approved screens 01–09; `/reels` uses screen 09)
-4. Current cycle: V01 (working take, exact revision, request isolation). Canon: `docs/core-loop/PLAN.md`.
+4. Current cycle: V01 (not accepted). Canon: `docs/core-loop/PLAN.md` and `docs/core-loop/V01_*.md`.
 5. BASE_SHA = `34abcd78c70b2fa31bd717aeff56acc31577c0d1`
 6. AUDITED_APP_SHA = `f971a7fb43c2fdd9df6b1824620491500972736a`
 

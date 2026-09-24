@@ -4,7 +4,7 @@
 
 V00: **accepted**.
 BASE_SHA: `34abcd78c70b2fa31bd717aeff56acc31577c0d1`.
-V01: **in progress** on `feat/v01-from-base`, branched from BASE_SHA.
+V01: **not accepted** (fix commits on `feat/v01-from-base` from BASE). Документы этапа: [`V01_REPORT.md`](./V01_REPORT.md), [`V01_ADR.md`](./V01_ADR.md), [`V01_FILE_MAP.md`](./V01_FILE_MAP.md), [`V01_SCENARIOS.md`](./V01_SCENARIOS.md).
 AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 
 | Этап | Содержание |
