@@ -1,6 +1,0 @@
--- AlterTable
-ALTER TABLE "Take" ADD COLUMN "mediaStatus" TEXT NOT NULL DEFAULT 'ready';
-ALTER TABLE "Take" ADD COLUMN "originalName" TEXT;
-ALTER TABLE "Take" ADD COLUMN "storedPath" TEXT;
-ALTER TABLE "Take" ADD COLUMN "mimeType" TEXT;
-ALTER TABLE "Take" ADD COLUMN "bodyText" TEXT NOT NULL DEFAULT '';
