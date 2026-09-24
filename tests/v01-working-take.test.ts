@@ -8,6 +8,7 @@ import { createReel, createTake, getReel, updateReel, ReelError } from "../src/l
 import { createThoughtFromText } from "../src/lib/thought-create";
 import { createEditedRevision, ensureOriginalFromText, listTranscriptBundle } from "../src/lib/transcripts";
 import { v01TestSeams } from "../src/lib/v01-test-seams";
+import { PrismaClient } from "@prisma/client";
 
 test("working take is the third take by id, not the first two", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
@@ -419,7 +420,7 @@ test("AiCall snapshot stores working take, revision, reel and dialogue versions"
     workingTakeId: string;
     transcriptRevisionId: string | null;
     reelUpdatedAt: string;
-    dialogueVersion: { threadId: string; messageCount: number; lastMessageId: string | null };
+    dialogueVersion: { threadId: string; messageCount: number; lastMessageId: string | null; headEpoch: number };
   };
   assert.equal(snap.text, "зафиксируй материал");
   assert.equal(snap.workingTakeId, reel.workingTakeId);
@@ -428,6 +429,7 @@ test("AiCall snapshot stores working take, revision, reel and dialogue versions"
   assert.ok(snap.dialogueVersion.threadId);
   assert.ok(snap.dialogueVersion.messageCount >= 2);
   assert.ok(snap.dialogueVersion.lastMessageId);
+  assert.ok(snap.dialogueVersion.headEpoch >= 2);
 });
 
 test("snapshot stays on the take used in the prompt if the pointer moves after the read", async (t) => {
@@ -477,47 +479,63 @@ test("snapshot stays on the take used in the prompt if the pointer moves after t
   assert.equal(page.messages.some((item) => item.body === "STALE_AFTER_READ"), false);
 });
 
-test("state change after CAS check and before write is not saved", async (t) => {
+test("insert after last CAS check waits on the dialogue thread lock", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   resetAiInflightForTests();
   t.after(() => {
     resetAiInflightForTests();
-    v01TestSeams.afterMaterialCheck = null;
+    v01TestSeams.afterLastMaterialCheck = null;
   });
 
   const { reel } = await createThoughtFromText({
-    title: "Гонка записи",
+    title: "Гонка после последней проверки",
     body: "текст до записи",
-    idempotencyKey: "v01-write-race-thought",
+    idempotencyKey: "v01-last-check-thought",
   });
-  v01TestSeams.afterMaterialCheck = async () => {
-    const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId: reel.id } });
-    await prisma.dialogueMessage.create({
-      data: {
-        threadId: thread.id,
-        role: "user",
-        kind: "text",
-        body: "вставка между check и write",
-        status: "done",
-      },
-    });
+  const { ensureReelThread } = await import("../src/lib/dialogue");
+  const thread = await ensureReelThread(reel.id);
+  const rival = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } });
+  t.after(() => rival.$disconnect());
+
+  let insertSettledBeforeWrite = false;
+  let insertPromise: Promise<unknown> | undefined;
+  v01TestSeams.afterLastMaterialCheck = async () => {
+    insertPromise = rival.dialogueMessage
+      .create({
+        data: {
+          threadId: thread.id,
+          role: "user",
+          kind: "text",
+          body: "AFTER_LAST_CHECK_INSERT",
+          status: "done",
+        },
+      })
+      .then((row) => {
+        insertSettledBeforeWrite = true;
+        return row;
+      });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    assert.equal(insertSettledBeforeWrite, false);
   };
+
   const { sendDialogueMessage, listDialoguePage } = await import("../src/lib/dialogue");
-  await assert.rejects(
-    () =>
-      sendDialogueMessage(
-        reel.id,
-        { text: "между check и write", idempotencyKey: "v01-write-race-send" },
-        async () => ({
-          text: JSON.stringify({ reply: "STALE_AFTER_CHECK", scriptProposal: null }),
-          usage: { promptTokens: 1, completionTokens: 1 },
-        }),
-      ),
-    (error: unknown) => error instanceof StateVersionError,
+  const page = await sendDialogueMessage(
+    reel.id,
+    { text: "после последней проверки", idempotencyKey: "v01-last-check-send" },
+    async () => ({
+      text: JSON.stringify({ reply: "REPLY_UNDER_THREAD_LOCK", scriptProposal: null }),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    }),
   );
-  const page = await listDialoguePage(reel.id);
-  assert.equal(page.messages.some((item) => item.body === "STALE_AFTER_CHECK"), false);
+  assert.ok(page.messages.some((item) => item.body === "REPLY_UNDER_THREAD_LOCK"));
+  await insertPromise;
+  const after = await listDialoguePage(reel.id);
+  assert.ok(after.messages.some((item) => item.body === "AFTER_LAST_CHECK_INSERT"));
+  const reply = after.messages.find((item) => item.body === "REPLY_UNDER_THREAD_LOCK");
+  const late = after.messages.find((item) => item.body === "AFTER_LAST_CHECK_INSERT");
+  assert.ok(reply && late);
+  assert.ok(reply.createdAt <= late.createdAt || reply.id < late.id);
 });
 
 test("database rejects a working take from another thought", async (t) => {
