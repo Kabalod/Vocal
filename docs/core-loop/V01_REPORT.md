@@ -16,6 +16,7 @@ Live Supabase не менялся. V02 не начинать.
 | Неявный working take | Нет fallback; чтение по id |
 | API не принимает указатель | `PATCH /api/reels/[id]` + `workingTakeId` |
 | Индекс / FK | `@@index`; `3` — существование Take; `4` — составной FK той же мысли |
+| Голова диалога при записи | `FOR UPDATE` на `DialogueThread`; триггер `headEpoch`; миграция 5 |
 | Документы V01 | этот файл, ADR, FILE_MAP, SCENARIOS |
 | Противоречия V00 | принятость V00 отделена от приёмки V01 |
 
@@ -27,4 +28,4 @@ Live Supabase не менялся. V02 не начинать.
 
 ## Проверки агента
 
-Полный `npm run test:postgres` на этом дереве (после миграции 4 и CAS): **102/102**, fail 0, ~636 с. Отдельно `tests/v01-working-take.test.ts`: **15/15**. `tsc --noEmit` ок. Suite не заменяет внешнюю приёмку. GitHub status checks на ветке нет.
+Полный `npm run test:postgres` после миграции 5 (`headEpoch` + `FOR UPDATE` на `DialogueThread`): **102/102**, fail 0. Отдельно `tests/v01-working-take.test.ts`: **15/15** (вставка после последней проверки ждёт lock). `tsc --noEmit` ок. Suite не заменяет внешнюю приёмку. GitHub status checks на ветке нет.

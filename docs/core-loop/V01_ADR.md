@@ -26,7 +26,7 @@ V01: **не принят**. Live baseline / `migrate resolve` на Supabase не
 
 ## Версия состояния
 
-**Решение:** клиентский `expectedUpdatedAt` / `expectedWorkingTakeId` до вызова. После модели `commitDialogueReply` в одной транзакции: `FOR UPDATE` на Reel, Take и DialogueThread, сверка снимка, повторная сверка после test-seam, затем запись `AiCall` + processing + optional proposal. Расхождение → 409, stale reply не пишется.
+**Решение:** клиентский `expectedUpdatedAt` / `expectedWorkingTakeId` до вызова. После модели `commitDialogueReply` в одной транзакции сначала `FOR UPDATE` на `DialogueThread`, затем Reel и Take. Сверка снимка (включая `headEpoch`) и запись ответа идут под этими блокировками. Триггер `dialogue_message_bumps_head` при INSERT/UPDATE/DELETE сообщения делает `UPDATE DialogueThread.headEpoch`, поэтому параллельная вставка ждёт lock и не может стать видимой между последней проверкой и записью. Если голова уже сменилась до lock — 409, stale reply не пишется.
 
 ## Inflight
 
