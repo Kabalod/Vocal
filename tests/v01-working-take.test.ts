@@ -4,9 +4,9 @@ import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { aiOperationKey, resetAiInflightForTests, StateVersionError, withAiInflight } from "../src/lib/ai/usage-guard";
 import { runWithOwner } from "../src/lib/auth/session";
-import { createReel, createTake, getReel } from "../src/lib/reels";
+import { createReel, createTake, getReel, updateReel, ReelError } from "../src/lib/reels";
 import { createThoughtFromText } from "../src/lib/thought-create";
-import { ensureOriginalFromText, listTranscriptBundle } from "../src/lib/transcripts";
+import { createEditedRevision, ensureOriginalFromText, listTranscriptBundle } from "../src/lib/transcripts";
 
 test("working take is the third take by id, not the first two", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
@@ -179,4 +179,252 @@ test("daily budget is counted per owner", async (t) => {
     const { assertDailyTokenBudget, AiBudgetError } = await import("../src/lib/ai/usage-guard");
     await assert.rejects(() => assertDailyTokenBudget(), (error: unknown) => error instanceof AiBudgetError);
   });
+});
+
+test("stale working take, revision, or dialogue during AI is not saved", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  await resetPrismaClient();
+  resetAiInflightForTests();
+  t.after(() => resetAiInflightForTests());
+
+  const { sendDialogueMessage, listDialoguePage } = await import("../src/lib/dialogue");
+  const staleReply = "STALE_MODEL_REPLY_MUST_NOT_PERSIST";
+
+  async function thought(key: string) {
+    return createThoughtFromText({
+      title: key,
+      body: `Исходный текст ${key}`,
+      idempotencyKey: key,
+    });
+  }
+
+  const working = await thought("v01-mid-working");
+  const take2 = await createTake(working.reel.id, { inputType: "text", bodyText: "второй дубль" });
+  await assert.rejects(
+    () =>
+      sendDialogueMessage(
+        working.reel.id,
+        { text: "во время смены дубля", idempotencyKey: "v01-mid-working-send" },
+        async () => {
+          await prisma.reel.update({
+            where: { id: working.reel.id },
+            data: { workingTakeId: take2.id },
+          });
+          return {
+            text: JSON.stringify({ reply: staleReply, scriptProposal: null }),
+            usage: { promptTokens: 1, completionTokens: 1 },
+          };
+        },
+      ),
+    (error: unknown) => error instanceof StateVersionError && error.status === 409,
+  );
+  const afterWorking = await listDialoguePage(working.reel.id);
+  assert.equal(afterWorking.messages.some((item) => item.body === staleReply), false);
+  assert.ok(afterWorking.messages.some((item) => item.kind === "error"));
+
+  const revision = await thought("v01-mid-revision");
+  const takeId = revision.reel.workingTakeId;
+  assert.ok(takeId);
+  await assert.rejects(
+    () =>
+      sendDialogueMessage(
+        revision.reel.id,
+        { text: "во время смены ревизии", idempotencyKey: "v01-mid-revision-send" },
+        async () => {
+          await createEditedRevision(takeId, "новая выбранная ревизия UNIQUE_REV");
+          return {
+            text: JSON.stringify({ reply: staleReply, scriptProposal: null }),
+            usage: { promptTokens: 1, completionTokens: 1 },
+          };
+        },
+      ),
+    (error: unknown) => error instanceof StateVersionError,
+  );
+  assert.equal((await listDialoguePage(revision.reel.id)).messages.some((item) => item.body === staleReply), false);
+
+  const dialogue = await thought("v01-mid-dialogue");
+  await assert.rejects(
+    () =>
+      sendDialogueMessage(
+        dialogue.reel.id,
+        { text: "во время чужого сообщения", idempotencyKey: "v01-mid-dialogue-send" },
+        async () => {
+          const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId: dialogue.reel.id } });
+          await prisma.dialogueMessage.create({
+            data: {
+              threadId: thread.id,
+              role: "user",
+              kind: "text",
+              body: "параллельное сообщение",
+              status: "done",
+            },
+          });
+          return {
+            text: JSON.stringify({ reply: staleReply, scriptProposal: null }),
+            usage: { promptTokens: 1, completionTokens: 1 },
+          };
+        },
+      ),
+    (error: unknown) => error instanceof StateVersionError,
+  );
+  assert.equal((await listDialoguePage(dialogue.reel.id)).messages.some((item) => item.body === staleReply), false);
+});
+
+test("same idempotency key on two thoughts does not share a model call", async (t) => {
+  await withPostgresTestDb(t);
+  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  resetAiInflightForTests();
+  t.after(() => resetAiInflightForTests());
+
+  const first = await createThoughtFromText({
+    title: "Мысль 1",
+    body: "текст одной мысли",
+    idempotencyKey: "v01-two-thoughts-a",
+  });
+  const second = await createThoughtFromText({
+    title: "Мысль 2",
+    body: "текст другой мысли",
+    idempotencyKey: "v01-two-thoughts-b",
+  });
+  const { getProfile } = await import("../src/lib/profile");
+  await getProfile();
+  const { sendDialogueMessage } = await import("../src/lib/dialogue");
+  let completeCalls = 0;
+  const complete = async () => {
+    completeCalls += 1;
+    return {
+      text: JSON.stringify({ reply: `ответ ${completeCalls}`, scriptProposal: null }),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    };
+  };
+  await Promise.all([
+    sendDialogueMessage(first.reel.id, { text: "один", idempotencyKey: "shared-key" }, complete),
+    sendDialogueMessage(second.reel.id, { text: "два", idempotencyKey: "shared-key" }, complete),
+  ]);
+  assert.equal(completeCalls, 2);
+});
+
+test("inflight key is released after a model error", async () => {
+  resetAiInflightForTests();
+  let runs = 0;
+  await assert.rejects(
+    () =>
+      withAiInflight("thought:err", async () => {
+        runs += 1;
+        throw new Error("boom");
+      }),
+    /boom/,
+  );
+  const again = await withAiInflight("thought:err", async () => {
+    runs += 1;
+    return "ok";
+  });
+  assert.equal(again, "ok");
+  assert.equal(runs, 2);
+  resetAiInflightForTests();
+});
+
+test("switching working take does not change finalTakeId", async (t) => {
+  await withPostgresTestDb(t);
+  const reel = await createReel({ title: "Итог отдельно" });
+  const take1 = await createTake(reel.id, { inputType: "text", bodyText: "первый" });
+  const take2 = await createTake(reel.id, { inputType: "text", bodyText: "второй" });
+  await updateReel(reel.id, { finalTakeId: take1.id });
+  const after = await updateReel(reel.id, { workingTakeId: take2.id });
+  assert.equal(after.workingTakeId, take2.id);
+  assert.equal(after.finalTakeId, take1.id);
+});
+
+test("API accepts own working take and rejects a take from another thought", async (t) => {
+  await withPostgresTestDb(t);
+  const { PATCH } = await import("../src/app/api/reels/[id]/route");
+  const reelA = await createReel({ title: "A" });
+  const reelB = await createReel({ title: "B" });
+  const takeA1 = await createTake(reelA.id, { inputType: "text", bodyText: "A1" });
+  const takeA2 = await createTake(reelA.id, { inputType: "text", bodyText: "A2" });
+  const takeB = await createTake(reelB.id, { inputType: "text", bodyText: "B1" });
+
+  const ok = await PATCH(
+    new Request(`http://vocal.local/api/reels/${reelA.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workingTakeId: takeA2.id }),
+    }),
+    { params: Promise.resolve({ id: reelA.id }) },
+  );
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).reel.workingTakeId, takeA2.id);
+  assert.equal((await getReel(reelA.id))?.workingTakeId, takeA2.id);
+  assert.equal(takeA1.id, (await getReel(reelA.id))?.takes[0]?.id);
+
+  const foreign = await PATCH(
+    new Request(`http://vocal.local/api/reels/${reelA.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workingTakeId: takeB.id }),
+    }),
+    { params: Promise.resolve({ id: reelA.id }) },
+  );
+  assert.equal(foreign.status, 400);
+  assert.equal((await foreign.json()).code, "TAKE_NOT_IN_REEL");
+  await assert.rejects(
+    () => updateReel(reelA.id, { workingTakeId: takeB.id }),
+    (error: unknown) => error instanceof ReelError && error.code === "TAKE_NOT_IN_REEL",
+  );
+});
+
+test("missing workingTakeId is not replaced by selectedTakeId or takes[0]", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  const reel = await createReel({ title: "Старая запись" });
+  const take = await createTake(reel.id, { inputType: "text", bodyText: "есть дубль" });
+  await prisma.reel.update({
+    where: { id: reel.id },
+    data: { workingTakeId: null, selectedTakeId: take.id },
+  });
+  const { buildThoughtMaterialContext } = await import("../src/lib/dialogue");
+  await assert.rejects(
+    () => buildThoughtMaterialContext(reel.id),
+    (error: unknown) => error instanceof ReelError && error.code === "WORKING_TAKE_REQUIRED",
+  );
+});
+
+test("AiCall snapshot stores working take, revision, reel and dialogue versions", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  resetAiInflightForTests();
+  t.after(() => resetAiInflightForTests());
+
+  const { reel } = await createThoughtFromText({
+    title: "Снимок",
+    body: "Материал для снимка вызова.",
+    idempotencyKey: "v01-snapshot-thought",
+  });
+  const { sendDialogueMessage } = await import("../src/lib/dialogue");
+  await sendDialogueMessage(
+    reel.id,
+    { text: "зафиксируй материал", idempotencyKey: "v01-snapshot-send" },
+    async () => ({
+      text: JSON.stringify({ reply: "зафиксировано", scriptProposal: null }),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    }),
+  );
+  const call = await prisma.aiCall.findFirstOrThrow({
+    where: { reelId: reel.id, kind: "dialogue" },
+    orderBy: { createdAt: "desc" },
+  });
+  const snap = JSON.parse(call.inputSnapshotJson) as {
+    text: string;
+    workingTakeId: string;
+    transcriptRevisionId: string | null;
+    reelUpdatedAt: string;
+    dialogueVersion: { threadId: string; messageCount: number; lastMessageId: string | null };
+  };
+  assert.equal(snap.text, "зафиксируй материал");
+  assert.equal(snap.workingTakeId, reel.workingTakeId);
+  assert.ok(snap.transcriptRevisionId);
+  assert.ok(snap.reelUpdatedAt);
+  assert.ok(snap.dialogueVersion.threadId);
+  assert.ok(snap.dialogueVersion.messageCount >= 2);
+  assert.ok(snap.dialogueVersion.lastMessageId);
 });
