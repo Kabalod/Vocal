@@ -1,17 +1,9 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { uniqueNewQuestions } from "../src/lib/question-text";
 import { annotateQuotes, quoteFoundInText } from "../src/lib/evidence";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("exact duplicate question texts are dropped before save", () => {
   assert.deepEqual(
@@ -36,16 +28,10 @@ test("quotes are marked found or missing without claiming the idea is true", () 
 });
 
 test("review and questions: versions, no scores, answers without AI, invalid JSON", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-review-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
       t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows */
-    }
   });
 
   const { createReel, createTake } = await import("../src/lib/reels");

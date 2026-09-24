@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { runtimePortraitFields } from "../src/lib/ai-runtime-context";
 import { resetPrismaClient } from "../src/lib/db";
@@ -47,7 +45,7 @@ test("P17 matrix: thought without profile through finals, upload, compare, expor
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-p17-"));
   const storage = path.join(dir, "storage");
   mkdirSync(storage, { recursive: true });
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     process.env.VOCAL_STORAGE_ROOT = storage;
   process.env.VOCAL_SKIP_JOB_ENQUEUE = "1";
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;

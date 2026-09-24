@@ -1,17 +1,9 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { assembleReelContext } from "../src/lib/reel-context";
 import { emptyProfileFields, type ProfileFieldValue } from "../src/types/profile";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function fields(patch: Partial<Record<string, { text: string; usage: "in_text" | "understanding" }>>): ProfileFieldValue[] {
   return emptyProfileFields().map((field) => {
@@ -53,16 +45,10 @@ test("assembleReelContext is deterministic and respects selection and usage", ()
 });
 
 test("profile and reel context API: save, skip, snapshot survives profile change", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
       t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const { GET: getProfile, PUT: putProfile } = await import("../src/app/api/profile/route");

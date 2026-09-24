@@ -1,10 +1,4 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { closeSync, mkdtempSync, openSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
@@ -17,8 +11,6 @@ import {
   parseArchiveRange,
   resolveArchiveDateField,
 } from "../src/lib/reel-archive-query";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("P01.1 pure helpers: range, month bounds, day keys, fingerprint", () => {
   assert.equal(ARCHIVE_DATE_FIELD_DEFAULT, "createdAt");
@@ -89,18 +81,10 @@ test("P01.1 pure helpers: range, month bounds, day keys, fingerprint", () => {
 });
 
 test("P01.1 list date filters, calendar facets, cursor fingerprint, no duplicates", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-p01-1-"));
-  const dbPath = path.join(dir, "test.db");
-  closeSync(openSync(dbPath, "a"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
       t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows */
-    }
   });
 
   const { GET: listGet } = await import("../src/app/api/reels/route");
@@ -117,6 +101,7 @@ test("P01.1 list date filters, calendar facets, cursor fingerprint, no duplicate
 
   await prisma.reel.create({
     data: {
+      ownerUserId: "local",
       id: "r-a",
       title: "Утро пятницы",
       initialNote: "поиск альфа",
@@ -127,6 +112,7 @@ test("P01.1 list date filters, calendar facets, cursor fingerprint, no duplicate
   });
   await prisma.reel.create({
     data: {
+      ownerUserId: "local",
       id: "r-b",
       title: "Ночь субботы",
       initialNote: "бета",
@@ -137,6 +123,7 @@ test("P01.1 list date filters, calendar facets, cursor fingerprint, no duplicate
   });
   await prisma.reel.create({
     data: {
+      ownerUserId: "local",
       id: "r-c",
       title: "Воскресенье работа",
       initialNote: "альфа работа",
@@ -147,6 +134,7 @@ test("P01.1 list date filters, calendar facets, cursor fingerprint, no duplicate
   });
   await prisma.reel.create({
     data: {
+      ownerUserId: "local",
       id: "r-arch",
       title: "Архив скрыт",
       initialNote: "альфа",

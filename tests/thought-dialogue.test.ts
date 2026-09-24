@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
@@ -52,8 +49,7 @@ test("dialogue cursor pages last N and older without duplicates", () => {
 });
 
 test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-dialogue-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
@@ -61,11 +57,6 @@ test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", asy
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const { reel } = await createThoughtFromText({

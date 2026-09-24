@@ -1,27 +1,13 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
 test("reel workspace API: create, isolate edits, search, archive, stale", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-workspace-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
       t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const { GET: listGet, POST } = await import("../src/app/api/reels/route");
@@ -142,13 +128,14 @@ test("reel workspace API: create, isolate edits, search, archive, stale", async 
   assert.ok(Array.isArray(jobsBody.jobs));
 
   await prisma.reel.create({
-    data: { title: "legacy draft", initialNote: "", status: "draft" },
+    data: {
+      ownerUserId: "local", title: "legacy draft", initialNote: "", status: "draft" },
   });
   const ideas = await (await listGet(new Request("http://vocal.local/api/reels?status=idea"))).json();
   assert.ok(ideas.reels.some((row: { title: string }) => row.title === "legacy draft"));
 
   const race = await prisma.reel.create({
-    data: { title: "гонка", initialNote: "0", status: "idea" },
+    data: { ownerUserId: "local", title: "гонка", initialNote: "0", status: "idea" },
   });
   const version = race.updatedAt.toISOString();
   const { updateReel, ReelError } = await import("../src/lib/reels");
@@ -163,7 +150,7 @@ test("reel workspace API: create, isolate edits, search, archive, stale", async 
   const reason = (bad[0] as PromiseRejectedResult).reason;
   assert.ok(reason instanceof ReelError && reason.code === "STALE");
   const winner = (ok[0] as PromiseFulfilledResult<{ initialNote: string }>).value;
-  const stored = await prisma.reel.findUnique({ where: { id: race.id } });
+  const stored = await prisma.reel.findUnique({ where: { id: race.id }});
   assert.equal(stored?.initialNote, winner.initialNote);
   assert.ok(stored?.initialNote === "alpha" || stored?.initialNote === "beta");
 });

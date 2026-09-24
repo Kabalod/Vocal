@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
@@ -48,16 +46,10 @@ test("new studio UI writes finalTakeId, not selectedTakeId", () => {
 });
 
 test("final take migrates from selectedTakeId and completion keeps history", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-complete-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
       t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows */
-    }
   });
 
   const { createReel, createTake, getReel, updateReel, listReels, ReelError } = await import("../src/lib/reels");
@@ -199,17 +191,11 @@ async function assertCompletedHasBothFinals(
 }
 
 test("concurrent final changes cannot complete a thought without both finals", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-complete-race-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     await resetPrismaClient();
     t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows */
-    }
   });
 
   const { createReel, createTake, updateReel } = await import("../src/lib/reels");

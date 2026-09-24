@@ -1,10 +1,4 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { resetPrismaClient } from "../src/lib/db";
@@ -17,8 +11,6 @@ import {
   unfinishedAmendPublishesPortrait,
 } from "../src/lib/product-contracts";
 import { emptyProfileFields } from "../src/types/profile";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("R2 keeps R1 mapping and product invariants", () => {
   assert.deepEqual(P13_P16_TO_R_PHASE, {
@@ -33,16 +25,10 @@ test("R2 keeps R1 mapping and product invariants", () => {
 });
 
 test("R2 retries do not duplicate thought, take, message, finals or export rows", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-r2-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
       t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows */
-    }
   });
 
   const { createThoughtFromText } = await import("../src/lib/thought-create");
@@ -201,8 +187,7 @@ test("R2 retries do not duplicate thought, take, message, finals or export rows"
 });
 
 test("R2 profile amend retry with the same key does not publish twice", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-r2-profile-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
@@ -210,11 +195,6 @@ test("R2 profile amend retry with the same key does not publish twice", async (t
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows */
-    }
   });
 
   const { startProfileDialogue, sendProfileMessage, supplementProfileDialogue, getProfileWorkspace, confirmProfilePortrait } = await import(

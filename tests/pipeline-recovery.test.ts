@@ -1,16 +1,11 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import type { AnalysisResultPayload } from "../src/types/analysis";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function fakePayload(transcript: string): AnalysisResultPayload {
   return {
@@ -46,7 +41,7 @@ function fakePayload(transcript: string): AnalysisResultPayload {
 
 test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versions", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-jobs-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
       t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
@@ -72,6 +67,7 @@ test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versi
 
   const job = await prisma.job.create({
     data: {
+      ownerUserId: "local",
       originalName: "clip.mp4",
       videoPath,
       status: "queued",
@@ -110,7 +106,7 @@ test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versi
   const original = await findOriginalRevision(take.id);
   assert.ok(original);
   assert.equal(original?.text, "привет мир");
-  const afterStt = await prisma.job.findUnique({ where: { id: job.id } });
+  const afterStt = await prisma.job.findUnique({ where: { id: job.id }});
   assert.equal(afterStt?.status, "error");
   assert.equal(afterStt?.stage, "analyze");
 
@@ -161,6 +157,7 @@ test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versi
 
   const hung = await prisma.job.create({
     data: {
+      ownerUserId: "local",
       originalName: "hung.mp4",
       videoPath,
       status: "analyzing",
@@ -176,6 +173,7 @@ test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versi
   assert.ok(recoverable.includes(hung.id));
   const live = await prisma.job.create({
     data: {
+      ownerUserId: "local",
       originalName: "live.mp4",
       videoPath,
       status: "analyzing",
@@ -197,11 +195,12 @@ test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versi
     probeDuration,
   });
   assert.equal(sttCalls, 1);
-  const hungDone = await prisma.job.findUnique({ where: { id: hung.id } });
+  const hungDone = await prisma.job.findUnique({ where: { id: hung.id }});
   assert.equal(hungDone?.status, "done");
 
   const race = await prisma.job.create({
     data: {
+      ownerUserId: "local",
       originalName: "race.mp4",
       videoPath,
       status: "queued",
@@ -218,6 +217,7 @@ test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versi
 
   const exhaustedJob = await prisma.job.create({
     data: {
+      ownerUserId: "local",
       originalName: "exhausted.mp4",
       videoPath,
       status: "error",
@@ -237,12 +237,13 @@ test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versi
   assert.equal(retryRes.status, 409);
   const retryBody = await retryRes.json();
   assert.equal(retryBody.code, "RETRY_EXHAUSTED");
-  const sameTake = await prisma.take.count({ where: { id: take.id } });
+  const sameTake = await prisma.take.count({ where: { id: take.id }});
   assert.equal(sameTake, 1);
 
   const sttFailTakeReel = reel;
   const sttFailJob = await prisma.job.create({
     data: {
+      ownerUserId: "local",
       originalName: "stt-fail.mp4",
       videoPath,
       status: "queued",
@@ -282,6 +283,7 @@ test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versi
 
   const payloadJob = await prisma.job.create({
     data: {
+      ownerUserId: "local",
       originalName: "payload.mp4",
       videoPath,
       status: "done",

@@ -22,6 +22,7 @@ export async function backfillReels(client: PrismaClient) {
 
       const reel = await tx.reel.create({
         data: {
+          ownerUserId: fresh.ownerUserId,
           title: titleFromJob(fresh.originalName),
           initialNote: "",
           status: "idea",

@@ -1,21 +1,16 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { assertOwnedObjectPath, PRIVATE_MEDIA_PREFIX } from "../src/lib/media-access";
-import { AuthError, legacyOwnerUserId, runWithOwner } from "../src/lib/auth/session";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+import { AuthError, runWithOwner } from "../src/lib/auth/session";
 
 test("A/B isolation: read, change, export, files, job retry; ID spoofing fails", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-auth-iso-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
     t.after(async () => {
     await prisma.$disconnect();
@@ -111,16 +106,6 @@ test("A/B isolation: read, change, export, files, job retry; ID spoofing fails",
   assert.equal(asA.status, 200);
   const body = await asA.json();
   assert.equal(body.reel.title, "Мысль А");
-});
-
-test("legacy owner is predetermined, not first login", () => {
-  const prev = process.env.VOCAL_LEGACY_OWNER_USER_ID;
-  delete process.env.VOCAL_LEGACY_OWNER_USER_ID;
-  assert.throws(() => legacyOwnerUserId(), /VOCAL_LEGACY_OWNER_USER_ID/);
-  process.env.VOCAL_LEGACY_OWNER_USER_ID = "11111111-1111-1111-1111-111111111111";
-  assert.equal(legacyOwnerUserId(), "11111111-1111-1111-1111-111111111111");
-  if (prev) process.env.VOCAL_LEGACY_OWNER_USER_ID = prev;
-  else delete process.env.VOCAL_LEGACY_OWNER_USER_ID;
 });
 
 test("signed object path cannot be spoofed across owners", async () => {

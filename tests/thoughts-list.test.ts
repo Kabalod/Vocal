@@ -1,30 +1,14 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { closeSync, mkdtempSync, openSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { REEL_LIST_PREVIEW_MAX } from "../src/types/reel";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
 test("thought list groups statuses, paginates, and keeps compact DTO", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-thoughts-"));
-  const dbPath = path.join(dir, "test.db");
-  closeSync(openSync(dbPath, "a"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
       t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const { GET: listGet } = await import("../src/app/api/reels/route");
@@ -32,12 +16,12 @@ test("thought list groups statuses, paginates, and keeps compact DTO", async (t)
   const longNote = "заметка ".repeat(80);
   await prisma.reel.createMany({
     data: [
-      { title: "Идея одна", initialNote: longNote, status: "idea" },
-      { title: "Черновик", initialNote: "", status: "draft" },
-      { title: "Работа", initialNote: "в процессе", status: "in_progress" },
-      { title: "Готов", initialNote: "к записи", status: "ready_to_record" },
-      { title: "Готово", initialNote: "успех", status: "completed" },
-      { title: "Архив мысль", initialNote: "скрыта", status: "archived" },
+      { ownerUserId: "local", title: "Идея одна", initialNote: longNote, status: "idea" },
+      { ownerUserId: "local", title: "Черновик", initialNote: "", status: "draft" },
+      { ownerUserId: "local", title: "Работа", initialNote: "в процессе", status: "in_progress" },
+      { ownerUserId: "local", title: "Готов", initialNote: "к записи", status: "ready_to_record" },
+      { ownerUserId: "local", title: "Готово", initialNote: "успех", status: "completed" },
+      { ownerUserId: "local", title: "Архив мысль", initialNote: "скрыта", status: "archived" },
     ],
   });
 
@@ -100,6 +84,7 @@ test("thought list groups statuses, paginates, and keeps compact DTO", async (t)
 
   const withScript = await prisma.reel.create({
     data: {
+      ownerUserId: "local",
       title: "Со сценарием",
       initialNote: "заметка не должна утечь как сценарий",
       status: "idea",
@@ -114,7 +99,7 @@ test("thought list groups statuses, paginates, and keeps compact DTO", async (t)
   });
   await prisma.reel.update({
     where: { id: withScript.id },
-    data: { selectedScriptId: (await prisma.scriptVersion.findFirst({ where: { reelId: withScript.id } }))!.id },
+    data: { selectedScriptId: (await prisma.scriptVersion.findFirst({ where: { reelId: withScript.id }}))!.id },
   });
   const listed = await (await listGet(new Request("http://vocal.local/api/reels?status=all&q=Со сценарием"))).json();
   assert.equal(listed.reels.length, 1);

@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import {
   draftAmendEntersRuntime,
@@ -79,16 +76,10 @@ test("R6 keeps confirmed portrait in runtime and drops amend drafts", () => {
 });
 
 test("thought A prompt does not include thought B or amend draft", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-r6-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
       t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const { createReel, createTake } = await import("../src/lib/reels");

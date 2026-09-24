@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
@@ -124,18 +121,10 @@ test("P01.5 preview URL, dialog, record and back restore archive filters", () =>
 });
 
 test("P01.5 preview endpoint returns summary without N+1 list fields", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-p01-5-"));
-  const dbPath = path.join(dir, "test.db");
-  closeSync(openSync(dbPath, "a"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
       t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows */
-    }
   });
 
   const { GET } = await import("../src/app/api/reels/[id]/archive-preview/route");
@@ -143,6 +132,7 @@ test("P01.5 preview endpoint returns summary without N+1 list fields", async (t)
 
   const reel = await prisma.reel.create({
     data: {
+      ownerUserId: "local",
       id: "prev-1",
       title: "Превью мысль",
       initialNote: "исходная мысль пользователя",
@@ -167,6 +157,7 @@ test("P01.5 preview endpoint returns summary without N+1 list fields", async (t)
   });
   await prisma.job.create({
     data: {
+      ownerUserId: "local",
       originalName: "voice.webm",
       videoPath: "/tmp/voice.webm",
       status: "transcribing",
@@ -194,7 +185,7 @@ test("P01.5 preview endpoint returns summary without N+1 list fields", async (t)
   assert.equal(preview.noScriptHint, null);
 
   const emptyReel = await prisma.reel.create({
-    data: { id: "prev-empty", title: "Без сценария", status: "idea" },
+    data: { ownerUserId: "local", id: "prev-empty", title: "Без сценария", status: "idea" },
   });
   const emptyPreview = await (
     await GET(new Request("http://vocal.local/api/reels/prev-empty/archive-preview"), {
@@ -205,7 +196,7 @@ test("P01.5 preview endpoint returns summary without N+1 list fields", async (t)
   assert.match(emptyPreview.noScriptHint, /Сценария пока нет/);
 
   const doneReel = await prisma.reel.create({
-    data: { id: "prev-done", title: "Готово", status: "completed" },
+    data: { ownerUserId: "local", id: "prev-done", title: "Готово", status: "completed" },
   });
   const donePreview = await (
     await GET(new Request("http://vocal.local/api/reels/prev-done/archive-preview"), {

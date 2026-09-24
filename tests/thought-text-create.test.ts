@@ -1,31 +1,17 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { emptyThoughtDraft, newThoughtIdempotencyKey } from "../src/lib/thought-draft";
 import { thoughtUserStatus } from "../src/lib/thought-preview";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
 test("text thought create is one transaction, idempotent, and keeps draft on error", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-thought-text-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     delete process.env.VOCAL_FAIL_THOUGHT_CREATE;
     t.after(async () => {
     delete process.env.VOCAL_FAIL_THOUGHT_CREATE;
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const { POST } = await import("../src/app/api/thoughts/route");
@@ -141,18 +127,12 @@ test("text thought create is one transaction, idempotent, and keeps draft on err
 });
 
 test("concurrent thought create with the same key returns one thought", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-thought-race-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     delete process.env.VOCAL_FAIL_THOUGHT_CREATE;
   await resetPrismaClient();
     t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const { POST } = await import("../src/app/api/thoughts/route");

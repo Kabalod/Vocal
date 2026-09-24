@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 const { spawnSync } = require("node:child_process");
+const { randomBytes } = require("node:crypto");
+const net = require("node:net");
 const { setTimeout: delay } = require("node:timers/promises");
 
-const container = "vocal-test-postgres";
 const image = "postgres:16-alpine";
 const user = "postgres";
 const password = "vocal_test";
 const database = "vocal_test";
-const hostPort = "55432";
-const testUrl = `postgresql://${user}:${password}@127.0.0.1:${hostPort}/${database}`;
+const container = `vocal-test-pg-${process.pid}-${randomBytes(3).toString("hex")}`;
 
 const authTests = [
   "tests/session-owner.test.ts",
@@ -49,13 +49,86 @@ const dbTests = [
   "tests/mvp-release.test.ts",
 ];
 
-const tests = process.argv.includes("--auth") ? authTests : dbTests;
+const reelsTests = [
+  "tests/reels-workspace.test.ts",
+  "tests/reels-editor-session.test.ts",
+  "tests/reels-takes.test.ts",
+  "tests/pipeline-recovery.test.ts",
+  "tests/creator-profile.test.ts",
+  "tests/reviews-questions.test.ts",
+  "tests/scripts.test.ts",
+  "tests/text-diff.test.ts",
+  "tests/personal-mvp.test.ts",
+  "tests/shell-nav.test.ts",
+  "tests/shell-layout.test.ts",
+  "tests/shell-sheet.test.ts",
+  "tests/vocal-ui-kit.test.ts",
+  "tests/reel-filters.test.ts",
+  "tests/thoughts-list.test.ts",
+  "tests/p01-1-archive-contracts.test.ts",
+  "tests/p01-2-archive-list-state.test.ts",
+  "tests/p01-3-desktop-archive.test.ts",
+  "tests/p01-4-mobile-archive.test.ts",
+  "tests/p01-5-archive-preview.test.ts",
+  "tests/p01-6-0-visual-assets.test.ts",
+  "tests/p01-6-1-archive-core.test.ts",
+  "tests/p01-6-2-desktop-static.test.ts",
+  "tests/thought-preview.test.ts",
+  "tests/thought-text-create.test.ts",
+  "tests/new-thought-ui.test.ts",
+  "tests/thought-media-create.test.ts",
+  "tests/thought-media-cleanup.test.ts",
+  "tests/reel-studio.test.ts",
+  "tests/script-timeline.test.ts",
+  "tests/thought-dialogue.test.ts",
+  "tests/thought-script-draft.test.ts",
+  "tests/script-draft-save.test.ts",
+  "tests/recording-view.test.ts",
+  "tests/thought-completion.test.ts",
+  "tests/r1-contracts.test.ts",
+  "tests/r2-idempotency.test.ts",
+  "tests/r3-recovery.test.ts",
+  "tests/r4-voice.test.ts",
+  "tests/r5-media.test.ts",
+  "tests/r6-context.test.ts",
+  "tests/r7-export.test.ts",
+  "tests/r8-a11y.test.ts",
+  "tests/r8-privacy.test.ts",
+  "tests/profile-dialogue.test.ts",
+  "tests/p10-p12-profile.test.ts",
+  "tests/legacy-routes.test.ts",
+  "tests/mvp-release.test.ts",
+  "tests/p17-e2e-matrix.test.ts",
+  "tests/p17-visual.test.ts",
+  "tests/auth-isolation.test.ts",
+  "tests/supabase-profiles-rls.test.ts",
+  "tests/private-storage.test.ts",
+  "tests/criteria-write.test.ts",
+];
+
+function selectedTests() {
+  if (process.argv.includes("--auth")) return authTests;
+  if (process.argv.includes("--reels")) return reelsTests;
+  return dbTests;
+}
 
 function run(command, args, opts = {}) {
   return spawnSync(command, args, {
     stdio: "inherit",
     shell: true,
     ...opts,
+  });
+}
+
+function allocatePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      server.close((err) => (err ? reject(err) : resolve(port)));
+    });
+    server.on("error", reject);
   });
 }
 
@@ -69,13 +142,19 @@ async function waitForReady() {
     if ((ready.status ?? 1) === 0) return;
     await delay(500);
   }
-  throw new Error("vocal-test-postgres did not become ready");
+  throw new Error(`${container} did not become ready`);
+}
+
+function removeOwnContainer() {
+  run("docker", ["rm", "-f", container], { stdio: "pipe" });
 }
 
 async function main() {
   let status = 1;
-  run("docker", ["rm", "-f", container], { stdio: "pipe" });
-  const started = run("docker", [
+  let started = false;
+  const hostPort = await allocatePort();
+  const testUrl = `postgresql://${user}:${password}@127.0.0.1:${hostPort}/${database}`;
+  const launched = run("docker", [
     "run",
     "-d",
     "--name",
@@ -90,9 +169,10 @@ async function main() {
     `${hostPort}:5432`,
     image,
   ]);
-  if ((started.status ?? 1) !== 0) {
+  if ((launched.status ?? 1) !== 0) {
     throw new Error("Failed to start postgres:16-alpine. Docker Desktop must be running.");
   }
+  started = true;
   try {
     await waitForReady();
     const env = {
@@ -106,16 +186,16 @@ async function main() {
     if ((generate.status ?? 1) !== 0) throw new Error("prisma generate failed");
     const migrate = run("npx", ["prisma", "migrate", "deploy"], { env });
     if ((migrate.status ?? 1) !== 0) throw new Error("prisma migrate deploy failed on test postgres");
-    const testRun = run("npx", ["tsx", "--test", "--test-concurrency=1", ...tests], { env });
+    const testRun = run("npx", ["tsx", "--test", "--test-concurrency=1", ...selectedTests()], { env });
     status = testRun.status ?? 1;
   } finally {
-    run("docker", ["rm", "-f", container], { stdio: "pipe" });
+    if (started) removeOwnContainer();
   }
   process.exit(status);
 }
 
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
-  run("docker", ["rm", "-f", container], { stdio: "pipe" });
+  removeOwnContainer();
   process.exit(1);
 });

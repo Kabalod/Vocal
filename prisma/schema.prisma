@@ -20,7 +20,7 @@ model Reel {
   contextKeysJson  String                 @default("[]")
   selectedScriptId String?
   finalScriptId    String?
-  ownerUserId      String                 @default("local")
+  ownerUserId      String
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
 
@@ -41,7 +41,7 @@ model Reel {
 /// CreatorProfile.id equals the auth user uuid (same as public.profiles.id).
 model CreatorProfile {
   id                 String             @id
-  ownerUserId        String             @unique @default("local")
+  ownerUserId        String             @unique
   currentRevisionId  String?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
@@ -134,7 +134,7 @@ model Job {
   updatedAt    DateTime  @updatedAt
   takeId       String?
   take         Take?     @relation(fields: [takeId], references: [id], onDelete: Restrict)
-  ownerUserId  String    @default("local")
+  ownerUserId  String
   analysis     AnalysisResult?
 
   @@index([ownerUserId, createdAt])
@@ -182,7 +182,7 @@ model AiCall {
   errorMessage       String?
   promptTokens       Int?
   completionTokens   Int?
-  ownerUserId        String          @default("local")
+  ownerUserId        String
   createdAt          DateTime        @default(now())
   reviews            Review[]
 

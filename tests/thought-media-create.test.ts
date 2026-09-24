@@ -1,16 +1,8 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import type { AnalysisResultPayload } from "../src/types/analysis";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function fakePayload(transcript: string): AnalysisResultPayload {
   return {
@@ -45,18 +37,12 @@ function fakePayload(transcript: string): AnalysisResultPayload {
 }
 
 test("thought media create validates, is idempotent, and builds script after STT", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-thought-media-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     process.env.VOCAL_SKIP_JOB_ENQUEUE = "1";
     t.after(async () => {
     delete process.env.VOCAL_SKIP_JOB_ENQUEUE;
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const { POST } = await import("../src/app/api/thoughts/media/route");
@@ -199,7 +185,9 @@ test("thought media create validates, is idempotent, and builds script after STT
   assert.equal(processingBody.phase, "done");
   assert.equal(processingBody.scriptReady, true);
 
-  const titleReel = await prisma.reel.create({ data: { title: DEFAULT_THOUGHT_TITLE } });
+  const titleReel = await prisma.reel.create({
+    data: {
+      ownerUserId: "local", title: DEFAULT_THOUGHT_TITLE }});
   const title = await applyThoughtTitleFromTranscript(titleReel.id, "Первая фраза. Дальше текст.", async () => {
     throw new Error("no model");
   });

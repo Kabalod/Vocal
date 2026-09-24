@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
@@ -81,7 +79,7 @@ test("R5 classifies take limits, stale pending reclaim, and scriptless process",
 test("stale pending take upload is reclaimed on retry", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-r5-stale-"));
   const storage = path.join(dir, "storage");
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     process.env.VOCAL_STORAGE_ROOT = storage;
   process.env.VOCAL_SKIP_JOB_ENQUEUE = "1";
     t.after(async () => {

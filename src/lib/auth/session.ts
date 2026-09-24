@@ -71,11 +71,3 @@ export function canWriteSharedCriteria(): boolean {
   if (allow.length === 0) return false;
   return allow.includes(ownerUserId());
 }
-
-export function legacyOwnerUserId(): string {
-  const id = process.env.VOCAL_LEGACY_OWNER_USER_ID?.trim();
-  if (!id) {
-    throw new Error("VOCAL_LEGACY_OWNER_USER_ID must be the predetermined owner uuid.");
-  }
-  return id;
-}

@@ -1,10 +1,4 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { resetPrismaClient } from "../src/lib/db";
@@ -20,8 +14,6 @@ import {
 } from "../src/lib/profile-portrait";
 import { fallbackProfileReply, parseProfileAiReply } from "../src/lib/ai/profile";
 import { emptyProfileFields, LOCAL_PROFILE_ID } from "../src/types/profile";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("merge keeps confirmed meanings and empty patch does not wipe", () => {
   const current = emptyProfileFields().map((field) =>
@@ -147,8 +139,7 @@ test("sanitize and parse accept live Groq value patch and empty reply", () => {
 });
 
 test("profile dialogue covers keys, voice skips confirm, reload and snapshots stay", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-dlg-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
@@ -156,11 +147,6 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const {
@@ -453,8 +439,7 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
 });
 
 test("parallel profile answers rematch onto the latest portrait", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-race-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
@@ -462,11 +447,6 @@ test("parallel profile answers rematch onto the latest portrait", async (t) => {
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const { startProfileDialogue, sendProfileMessage, getProfileWorkspace } = await import(
@@ -544,7 +524,6 @@ test("parallel profile answers rematch onto the latest portrait", async (t) => {
 });
 
 test("late answer for the same field does not overwrite a newer value", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-stale-"));
   const { prisma, url } = await withPostgresTestDb(t);
   process.env.DATABASE_URL = url;
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
@@ -554,11 +533,6 @@ test("late answer for the same field does not overwrite a newer value", async (t
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const { startProfileDialogue, sendProfileMessage, getProfileWorkspace } = await import(
@@ -612,21 +586,16 @@ test("late answer for the same field does not overwrite a newer value", async (t
 });
 
 test("stale ready reply cannot complete after a newer clarify", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-stale-complete-"));
   const { prisma, url } = await withPostgresTestDb(t);
   process.env.DATABASE_URL = url;
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  delete process.env.VOCAL_TEST_USER_ID;
   await resetPrismaClient();
   resetAiInflightForTests();
   t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const { startProfileDialogue, sendProfileMessage, getProfileWorkspace } = await import(
@@ -699,7 +668,6 @@ test("stale ready reply cannot complete after a newer clarify", async (t) => {
 });
 
 test("incomplete intake resume keeps the current question", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-resume-"));
   const { prisma, url } = await withPostgresTestDb(t);
   process.env.DATABASE_URL = url;
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
@@ -709,11 +677,6 @@ test("incomplete intake resume keeps the current question", async (t) => {
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const {
@@ -791,7 +754,6 @@ test("incomplete intake resume keeps the current question", async (t) => {
 });
 
 test("unresolved contradiction does not publish a portrait", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-profile-conflict-"));
   const { prisma, url } = await withPostgresTestDb(t);
   process.env.DATABASE_URL = url;
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
@@ -801,11 +763,6 @@ test("unresolved contradiction does not publish a portrait", async (t) => {
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const { startProfileDialogue, sendProfileMessage } = await import("../src/lib/profile-dialogue");

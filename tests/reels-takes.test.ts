@@ -1,19 +1,14 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { writeFile as fsWriteFile, unlink as fsUnlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { isPathInsideRoot } from "../src/lib/storage";
 import { parseByteRange } from "../src/lib/take-media";
 import { canPlayInBrowser, extensionFromName, mimeFromName } from "../src/lib/take-playback";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("byte range and browser playback helpers", () => {
   assert.deepEqual(parseByteRange(null, 10), { start: 0, end: 9, partial: false });
@@ -34,7 +29,7 @@ test("byte range and browser playback helpers", () => {
 test("take media API: types, idempotency, range, path deny, no auto-final, no job", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-takes-"));
   const storage = path.join(dir, "storage");
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     process.env.VOCAL_STORAGE_ROOT = storage;
     t.after(async () => {
     await prisma.$disconnect();
@@ -228,7 +223,7 @@ test("take media API: types, idempotency, range, path deny, no auto-final, no jo
 test("createTake stores pending; parallel same-key upload writes once", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-takes-race-"));
   const storage = path.join(dir, "storage");
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     process.env.VOCAL_STORAGE_ROOT = storage;
   await resetPrismaClient();
     t.after(async () => {
@@ -380,13 +375,14 @@ test("backfilled job take plays in browser and serves Range", async (t) => {
   const videoPath = path.join(videos, "legacy-job.mp4");
   writeFileSync(videoPath, "0123456789abcdef");
   await prisma.job.create({
-    data: { originalName: "old.mp4", videoPath, status: "done" },
+    data: {
+      ownerUserId: "local", originalName: "old.mp4", videoPath, status: "done" },
   });
 
   const { backfillReels } = await import("../scripts/backfill-reels");
   await backfillReels(prisma);
 
-  const takeRow = await prisma.take.findFirst({ include: { jobs: true } });
+  const takeRow = await prisma.take.findFirst({ include: { jobs: true }});
   assert.ok(takeRow);
   const { getTakeDto } = await import("../src/lib/takes");
   const dto = await getTakeDto(takeRow.id);

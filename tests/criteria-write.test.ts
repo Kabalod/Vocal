@@ -1,30 +1,16 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
 test("regular user cannot write shared criteria", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-criteria-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
   delete process.env.VOCAL_CRITERIA_ADMIN_USER_IDS;
   process.env.VOCAL_TEST_USER_ID = "user-b";
     t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const { GET, PUT, POST } = await import("../src/app/api/criteria/route");

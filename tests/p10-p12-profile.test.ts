@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { runtimePortraitFields } from "../src/lib/ai-runtime-context";
 import { resetPrismaClient } from "../src/lib/db";
@@ -37,8 +34,7 @@ test("P10–P12 UI keeps labels, 44px targets, and no profile guard on thoughts"
 });
 
 test("P11 resume, explicit confirm, voice≠take, unfinished amend stays off AI", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-p10-p12-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
   resetAiInflightForTests();
@@ -46,11 +42,6 @@ test("P11 resume, explicit confirm, voice≠take, unfinished amend stays off AI"
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows */
-    }
   });
 
   const {

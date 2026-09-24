@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { resetPrismaClient } from "../src/lib/db";
@@ -33,7 +31,6 @@ test("user statuses, nav and media errors stay inside the MVP dictionary", () =>
 
 test("release routes: thought, dialogue, draft, finals, profile context, usage, backup", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-release-"));
-  const dbPath = path.join(dir, "test.db");
   const { prisma, url } = await withPostgresTestDb(t);
     process.env.VOCAL_STORAGE_ROOT = dir;
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;

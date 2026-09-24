@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import {
   buildCanonicalExportTxt,
@@ -76,16 +73,10 @@ test("R7 builds a .txt of the chosen script and keeps text on copy failure", asy
 });
 
 test("canonical txt export is idempotent and does not include another thought", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-r7-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
       t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows lock */
-    }
   });
 
   const { createReel } = await import("../src/lib/reels");

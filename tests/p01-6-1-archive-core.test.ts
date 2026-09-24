@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
@@ -91,18 +88,10 @@ test("P01.6-1 UI drops counters and old sort labels; cards stay compact", () => 
 });
 
 test("P01.6-1 list order and old sort query stay safe", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-p01-6-1-"));
-  const dbPath = path.join(dir, "test.db");
-  closeSync(openSync(dbPath, "a"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
       t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows */
-    }
   });
 
   const { GET: listGet } = await import("../src/app/api/reels/route");
@@ -111,6 +100,7 @@ test("P01.6-1 list order and old sort query stay safe", async (t) => {
   const same = new Date("2026-09-18T12:00:00.000Z");
   await prisma.reel.create({
     data: {
+      ownerUserId: "local",
       id: "r-b",
       title: "B",
       status: "idea",
@@ -120,6 +110,7 @@ test("P01.6-1 list order and old sort query stay safe", async (t) => {
   });
   await prisma.reel.create({
     data: {
+      ownerUserId: "local",
       id: "r-a",
       title: "A",
       status: "idea",
@@ -129,6 +120,7 @@ test("P01.6-1 list order and old sort query stay safe", async (t) => {
   });
   await prisma.reel.create({
     data: {
+      ownerUserId: "local",
       id: "r-c",
       title: "C",
       status: "idea",
@@ -165,19 +157,11 @@ test("P01.6-1 list order and old sort query stay safe", async (t) => {
 });
 
 test("P01.6-1 cursor pages with limit=2 keep newest/oldest complete and unique", async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vocal-p01-6-1-cursor-"));
-  const dbPath = path.join(dir, "test.db");
-  closeSync(openSync(dbPath, "a"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     await resetPrismaClient();
     t.after(async () => {
     await prisma.$disconnect();
     await resetPrismaClient();
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* windows */
-    }
   });
 
   const { GET: listGet } = await import("../src/app/api/reels/route");
@@ -185,6 +169,7 @@ test("P01.6-1 cursor pages with limit=2 keep newest/oldest complete and unique",
   for (const id of ["r-a", "r-b", "r-c", "r-d", "r-e"]) {
     await prisma.reel.create({
       data: {
+        ownerUserId: "local",
         id,
         title: id,
         status: "idea",

@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
@@ -47,7 +45,7 @@ test("R3 keeps R1 mapping and reconnect/reload helpers", () => {
 
 test("R3 fails stale dialogue processing and recovers expired or exhausted jobs", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-r3-"));
-  const { prisma, url } = await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
     process.env.VOCAL_SKIP_JOB_ENQUEUE = "1";
     t.after(async () => {
     delete process.env.VOCAL_SKIP_JOB_ENQUEUE;
@@ -102,6 +100,7 @@ test("R3 fails stale dialogue processing and recovers expired or exhausted jobs"
   writeFileSync(videoPath, "fake");
   const hung = await prisma.job.create({
     data: {
+      ownerUserId: "local",
       originalName: "hung.mp4",
       videoPath,
       status: "analyzing",
@@ -115,11 +114,12 @@ test("R3 fails stale dialogue processing and recovers expired or exhausted jobs"
   });
   assert.equal((await listRecoverableJobIds()).includes(hung.id), true);
   assert.equal(await recoverJobIfStale(hung.id), true);
-  const stillHung = await prisma.job.findUnique({ where: { id: hung.id } });
+  const stillHung = await prisma.job.findUnique({ where: { id: hung.id }});
   assert.equal(stillHung?.status, "analyzing");
 
   const exhausted = await prisma.job.create({
     data: {
+      ownerUserId: "local",
       originalName: "exhausted.mp4",
       videoPath,
       status: "analyzing",
@@ -133,12 +133,13 @@ test("R3 fails stale dialogue processing and recovers expired or exhausted jobs"
   });
   assert.equal((await listRecoverableJobIds()).includes(exhausted.id), false);
   assert.equal(await recoverJobIfStale(exhausted.id), false);
-  const exhaustedRow = await prisma.job.findUnique({ where: { id: exhausted.id } });
+  const exhaustedRow = await prisma.job.findUnique({ where: { id: exhausted.id }});
   assert.equal(exhaustedRow?.status, "error");
   assert.equal(exhaustedRow?.errorMessage, EXHAUSTED_JOB_USER_MESSAGE);
 
   const runningExhausted = await prisma.job.create({
     data: {
+      ownerUserId: "local",
       originalName: "running-exhausted.mp4",
       videoPath,
       status: "converting",
@@ -150,6 +151,6 @@ test("R3 fails stale dialogue processing and recovers expired or exhausted jobs"
   });
   const claimed = await processJob(runningExhausted.id);
   assert.equal(claimed.ok, false);
-  const afterClaim = await prisma.job.findUnique({ where: { id: runningExhausted.id } });
+  const afterClaim = await prisma.job.findUnique({ where: { id: runningExhausted.id }});
   assert.equal(afterClaim?.status, "error");
 });

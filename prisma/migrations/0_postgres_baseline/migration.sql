@@ -14,7 +14,7 @@ CREATE TABLE "Reel" (
     "contextKeysJson" TEXT NOT NULL DEFAULT '[]',
     "selectedScriptId" TEXT,
     "finalScriptId" TEXT,
-    "ownerUserId" TEXT NOT NULL DEFAULT 'local',
+    "ownerUserId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -24,7 +24,7 @@ CREATE TABLE "Reel" (
 -- CreateTable
 CREATE TABLE "CreatorProfile" (
     "id" TEXT NOT NULL,
-    "ownerUserId" TEXT NOT NULL DEFAULT 'local',
+    "ownerUserId" TEXT NOT NULL,
     "currentRevisionId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -119,7 +119,7 @@ CREATE TABLE "Job" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "takeId" TEXT,
-    "ownerUserId" TEXT NOT NULL DEFAULT 'local',
+    "ownerUserId" TEXT NOT NULL,
 
     CONSTRAINT "Job_pkey" PRIMARY KEY ("id")
 );
@@ -170,7 +170,7 @@ CREATE TABLE "AiCall" (
     "errorMessage" TEXT,
     "promptTokens" INTEGER,
     "completionTokens" INTEGER,
-    "ownerUserId" TEXT NOT NULL DEFAULT 'local',
+    "ownerUserId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "AiCall_pkey" PRIMARY KEY ("id")
