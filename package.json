@@ -9,6 +9,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test:auth-acceptance": "node scripts/test-postgres.cjs --auth",
+    "test:v01": "node scripts/test-postgres.cjs --v01",
     "test:postgres": "node scripts/test-postgres.cjs",
     "test:reels": "node scripts/test-postgres.cjs --reels",
     "backup": "tsx scripts/backup.ts",

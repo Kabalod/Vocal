@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 const { spawnSync } = require("node:child_process");
 const { randomBytes } = require("node:crypto");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const net = require("node:net");
 const { setTimeout: delay } = require("node:timers/promises");
 
@@ -111,6 +114,7 @@ const reelsTests = [
 function selectedTests() {
   const extra = process.argv.filter((arg) => arg.endsWith(".test.ts"));
   if (extra.length) return extra;
+  if (process.argv.includes("--v01")) return ["tests/v01-working-take.test.ts"];
   if (process.argv.includes("--auth")) return authTests;
   if (process.argv.includes("--reels")) return reelsTests;
   return dbTests;
@@ -158,6 +162,7 @@ async function main() {
   let started = false;
   const hostPort = await allocatePort();
   const testUrl = `postgresql://${user}:${password}@127.0.0.1:${hostPort}/${database}`;
+  const dockerAt = Date.now();
   const launched = run("docker", [
     "run",
     "-d",
@@ -179,18 +184,35 @@ async function main() {
   started = true;
   try {
     await waitForReady();
+    console.error(`vocal-test-time docker_ready_ms=${Date.now() - dockerAt}`);
+    const executeCountFile = path.join(os.tmpdir(), `vocal-prisma-exec-${process.pid}.txt`);
+    fs.writeFileSync(executeCountFile, "0");
     const env = {
       ...process.env,
       NODE_ENV: "test",
       TEST_DATABASE_URL: testUrl,
       DATABASE_URL: testUrl,
       DIRECT_URL: testUrl,
+      VOCAL_PRISMA_EXECUTE_COUNT: "0",
+      VOCAL_PRISMA_EXECUTE_FILE: executeCountFile,
     };
+    const generateAt = Date.now();
     const generate = run("npx", ["prisma", "generate"], { env });
     if ((generate.status ?? 1) !== 0) throw new Error("prisma generate failed");
+    console.error(`vocal-test-time prisma_generate_ms=${Date.now() - generateAt}`);
+    const migrateAt = Date.now();
     const migrate = run("npx", ["prisma", "migrate", "deploy"], { env });
     if ((migrate.status ?? 1) !== 0) throw new Error("prisma migrate deploy failed on test postgres");
+    console.error(`vocal-test-time migrate_deploy_ms=${Date.now() - migrateAt}`);
+    const testsAt = Date.now();
     const testRun = run("npx", ["tsx", "--test", "--test-concurrency=1", ...selectedTests()], { env });
+    console.error(`vocal-test-time tests_ms=${Date.now() - testsAt}`);
+    console.error(`vocal-test-time prisma_db_execute_count=${fs.readFileSync(executeCountFile, "utf8").trim()}`);
+    try {
+      fs.unlinkSync(executeCountFile);
+    } catch {
+      /* ignore */
+    }
     status = testRun.status ?? 1;
   } finally {
     if (started) removeOwnContainer();
