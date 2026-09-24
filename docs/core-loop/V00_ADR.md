@@ -1,6 +1,9 @@
 # V00 — решения аудита (ADR)
 
-Канон решений вместе с [`CONTRACT.md`](./CONTRACT.md). Матрица этапов: [`PLAN.md`](./PLAN.md). Факты кода — `AUDITED_APP_SHA` `4ac28630692860a3092cf6c4cbc05ed791eb549d`.
+Канон решений вместе с [`CONTRACT.md`](./CONTRACT.md). Матрица этапов: [`PLAN.md`](./PLAN.md).
+Факты кода — `AUDITED_APP_SHA` `f971a7fb43c2fdd9df6b1824620491500972736a`.
+Исторический снимок: `4ac28630692860a3092cf6c4cbc05ed791eb549d`.
+BASE_SHA: not assigned. V01: not started. V00: not accepted.
 
 ## Матрица этапов
 
@@ -14,7 +17,7 @@
 
 ## A. Статусы и состояние мысли
 
-**Есть:** `Reel.status` + `normalizeReelStatus` в `src/types/reel.ts`. Внутренние значения: `idea`, `in_progress`, `ready_to_record`, `completed`, `archived`. Aliases: `draft` → `idea`, `active` → `in_progress`. Default колонки Prisma на кандидате: `"draft"`.
+**Есть:** `Reel.status` + `normalizeReelStatus` в `src/types/reel.ts`. Внутренние значения: `idea`, `in_progress`, `ready_to_record`, `completed`, `archived`. Aliases: `draft` → `idea`, `active` → `in_progress`. Default колонки Prisma: `"draft"`.
 
 Пользовательские группы: «Не завершена», «В работе», «Успешно завершена». `ready_to_record` схлопывается в «В работе». `archived` не стадия основного цикла.
 
@@ -24,7 +27,7 @@
 
 ## B. Рабочий дубль vs итоговый
 
-**Есть:** `selectedTakeId`, `finalTakeId`. Завершение на кандидате требует оба итога (`thoughtCompletionGate` в `src/lib/thought-completion.ts`). `backfillFinalTakeIds` — служебная функция.
+**Есть:** `selectedTakeId`, `finalTakeId`. Завершение требует оба итога (`thoughtCompletionGate` в `src/lib/thought-completion.ts`). `backfillFinalTakeIds` — служебная функция.
 
 **Нет:** `workingTakeId`. Нет handler `suggest_take`.
 
@@ -32,7 +35,7 @@
 
 ## C. Контекст диалога: `take: 2`
 
-В `buildThoughtMaterialContext` (`dialogue.ts`): `takes: { orderBy: { number: "asc" }, take: 2 }`, затем `selectedTakeId` или `takes[0]`.
+В `buildThoughtMaterialContext` (`dialogue.ts`): `takes: { orderBy: { number: "asc" }, take: 2 }`, затем `selectedTakeId` или `takes[0]`. Текст — `selectedId` из `listTranscriptBundle`.
 
 Третий и далее дубли не в выборке. Выбранный дубль вне первых двух по `number` может дать чужой или пустой материал.
 
@@ -40,16 +43,18 @@
 
 ## D. Inflight и идемпотентность
 
-На кандидате:
+На `f971a7f`:
 
 - диалог: `dialogue:${reelId}:${key}`
 - профиль: `profile-dialogue:${key}`
+- `ownerUserId` в ключ не входит
 - совпадение ключа → общий Promise
-- `AiInflightError` (409) функцией не бросается
+- `AiInflightError` (409) объявлен, функцией не бросается
+- 409 по версии состояния нет
 
 **Целевой контракт (V01):** ключ = `ownerUserId` + object type + object id + operation type + `idempotencyKey`. Разные пользователи и разные объекты не делят Promise. Повтор одной операции дедуплицируется и не делает второй вызов модели. Конфликт разных версий состояния → 409.
 
-Дневной бюджет `assertDailyTokenBudget` на кандидате без `ownerUserId` в агрегате.
+Дневной бюджет `assertDailyTokenBudget` без `ownerUserId` в агрегате.
 
 ## E. Действия агента и сценарий
 
@@ -65,18 +70,18 @@
 
 ## G. Завершение
 
-На `4ac2863` нельзя завершить мысль без `finalTakeId` **и** `finalScriptId`.
+На `f971a7f` нельзя завершить мысль без `finalTakeId` **и** `finalScriptId`.
 
 **Политика (код только V06):** `finalTakeId` выбирает пользователь; `finalScriptId` не обязателен; итоговый текст = точная выбранная ревизия расшифровки этого дубля; не называть её сценарием; версии и черновики не затирать.
 
 ## H. Два пути Groq
 
-Путь A: `complete.ts` + `AiCall`. Путь uploads/pipeline/analyze — прямой Groq.
+Путь A: `complete.ts` + `AiCall`. Путь B: прямой `getGroq()` в `stt.ts` и `analyze.ts`.
 
 **Решение:** V00/V01 не сливать транспорты «заодно».
 
 ## I. База и Auth
 
-Код Auth и `ownerUserId` на кандидате есть. Приёмки нет.
+Auth принят. Landing принят. DB00-fix принят. Provider — только PostgreSQL. `ownerUserId` без `@default("local")`. Live migrate на Supabase не применялся.
 
-**Решение:** V01 не начинать без принятого V00 и назначенного BASE. Временного общего пользователя не вводить. Provider — только PostgreSQL.
+**Решение:** V01 не начинать без принятого V00 и назначенного BASE. Временного общего пользователя не вводить.

@@ -1,6 +1,6 @@
 # V00 — карта файлов ядра мысли
 
-Дерево **`AUDITED_APP_SHA`** `4ac28630692860a3092cf6c4cbc05ed791eb549d` (кандидат, не BASE). Матрица: [`PLAN.md`](./PLAN.md).
+Дерево **`AUDITED_APP_SHA`** `f971a7fb43c2fdd9df6b1824620491500972736a` (кандидат для будущего BASE, не BASE). Матрица: [`PLAN.md`](./PLAN.md).
 
 Не создавать в V00: ThoughtState, четыре действия агента, `workingTakeId`, снятие confirm.
 
@@ -16,10 +16,10 @@
 
 ## Существующие ядра
 
-| Область | Файлы на `4ac2863` | Этап |
+| Область | Файлы на `f971a7f` | Этап |
 |---|---|---|
 | Диалог мысли | `src/lib/dialogue.ts`, `src/app/api/thoughts/[id]/dialogue/**` | V01 контекст и ключи; V03 контракт действий |
-| Актуальный дубль / ревизия | `Take`, `TranscriptRevision`, `selectedTakeId`, `finalTakeId` | V01 |
+| Актуальный дубль / ревизия | `Take`, `TranscriptRevision`, `selectedTakeId`, `finalTakeId`, `selectedTranscriptId` | V01 |
 | Помощь сценарием | `requestScriptHelp` в `dialogue.ts`; `src/lib/ai/script.ts`, `src/lib/scripts.ts`, generate API | V05 |
 | Статус карточки | `src/types/reel.ts`, `src/lib/reels.ts` | читать; пользовательские группы не расширять |
 | Завершение | `thoughtCompletionGate` и `backfillFinalTakeIds` в `src/lib/thought-completion.ts`; UI `CompletionSummary.tsx`, `ReelStudio.tsx` | V06; backfill — служебная функция |
@@ -29,18 +29,18 @@
 | Вызов A | `src/lib/ai/complete.ts`, `usage-guard.ts`, `groq.ts` | V01 inflight |
 | Загрузка / Job | `uploads` → `pipeline.ts` → `analyze.ts` / `stt.ts` | не смешивать транспорт в V01 |
 | Схема | `prisma/schema.prisma` (postgresql) | колонки ThoughtState — V02; completion — V06 |
-| Auth | `src/lib/auth/**`, `src/lib/supabase/**` | не переписывать в ядре |
-| Лендинг | `src/app/page.tsx`, `src/components/landing/**` | не трогать |
+| Auth | `src/lib/auth/**`, `src/lib/supabase/**` | принят; не переписывать в ядре |
+| Лендинг | `src/app/page.tsx`, `src/components/landing/**` | принят; не трогать |
 | Канон UI | `docs/design/references-new/` экраны 01–09; `/reels` = 09 | визуал не этот цикл |
 | Документы цикла | `docs/core-loop/*` | V00 |
 
-## Локальные файлы вне `4ac2863`
+## Локальные файлы вне `f971a7f`
 
-Не канон V00, пока не приняты отдельным коммитом:
+На этом SHA отсутствуют и **не канон**:
 
 - `src/lib/dialogue-reply.ts`
 - `src/lib/thought-opening.ts`
-- `src/lib/thought-completion-gate.ts` (на кандидате gate живёт в `thought-completion.ts`)
+- `src/lib/thought-completion-gate.ts` (gate живёт в `thought-completion.ts`)
 
 ## Новые модули (не создавать в V00)
 
@@ -58,5 +58,6 @@
 ## Не трогать в V00
 
 - визуальный канон, champagne/STAGE/Desktop-архивы
-- лендинг и Auth-приёмка
+- принятые лендинг и Auth
 - I01 память / scoring-v1 как отдельный интеллект-цикл
+- Prisma schema / migrations и live Supabase

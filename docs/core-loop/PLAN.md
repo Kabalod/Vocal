@@ -2,7 +2,10 @@
 
 Канон этапов в репозитории. Продуктовые правила: [`CONTRACT.md`](./CONTRACT.md). Решения аудита: [`V00_ADR.md`](./V00_ADR.md). Отчёт: [`V00_REPORT.md`](./V00_REPORT.md).
 
-V00 не принят. BASE_SHA не назначен. V01 не начат. Код на `AUDITED_APP_SHA` `4ac28630692860a3092cf6c4cbc05ed791eb549d` этой матрице ещё не следует.
+V00: ready for external final review, **not accepted**.
+BASE_SHA: **not assigned**.
+V01: **not started**.
+AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`. Код на этом SHA матрице ещё не следует.
 
 | Этап | Содержание |
 |---|---|
@@ -16,3 +19,5 @@ V00 не принят. BASE_SHA не назначен. V01 не начат. Ко
 | V07 | Библиотека приёмов и полный цикл. |
 
 Путь процесса — в [`CONTRACT.md`](./CONTRACT.md). Действия агента (`ask_question`, `suggest_take`, `content_sufficient`, `redirect_to_task`) не являются статусами мысли.
+
+Перед стартом V01 нужны только: внешняя приёмка этих документов и явное назначение BASE_SHA.

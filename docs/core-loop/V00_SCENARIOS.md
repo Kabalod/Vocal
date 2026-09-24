@@ -1,20 +1,24 @@
 # V00 — сценарии ядра
 
-Поведение дерева `AUDITED_APP_SHA` `4ac2863`, не грязные `thought-opening` / `dialogue-reply`. Целевой путь: [`CONTRACT.md`](./CONTRACT.md). Матрица: [`PLAN.md`](./PLAN.md).
+Поведение дерева `AUDITED_APP_SHA` `f971a7fb43c2fdd9df6b1824620491500972736a`.
+Файлов `thought-opening` / `dialogue-reply` на этом SHA нет.
+Целевой путь: [`CONTRACT.md`](./CONTRACT.md). Матрица: [`PLAN.md`](./PLAN.md).
+
+Auth принят. Landing принят. DB00-fix принят. BASE не назначен. V01 не начат.
 
 ## 1. Исходный материал без дубля
 
 Автор открывает мысль, в диалоге есть текст / заметка, обработанного дубля нет.
 
-**Сейчас:** тред `DialogueThread`, свободный `reply`. Авторазбора в дереве кандидата нет.
+**Сейчас:** тред `DialogueThread`, свободный `reply`. Авторазбора в дереве нет.
 
-**Цель:** анализ состояния → `ask_question` или `suggest_take`. `content_sufficient` до обработанного дубля запрещён. Достаточный исходник → `suggest_take`.
+**Цель:** анализ состояния → `ask_question` или `suggest_take`. `content_sufficient` до обработанного дубля запрещён. Достаточный исходник → `suggest_take`. **V03.**
 
 ## 2. Ответ в диалоге и третий дубль
 
 POST → `withAiInflight('dialogue:${reelId}:${key}')` → `reply` + опционально `scriptProposal`.
 
-**Сейчас:** материал из двух takes по `number` + `selectedTakeId`, если он в этой двойке.
+**Сейчас:** материал из двух takes по `number` + `selectedTakeId`, если он в этой двойке. Текст — `selectedTranscriptId` через `listTranscriptBundle`.
 
 **Риск:** третий+ дубль и его ревизия невидимы. **V01.**
 
@@ -38,13 +42,13 @@ POST → `withAiInflight('dialogue:${reelId}:${key}')` → `reply` + опцио�
 
 Автор ставит `status: completed`.
 
-**Сейчас на 4ac2863:** всегда нужны `finalTakeId` и `finalScriptId`. `backfillFinalTakeIds` — служебное копирование selected → final.
+**Сейчас на f971a7f:** всегда нужны `finalTakeId` и `finalScriptId`. `backfillFinalTakeIds` — служебное копирование selected → final.
 
 **Цель V06:** пользователь выбирает только `finalTakeId`; итоговый текст = точная ревизия расшифровки; `finalScriptId` не обязателен; текст не называется сценарием.
 
 ## 6. Повтор POST / версии
 
-Один inflight-ключ → общий Promise. Другой key → второй вызов модели. 409 по версии состояния нет. Ключ профиля без `ownerUserId`.
+Один inflight-ключ → общий Promise. Другой key → второй вызов модели. 409 по версии состояния нет. Ключ без `ownerUserId`.
 
 **Цель V01:** ключ = пользователь + тип объекта + id + тип операции + `idempotencyKey`; повтор без второго вызова модели; конфликт версий → 409.
 
@@ -56,8 +60,8 @@ POST → `withAiInflight('dialogue:${reelId}:${key}')` → `reply` + опцио�
 
 ## 8. Чужой ресурс
 
-`ownerUserId()` + `withApiUser`. Код изоляции есть; приёмка Auth не засчитана.
+`ownerUserId()` + `withApiUser`. Изоляция принята вместе с Auth.
 
 ## Изоляция A/B
 
-Диагностика, не приёмка и не замена почты/сессии.
+Диагностика продукта, не замена почты/сессии.
