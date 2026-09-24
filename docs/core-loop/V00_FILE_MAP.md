@@ -28,7 +28,7 @@
 | Контекст сборки | `src/lib/reel-context.ts`, `ai-runtime-context.ts` | V01 / V04 не ломать snapshot |
 | Вызов A | `src/lib/ai/complete.ts`, `usage-guard.ts`, `groq.ts` | V01 inflight |
 | Загрузка / Job | `uploads` → `pipeline.ts` → `analyze.ts` / `stt.ts` | не смешивать транспорт в V01 |
-| Схема | `prisma/schema.postgres.prisma` | колонки ThoughtState — V02; completion — V06 |
+| Схема | `prisma/schema.prisma` (postgresql) | колонки ThoughtState — V02; completion — V06 |
 | Auth | `src/lib/auth/**`, `src/lib/supabase/**` | не переписывать в ядре |
 | Лендинг | `src/app/page.tsx`, `src/components/landing/**` | не трогать |
 | Канон UI | `docs/design/references-new/` экраны 01–09; `/reels` = 09 | визуал не этот цикл |

@@ -26,7 +26,7 @@ V01 после BASE делает: актуальный дубль, точную 
 
 ## Совместимость стека
 
-Next 15, Prisma 6, Postgres приложения, Groq, Zod, `AiCall`, Reel/Take/Dialogue/Script. SQLite — тесты.
+Next 15, Prisma 6, PostgreSQL для приложения и тестов, Groq, Zod, `AiCall`, Reel/Take/Dialogue/Script.
 
 ## Документы после приёмки V00
 

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFile, cp, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export interface BackupManifest {
@@ -12,13 +12,6 @@ export interface BackupManifest {
 
 const STOP_WRITES_NOTE =
   "Остановите npm run dev и другие процессы, пишущие в БД и storage, затем копируйте. Восстановление только в отдельный каталог, не поверх рабочей БД.";
-
-function dbPathFromEnv(cwd: string, databaseUrl?: string) {
-  const raw = databaseUrl ?? process.env.DATABASE_URL ?? "file:./dev.db";
-  const file = raw.startsWith("file:") ? raw.slice("file:".length) : raw;
-  const cleaned = file.replace(/^\.\//, "");
-  return path.isAbsolute(cleaned) ? cleaned : path.resolve(cwd, cleaned.startsWith("prisma") ? cleaned : path.join("prisma", path.basename(cleaned)));
-}
 
 async function exists(filePath: string) {
   try {
@@ -52,12 +45,7 @@ export async function createAppBackup(options: {
   const cwd = options.cwd ?? process.cwd();
   const dest = path.resolve(options.destDir);
   await mkdir(dest, { recursive: true });
-  const dbSrc = dbPathFromEnv(cwd, options.databaseUrl);
-  let databaseFile: string | null = null;
-  if (await exists(dbSrc)) {
-    databaseFile = "dev.db";
-    await copyFile(dbSrc, path.join(dest, "dev.db"));
-  }
+  const databaseFile = null;
   const storageRoot = process.env.VOCAL_STORAGE_ROOT || cwd;
   const videosSrc = path.join(storageRoot, "storage", "videos");
   const audioSrc = path.join(storageRoot, "storage", "audio");
@@ -88,11 +76,6 @@ export async function restoreAppBackup(options: {
     throw new Error("RESTORE_SAME_DIR");
   }
   await mkdir(to, { recursive: true });
-  const dbFrom = path.join(from, "dev.db");
-  if (await exists(dbFrom)) {
-    await mkdir(path.join(to, "prisma"), { recursive: true });
-    await copyFile(dbFrom, path.join(to, "prisma", "dev.db"));
-  }
   const videosFrom = path.join(from, "storage", "videos");
   const audioFrom = path.join(from, "storage", "audio");
   if (await exists(videosFrom)) await cp(videosFrom, path.join(to, "storage", "videos"), { recursive: true });
@@ -105,7 +88,7 @@ export async function restoreAppBackup(options: {
   return {
     createdAt: new Date().toISOString(),
     note: STOP_WRITES_NOTE,
-    databaseFile: (await exists(dbFrom)) ? "dev.db" : null,
+    databaseFile: null,
     videos: await listFiles(path.join(to, "storage", "videos")),
     audio: await listFiles(path.join(to, "storage", "audio")),
   };

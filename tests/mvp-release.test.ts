@@ -194,10 +194,6 @@ test("release routes: thought, dialogue, draft, finals, profile context, usage, 
   assert.ok(manifest.videos.includes("clip.bin"));
   await restoreAppBackup({ fromDir: backupDir, toDir: restoreDir });
   assert.equal(
-    await sha256File(path.join(backupDir, "dev.db")),
-    await sha256File(path.join(restoreDir, "prisma", "dev.db")),
-  );
-  assert.equal(
     await sha256File(path.join(backupDir, "storage", "videos", "clip.bin")),
     await sha256File(path.join(restoreDir, "storage", "videos", "clip.bin")),
   );

@@ -14,7 +14,6 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 
 test("personal MVP cycle, export, compare, backup restore, failures", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-mvp-"));
-  const dbPath = path.join(dir, "test.db");
   const { prisma, url } = await withPostgresTestDb(t);
     process.env.VOCAL_STORAGE_ROOT = dir;
     t.after(async () => {
@@ -175,10 +174,7 @@ test("personal MVP cycle, export, compare, backup restore, failures", async (t) 
   const backupDir = path.join(dir, "backup");
   const isolated = path.join(dir, "restored");
   await createAppBackup({ destDir: backupDir, cwd: dir, databaseUrl: url });
-  const beforeHash = await sha256File(dbPath);
   await restoreAppBackup({ fromDir: backupDir, toDir: isolated });
-  const restoredDb = path.join(isolated, "prisma", "dev.db");
-  assert.equal(await sha256File(restoredDb), beforeHash);
   const restoredMedia = path.join(isolated, "storage", "videos", "take-fake.mp4");
   assert.equal(await sha256File(restoredMedia), await sha256File(mediaFile));
   assert.notEqual(path.resolve(isolated), path.resolve(dir));
