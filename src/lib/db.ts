@@ -19,7 +19,7 @@ if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
 
-/** Для тестов: новый клиент после смены DATABASE_URL. */
+/** Для тестов: новый клиент после смены TEST_DATABASE_URL. */
 export async function resetPrismaClient() {
   await prisma.$disconnect();
   prisma = createPrisma();

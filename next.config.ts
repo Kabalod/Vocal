@@ -14,7 +14,6 @@ const nextConfig: NextConfig = {
         ...config.resolve.alias,
         [path.resolve(__dirname, "src/instrumentation-node.ts")]: false,
         [path.resolve(__dirname, "src/lib/pipeline.ts")]: false,
-        [path.resolve(__dirname, "src/lib/prisma-provider.ts")]: false,
       };
     }
     return config;

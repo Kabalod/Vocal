@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { DatabaseTargetError, assertVocalPostgresUrl, resolveAppDatabaseUrl } from "../src/lib/db-target";
-import { resolvePrismaSchema as resolveGenerateSchema } from "../scripts/prisma-schema";
+import {
+  DatabaseTargetError,
+  assertTestDatabaseUrl,
+  assertVocalPostgresUrl,
+  resolveAppDatabaseUrl,
+} from "../src/lib/db-target";
 
 test("app runtime refuses sqlite and off-project postgres", () => {
   assert.throws(
@@ -13,7 +17,7 @@ test("app runtime refuses sqlite and off-project postgres", () => {
     () =>
       resolveAppDatabaseUrl({
         NODE_ENV: "development",
-        POSTGRES_DATABASE_URL: "postgresql://postgres.otherproj@localhost/postgres",
+        DATABASE_URL: "postgresql://postgres.otherproj@localhost/postgres",
       }),
     DatabaseTargetError,
   );
@@ -21,13 +25,13 @@ test("app runtime refuses sqlite and off-project postgres", () => {
     () =>
       resolveAppDatabaseUrl({
         NODE_ENV: "development",
-        POSTGRES_DATABASE_URL: `postgresql://postgres.other@aws-0-eu-west-2.pooler.supabase.com/postgres?password=zfbiyyhedhqdgrxxajrj`,
+        DATABASE_URL: `postgresql://postgres.other@aws-0-eu-west-2.pooler.supabase.com/postgres?password=zfbiyyhedhqdgrxxajrj`,
       }),
     DatabaseTargetError,
   );
   const pooler = resolveAppDatabaseUrl({
     NODE_ENV: "development",
-    POSTGRES_DATABASE_URL:
+    DATABASE_URL:
       "postgresql://postgres.zfbiyyhedhqdgrxxajrj:s3cret@aws-0-eu-west-2.pooler.supabase.com:5432/postgres",
   });
   const poolerUrl = new URL(pooler);
@@ -37,13 +41,13 @@ test("app runtime refuses sqlite and off-project postgres", () => {
 
   const direct = resolveAppDatabaseUrl({
     NODE_ENV: "development",
-    POSTGRES_DATABASE_URL: "postgresql://postgres:s3cret@db.zfbiyyhedhqdgrxxajrj.supabase.co:5432/postgres",
+    DATABASE_URL: "postgresql://postgres:s3cret@db.zfbiyyhedhqdgrxxajrj.supabase.co:5432/postgres",
   });
   const directUrl = new URL(direct);
   assert.equal(directUrl.hostname, "db.zfbiyyhedhqdgrxxajrj.supabase.co");
   assert.equal(directUrl.searchParams.get("sslmode"), "require");
 
-  assert.equal(resolveAppDatabaseUrl({ NODE_ENV: "test" }), "file:./prisma/dev.db");
+  assert.throws(() => resolveAppDatabaseUrl({ NODE_ENV: "test" }), DatabaseTargetError);
 });
 
 test("postgres URL is parsed, not substring-matched", () => {
@@ -60,20 +64,28 @@ test("postgres URL is parsed, not substring-matched", () => {
   assert.equal(new URL(withSsl).searchParams.get("sslmode"), "require");
 });
 
+test("tests accept only local postgres", () => {
+  assert.equal(
+    assertTestDatabaseUrl("postgresql://postgres:pass@127.0.0.1:5432/vocal_test"),
+    "postgresql://postgres:pass@127.0.0.1:5432/vocal_test",
+  );
+  assert.throws(
+    () => assertTestDatabaseUrl("file:./prisma/dev.db"),
+    DatabaseTargetError,
+  );
+  assert.throws(
+    () =>
+      assertTestDatabaseUrl(
+        "postgresql://postgres.zfbiyyhedhqdgrxxajrj@aws-0-eu-west-2.pooler.supabase.com:5432/postgres",
+      ),
+    DatabaseTargetError,
+  );
+});
+
 test("public health does not return prisma or connection text", () => {
   const src = readFileSync(new URL("../src/app/api/health/route.ts", import.meta.url), "utf8");
   assert.doesNotMatch(src, /postgresError/);
   assert.doesNotMatch(src, /error\.message/);
   assert.doesNotMatch(src, /POSTGRES_DATABASE_URL/);
   assert.match(src, /logApiError/);
-});
-
-test("generate uses postgres outside the test contour", () => {
-  assert.equal(resolveGenerateSchema({ NODE_ENV: "development" }), "prisma/schema.postgres.prisma");
-  assert.equal(resolveGenerateSchema({ NODE_ENV: "production" }), "prisma/schema.postgres.prisma");
-  assert.equal(resolveGenerateSchema({ NODE_ENV: "test" }), "prisma/schema.prisma");
-  assert.equal(
-    resolveGenerateSchema({ DATABASE_URL: "file:./prisma/dev.db", NODE_ENV: "development" }),
-    "prisma/schema.postgres.prisma",
-  );
 });

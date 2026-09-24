@@ -17,8 +17,6 @@ export async function GET() {
   let postgres = false;
   try {
     resolveAppDatabaseUrl();
-    const { assertGeneratedPrismaProvider } = await import("@/lib/prisma-provider");
-    assertGeneratedPrismaProvider();
     const { prisma } = await import("@/lib/db");
     await prisma.$queryRaw`select 1`;
     postgres = true;

@@ -12,39 +12,23 @@ const tests = [
   "tests/criteria-write.test.ts",
 ];
 
-function generate(schema) {
-  const result = spawnSync("npx", ["prisma", "generate", "--schema", schema], {
-    cwd: root,
-    stdio: "inherit",
-    shell: true,
-    env: { ...process.env, VOCAL_PRISMA_SCHEMA: schema },
-  });
-  if ((result.status ?? 1) !== 0) {
-    throw new Error(`prisma generate failed for ${schema}`);
-  }
+const generate = spawnSync("npx", ["prisma", "generate"], {
+  cwd: root,
+  stdio: "inherit",
+  shell: true,
+  env: process.env,
+});
+if ((generate.status ?? 1) !== 0) {
+  process.exit(generate.status ?? 1);
 }
 
-let testStatus = 1;
-try {
-  generate("prisma/schema.prisma");
-  const run = spawnSync("npx", ["tsx", "--test", ...tests], {
-    cwd: root,
-    stdio: "inherit",
-    shell: true,
-    env: {
-      ...process.env,
-      NODE_ENV: "test",
-      VOCAL_PRISMA_SCHEMA: "prisma/schema.prisma",
-    },
-  });
-  testStatus = run.status ?? 1;
-} finally {
-  try {
-    generate("prisma/schema.postgres.prisma");
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : error);
-    testStatus = 1;
-  }
-}
-
-process.exit(testStatus);
+const run = spawnSync("npx", ["tsx", "--test", ...tests], {
+  cwd: root,
+  stdio: "inherit",
+  shell: true,
+  env: {
+    ...process.env,
+    NODE_ENV: "test",
+  },
+});
+process.exit(run.status ?? 1);

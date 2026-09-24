@@ -29,7 +29,8 @@ const report = {
   supabaseHost: hostOf(process.env.NEXT_PUBLIC_SUPABASE_URL),
   publishableKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ? "set" : "unset",
   databaseUrl: dbKind(process.env.DATABASE_URL),
-  postgresDatabaseUrl: dbKind(process.env.POSTGRES_DATABASE_URL),
+  directUrl: dbKind(process.env.DIRECT_URL),
+  testDatabaseUrl: dbKind(process.env.TEST_DATABASE_URL),
   legacyOwner: uuidStatus(process.env.VOCAL_LEGACY_OWNER_USER_ID),
   serviceRole: process.env.SUPABASE_SERVICE_ROLE_KEY ? "set" : "unset",
 };

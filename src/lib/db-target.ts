@@ -14,34 +14,20 @@ export function isAppTestRuntime(env: Record<string, string | undefined> = proce
   return env.NODE_ENV === "test" || Boolean(env.NODE_TEST_CONTEXT);
 }
 
-export function expectedPrismaProvider(
-  env: Record<string, string | undefined> = process.env,
-): "postgresql" | "sqlite" {
-  return isAppTestRuntime(env) ? "sqlite" : "postgresql";
-}
-
-export function assertVocalPostgresUrl(raw: string): string {
+function parsePostgresUrl(raw: string, label: string): URL {
   let parsed: URL;
   try {
     parsed = new URL(raw);
   } catch {
-    throw new DatabaseTargetError("POSTGRES_DATABASE_URL должен быть корректным postgresql:// URL.");
+    throw new DatabaseTargetError(`${label} должен быть корректным postgresql:// URL.`);
   }
   if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
-    throw new DatabaseTargetError("POSTGRES_DATABASE_URL должен быть postgresql:// URL проекта zfbiyyhedhqdgrxxajrj.");
+    throw new DatabaseTargetError(`${label} должен быть postgresql:// URL.`);
   }
-  const host = parsed.hostname.toLowerCase();
-  const user = decodeURIComponent(parsed.username);
-  const directHost = `db.${VOCAL_SUPABASE_PROJECT_REF}.supabase.co`;
-  const isDirect = host === directHost;
-  const isPooler =
-    host.endsWith(".pooler.supabase.com") && user === `postgres.${VOCAL_SUPABASE_PROJECT_REF}`;
-  if (!isDirect && !isPooler) {
-    throw new DatabaseTargetError("POSTGRES_DATABASE_URL не указывает на проект zfbiyyhedhqdgrxxajrj.");
-  }
-  if (isDirect && user && user !== "postgres") {
-    throw new DatabaseTargetError("POSTGRES_DATABASE_URL не указывает на проект zfbiyyhedhqdgrxxajrj.");
-  }
+  return parsed;
+}
+
+function withSslMode(raw: string): string {
   const hashIndex = raw.indexOf("#");
   const withoutHash = hashIndex === -1 ? raw : raw.slice(0, hashIndex);
   const queryIndex = withoutHash.indexOf("?");
@@ -51,22 +37,62 @@ export function assertVocalPostgresUrl(raw: string): string {
   return `${base}?${params.toString()}`;
 }
 
+export function assertVocalPostgresUrl(raw: string, label = "DATABASE_URL"): string {
+  const parsed = parsePostgresUrl(raw, label);
+  const host = parsed.hostname.toLowerCase();
+  const user = decodeURIComponent(parsed.username);
+  const directHost = `db.${VOCAL_SUPABASE_PROJECT_REF}.supabase.co`;
+  const isDirect = host === directHost;
+  const isPooler =
+    host.endsWith(".pooler.supabase.com") && user === `postgres.${VOCAL_SUPABASE_PROJECT_REF}`;
+  if (!isDirect && !isPooler) {
+    throw new DatabaseTargetError(`${label} не указывает на проект ${VOCAL_SUPABASE_PROJECT_REF}.`);
+  }
+  if (isDirect && user && user !== "postgres") {
+    throw new DatabaseTargetError(`${label} не указывает на проект ${VOCAL_SUPABASE_PROJECT_REF}.`);
+  }
+  return withSslMode(raw);
+}
+
+export function assertTestDatabaseUrl(
+  raw: string,
+  env: Record<string, string | undefined> = process.env,
+): string {
+  const parsed = parsePostgresUrl(raw, "TEST_DATABASE_URL");
+  const host = parsed.hostname.toLowerCase();
+  if (host.includes("supabase.co") || host.endsWith(".pooler.supabase.com")) {
+    throw new DatabaseTargetError("TEST_DATABASE_URL не может указывать на Supabase.");
+  }
+  const allowRemote = env.VOCAL_ALLOW_NONLOCAL_TEST_DB === "1";
+  if (host !== "localhost" && host !== "127.0.0.1" && !allowRemote) {
+    throw new DatabaseTargetError("TEST_DATABASE_URL должен быть localhost или 127.0.0.1.");
+  }
+  return raw;
+}
+
 export function resolveAppDatabaseUrl(env: Record<string, string | undefined> = process.env): string {
   if (isAppTestRuntime(env)) {
-    const url = env.DATABASE_URL?.trim();
-    if (!url) return "file:./prisma/dev.db";
-    if (!url.startsWith("file:")) {
-      throw new DatabaseTargetError("В тестах DATABASE_URL должен быть file: SQLite.");
+    const testUrl = env.TEST_DATABASE_URL?.trim();
+    if (!testUrl) {
+      throw new DatabaseTargetError("Нужен TEST_DATABASE_URL. Тесты не используют SQLite.");
     }
-    return url;
+    return assertTestDatabaseUrl(testUrl, env);
   }
-  const postgres = env.POSTGRES_DATABASE_URL?.trim();
-  if (!postgres) {
+  const url = env.DATABASE_URL?.trim();
+  if (!url) {
     throw new DatabaseTargetError(
-      "Нужен POSTGRES_DATABASE_URL. Приложение не переключается на SQLite и не использует владельца local.",
+      "Нужен DATABASE_URL. Приложение не переключается на SQLite и не использует владельца local.",
     );
   }
-  return assertVocalPostgresUrl(postgres);
+  return assertVocalPostgresUrl(url, "DATABASE_URL");
+}
+
+export function resolveDirectDatabaseUrl(env: Record<string, string | undefined> = process.env): string {
+  const url = env.DIRECT_URL?.trim();
+  if (!url) {
+    throw new DatabaseTargetError("Нужен DIRECT_URL для миграций.");
+  }
+  return assertVocalPostgresUrl(url, "DIRECT_URL");
 }
 
 export function assertSupabasePublicTarget(env: Record<string, string | undefined> = process.env) {
