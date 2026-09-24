@@ -1,6 +1,8 @@
 # V01 — карта файлов
 
-BASE: `34abcd78c70b2fa31bd717aeff56acc31577c0d1`. Код аудита: `f971a7f`.
+V01: **accepted**. V01_HEAD: `d34e8dee2243ae109f2e535a439784117cef3aff`.
+BASE (старт V01): `34abcd78c70b2fa31bd717aeff56acc31577c0d1`. Код аудита: `f971a7f`.
+V02: **not started**. BASE для V02 не назначен.
 
 | Зона | Файлы |
 |---|---|

@@ -1,11 +1,12 @@
 # V01 — отчёт
 
-Status: **not accepted**. Нужна внешняя проверка коммитов поверх `d8e12c1`.
-BASE_SHA: `34abcd78c70b2fa31bd717aeff56acc31577c0d1`.
+Status: **accepted**.
+V01_HEAD: `d34e8dee2243ae109f2e535a439784117cef3aff`.
+BASE_SHA (старт V01): `34abcd78c70b2fa31bd717aeff56acc31577c0d1`.
 AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 Первый коммит этапа: `d8e12c18be3f1b37b49d2d9edf38b0d1b37ce9bb`.
 
-Live Supabase не менялся. V02 не начинать.
+Live Supabase не менялся. V02: **not started**. BASE для V02 этим коммитом не назначается.
 
 ## Закрытые блокеры ревью `d8e12c1`
 
@@ -28,4 +29,4 @@ Live Supabase не менялся. V02 не начинать.
 
 ## Проверки агента
 
-Полный `npm run test:postgres` после миграции 5 (`headEpoch` + `FOR UPDATE` на `DialogueThread`): **102/102**, fail 0. Отдельно `tests/v01-working-take.test.ts`: **15/15** (вставка после последней проверки ждёт lock). `tsc --noEmit` ок. Suite не заменяет внешнюю приёмку. GitHub status checks на ветке нет.
+Полный `npm run test:postgres` после миграции 5 (`headEpoch` + `FOR UPDATE` на `DialogueThread`): **102/102**, fail 0. Отдельно `tests/v01-working-take.test.ts`: **15/15** (вставка после последней проверки ждёт lock). `tsc --noEmit` ок. Принят пользователем на `V01_HEAD`. GitHub status checks на ветке нет.

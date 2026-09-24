@@ -4,9 +4,10 @@ Start here:
 1. `docs/design/README.md`
 2. `docs/design/SOURCE_OF_TRUTH_2026-09-15.md`
 3. Visual source of truth: `docs/design/references-new/` (approved screens 01–09; `/reels` uses screen 09)
-4. Current cycle: V01 (not accepted). Canon: `docs/core-loop/PLAN.md` and `docs/core-loop/V01_*.md`.
-5. BASE_SHA = `34abcd78c70b2fa31bd717aeff56acc31577c0d1`
-6. AUDITED_APP_SHA = `f971a7fb43c2fdd9df6b1824620491500972736a`
+4. Current cycle: V01 **accepted**; V02 **not started**. Canon: `docs/core-loop/PLAN.md` and `docs/core-loop/V01_*.md`.
+5. V01_HEAD = `d34e8dee2243ae109f2e535a439784117cef3aff`
+6. BASE_SHA (start of V01) = `34abcd78c70b2fa31bd717aeff56acc31577c0d1`. Do not treat this as BASE for V02. Do not assign V02 BASE here.
+7. AUDITED_APP_SHA = `f971a7fb43c2fdd9df6b1824620491500972736a`
 
 Do **not** use champagne Design System, STAGE_00–09, or Desktop design archives.
 

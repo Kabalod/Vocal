@@ -3,8 +3,9 @@
 Канон этапов в репозитории. Продуктовые правила: [`CONTRACT.md`](./CONTRACT.md). Решения аудита: [`V00_ADR.md`](./V00_ADR.md). Отчёт: [`V00_REPORT.md`](./V00_REPORT.md).
 
 V00: **accepted**.
-BASE_SHA: `34abcd78c70b2fa31bd717aeff56acc31577c0d1`.
-V01: **not accepted** (fix commits on `feat/v01-from-base` from BASE). Документы этапа: [`V01_REPORT.md`](./V01_REPORT.md), [`V01_ADR.md`](./V01_ADR.md), [`V01_FILE_MAP.md`](./V01_FILE_MAP.md), [`V01_SCENARIOS.md`](./V01_SCENARIOS.md).
+BASE_SHA (старт V01): `34abcd78c70b2fa31bd717aeff56acc31577c0d1`.
+V01: **accepted**. V01_HEAD: `d34e8dee2243ae109f2e535a439784117cef3aff`. Документы этапа: [`V01_REPORT.md`](./V01_REPORT.md), [`V01_ADR.md`](./V01_ADR.md), [`V01_FILE_MAP.md`](./V01_FILE_MAP.md), [`V01_SCENARIOS.md`](./V01_SCENARIOS.md).
+V02: **not started**. BASE для V02 не назначен.
 AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 
 | Этап | Содержание |
@@ -20,4 +21,4 @@ AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 
 Путь процесса — в [`CONTRACT.md`](./CONTRACT.md). Действия агента (`ask_question`, `suggest_take`, `content_sufficient`, `redirect_to_task`) не являются статусами мысли.
 
-V00 принят. BASE_SHA назначен. V01 начат в отдельной ветке от BASE. Baseline и `migrate resolve` на live Supabase не применять.
+V00 принят. V01 принят на `V01_HEAD`. V02 не начат; новый BASE назначается отдельно. Baseline и `migrate resolve` на live Supabase не применять.
