@@ -14,10 +14,12 @@ import { ReelError } from "@/lib/reels";
 import { replaceScriptDraft } from "@/lib/scripts";
 import { listTranscriptBundle } from "@/lib/transcripts";
 import {
-  captureDialogueMaterial,
-  dialogueMaterialChanged,
+  commitDialogueReply,
+  readDialogueVersion,
   requireWorkingTake,
+  snapshotFromLoaded,
 } from "@/lib/working-take";
+import { v01TestSeams } from "@/lib/v01-test-seams";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
 
@@ -214,33 +216,50 @@ export async function listDialoguePage(
   };
 }
 
-export async function buildThoughtMaterialContext(reelId: string): Promise<string> {
+async function freezeThoughtPrompt(reelId: string, threadId: string, authorText: string) {
   const { reel, take } = await requireWorkingTake(reelId);
-  const scripts = await prisma.scriptVersion.findMany({
-    where: { reelId },
-    orderBy: { createdAt: "desc" },
-    take: 4,
-  });
-  const transcript = await listTranscriptBundle(take.id);
-  const selectedText = transcript?.revisions.find((row) => row.id === transcript.selectedId)?.text;
+  if (v01TestSeams.afterWorkingTakeRead) await v01TestSeams.afterWorkingTakeRead();
+  const [scripts, transcript, dialogueVersion, recent, live] = await Promise.all([
+    prisma.scriptVersion.findMany({
+      where: { reelId },
+      orderBy: { createdAt: "desc" },
+      take: 4,
+    }),
+    listTranscriptBundle(take.id),
+    readDialogueVersion(threadId),
+    recentStoredText(threadId),
+    getReelContext(reelId),
+  ]);
+  const revisionId = take.selectedTranscriptId ?? transcript.selectedId;
+  const selectedText = transcript.revisions.find((row) => row.id === revisionId)?.text;
   const script =
     scripts.find((row) => row.id === reel.selectedScriptId) ??
     scripts.find((row) => row.kind !== "ai_proposal" && row.kind !== "draft");
-  const live = (await getReelContext(reelId)).live;
-  return [
+  const material = snapshotFromLoaded(reel, { id: take.id, selectedTranscriptId: revisionId ?? null }, dialogueVersion);
+  const prompt = [
     `Мысль: ${reel.id}`,
     `Название: ${reel.title ?? ""}`,
     `Рабочий дубль: ${take.id}`,
-    transcript.selectedId ? `Ревизия: ${transcript.selectedId}` : "",
+    revisionId ? `Ревизия: ${revisionId}` : "",
     selectedText ? `Материал:\n${selectedText.slice(0, 4000)}` : "Материала пока нет.",
     script?.body ? `Сценарий:\n${script.body.slice(0, 2000)}` : "",
-    `Цель ролика: ${live.reelGoal || "не указана"}`,
-    `Аудитория ролика: ${live.reelAudience || "не указана"}`,
-    `Подтверждённый профиль (можно в текст): ${JSON.stringify(live.publicForScript)}`,
-    `Подтверждённый профиль (только понимание): ${JSON.stringify(live.understandingOnly)}`,
+    `Цель ролика: ${live.live.reelGoal || "не указана"}`,
+    `Аудитория ролика: ${live.live.reelAudience || "не указана"}`,
+    `Подтверждённый профиль (можно в текст): ${JSON.stringify(live.live.publicForScript)}`,
+    `Подтверждённый профиль (только понимание): ${JSON.stringify(live.live.understandingOnly)}`,
+    `Недавняя переписка:\n${recent}`,
+    `Ответ автора: ${authorText}`,
+    `JSON: {"reply":"","scriptProposal":null}`,
   ]
     .filter(Boolean)
     .join("\n\n");
+  return { prompt, material };
+}
+
+export async function buildThoughtMaterialContext(reelId: string): Promise<string> {
+  const thread = await ensureReelThread(reelId);
+  const { prompt } = await freezeThoughtPrompt(reelId, thread.id, "");
+  return prompt;
 }
 
 async function recentStoredText(threadId: string): Promise<string> {
@@ -331,16 +350,7 @@ export async function sendDialogueMessage(
       },
     });
 
-    const userPrompt = `${await buildThoughtMaterialContext(reelId)}
-
-Недавняя переписка:
-${await recentStoredText(thread.id)}
-
-Ответ автора: ${text}
-
-JSON: {"reply":"","scriptProposal":null}`;
-
-    const material = await captureDialogueMaterial(reelId, thread.id);
+    const { prompt: userPrompt, material } = await freezeThoughtPrompt(reelId, thread.id, text);
     const call = await prisma.aiCall.create({
       data: {
         kind: "dialogue",
@@ -368,36 +378,18 @@ JSON: {"reply":"","scriptProposal":null}`;
         label: "dialogue",
       });
       const parsed = replySchema.parse(parseJsonObject(raw.text));
-      if (await dialogueMaterialChanged(reelId, thread.id, material)) {
-        throw new StateVersionError();
-      }
-      await prisma.aiCall.update({
-        where: { id: call.id },
-        data: {
-          status: "done",
-          responseText: raw.text,
-          resultJson: JSON.stringify(parsed),
-          promptTokens: raw.usage?.promptTokens ?? null,
-          completionTokens: raw.usage?.completionTokens ?? null,
-        },
+      await commitDialogueReply({
+        reelId,
+        threadId: thread.id,
+        snapshot: material,
+        callId: call.id,
+        processingId: processing.id,
+        reply: parsed.reply.trim(),
+        proposal: parsed.scriptProposal?.trim() || null,
+        rawText: raw.text,
+        promptTokens: raw.usage?.promptTokens ?? null,
+        completionTokens: raw.usage?.completionTokens ?? null,
       });
-      await prisma.dialogueMessage.update({
-        where: { id: processing.id },
-        data: { kind: "text", body: parsed.reply.trim(), status: "done" },
-      });
-      const proposal = parsed.scriptProposal?.trim();
-      if (proposal) {
-        await prisma.dialogueMessage.create({
-          data: {
-            threadId: thread.id,
-            role: "assistant",
-            kind: "script_proposal",
-            body: proposal,
-            payloadJson: JSON.stringify({ script: proposal, transferred: false }),
-            status: "done",
-          },
-        });
-      }
     } catch (error) {
       const stale = error instanceof StateVersionError || error instanceof ReelError;
       const message = stale

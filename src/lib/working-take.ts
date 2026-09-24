@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
 import { ReelError } from "@/lib/reels";
+import { StateVersionError } from "@/lib/ai/usage-guard";
+import { v01TestSeams } from "@/lib/v01-test-seams";
+import type { Prisma } from "@prisma/client";
 
 export type DialogueMaterialSnapshot = {
   workingTakeId: string;
@@ -38,37 +41,39 @@ export async function requireWorkingTake(reelId: string) {
   return { reel, take };
 }
 
-export async function captureDialogueMaterial(
-  reelId: string,
-  threadId: string,
-): Promise<DialogueMaterialSnapshot> {
-  const { reel, take } = await requireWorkingTake(reelId);
+export async function readDialogueVersion(threadId: string, db: Prisma.TransactionClient | typeof prisma = prisma) {
   const [messageCount, last] = await Promise.all([
-    prisma.dialogueMessage.count({ where: { threadId } }),
-    prisma.dialogueMessage.findFirst({
+    db.dialogueMessage.count({ where: { threadId } }),
+    db.dialogueMessage.findFirst({
       where: { threadId },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: { id: true },
     }),
   ]);
   return {
-    workingTakeId: take.id,
-    transcriptRevisionId: take.selectedTranscriptId,
-    reelUpdatedAt: reel.updatedAt.toISOString(),
-    dialogueVersion: {
-      threadId,
-      messageCount,
-      lastMessageId: last?.id ?? null,
-    },
+    threadId,
+    messageCount,
+    lastMessageId: last?.id ?? null,
   };
 }
 
-export async function dialogueMaterialChanged(
-  reelId: string,
-  threadId: string,
+export function snapshotFromLoaded(
+  reel: { updatedAt: Date },
+  take: { id: string; selectedTranscriptId: string | null },
+  dialogueVersion: DialogueMaterialSnapshot["dialogueVersion"],
+): DialogueMaterialSnapshot {
+  return {
+    workingTakeId: take.id,
+    transcriptRevisionId: take.selectedTranscriptId,
+    reelUpdatedAt: reel.updatedAt.toISOString(),
+    dialogueVersion,
+  };
+}
+
+export function materialSnapshotChanged(
+  current: DialogueMaterialSnapshot,
   snapshot: DialogueMaterialSnapshot,
-): Promise<boolean> {
-  const current = await captureDialogueMaterial(reelId, threadId);
+): boolean {
   return (
     current.workingTakeId !== snapshot.workingTakeId ||
     current.transcriptRevisionId !== snapshot.transcriptRevisionId ||
@@ -77,4 +82,80 @@ export async function dialogueMaterialChanged(
     current.dialogueVersion.messageCount !== snapshot.dialogueVersion.messageCount ||
     current.dialogueVersion.lastMessageId !== snapshot.dialogueVersion.lastMessageId
   );
+}
+
+export async function readMaterialSnapshot(
+  reelId: string,
+  threadId: string,
+  db: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<DialogueMaterialSnapshot> {
+  const reel = await db.reel.findFirst({
+    where: { id: reelId, ownerUserId: ownerUserId() },
+    select: { id: true, workingTakeId: true, updatedAt: true },
+  });
+  if (!reel?.workingTakeId) {
+    throw new ReelError("Нужен явный рабочий дубль.", "WORKING_TAKE_REQUIRED", 409);
+  }
+  const take = await db.take.findFirst({
+    where: { id: reel.workingTakeId, reelId },
+    select: { id: true, selectedTranscriptId: true },
+  });
+  if (!take) {
+    throw new ReelError("Рабочий дубль должен принадлежать этой карточке.", "TAKE_NOT_IN_REEL");
+  }
+  return snapshotFromLoaded(reel, take, await readDialogueVersion(threadId, db));
+}
+
+export async function commitDialogueReply(input: {
+  reelId: string;
+  threadId: string;
+  snapshot: DialogueMaterialSnapshot;
+  callId: string;
+  processingId: string;
+  reply: string;
+  proposal: string | null;
+  rawText: string;
+  promptTokens: number | null;
+  completionTokens: number | null;
+}): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Reel" WHERE id = ${input.reelId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "Take" WHERE id = ${input.snapshot.workingTakeId} FOR UPDATE`;
+
+    const matches = async () => {
+      const current = await readMaterialSnapshot(input.reelId, input.threadId, tx);
+      return !materialSnapshotChanged(current, input.snapshot);
+    };
+
+    if (!(await matches())) throw new StateVersionError();
+    if (v01TestSeams.afterMaterialCheck) await v01TestSeams.afterMaterialCheck();
+    if (!(await matches())) throw new StateVersionError();
+
+    await tx.aiCall.update({
+      where: { id: input.callId },
+      data: {
+        status: "done",
+        responseText: input.rawText,
+        resultJson: JSON.stringify({ reply: input.reply, scriptProposal: input.proposal }),
+        promptTokens: input.promptTokens,
+        completionTokens: input.completionTokens,
+      },
+    });
+    await tx.dialogueMessage.update({
+      where: { id: input.processingId },
+      data: { kind: "text", body: input.reply, status: "done" },
+    });
+    if (input.proposal) {
+      await tx.dialogueMessage.create({
+        data: {
+          threadId: input.threadId,
+          role: "assistant",
+          kind: "script_proposal",
+          body: input.proposal,
+          payloadJson: JSON.stringify({ script: input.proposal, transferred: false }),
+          status: "done",
+        },
+      });
+    }
+  });
 }
