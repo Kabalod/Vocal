@@ -14,41 +14,166 @@ export class ThoughtStateError extends Error {
   }
 }
 
+export const FACT_SOURCE_TYPES = ["dialogue_message", "transcript_revision", "initial_note"] as const;
+export type ThoughtFactSourceType = (typeof FACT_SOURCE_TYPES)[number];
+
+export type ThoughtFact = {
+  id: string;
+  text: string;
+  sourceType: ThoughtFactSourceType;
+  sourceId: string;
+};
+
+export type ThoughtGap = {
+  id: string;
+  text: string;
+  status: "open" | "resolved";
+};
+
 export type ThoughtStatePatch = {
   intent?: string;
   position?: string;
   takeTask?: string;
   audienceLocal?: string;
-  facts?: string[];
-  openGaps?: string[];
+  facts?: ThoughtFact[];
+  openGaps?: ThoughtGap[];
   decisions?: string[];
 };
 
-function asJsonList(value: unknown, field: string): string {
+function asStringList(value: unknown, field: string): string {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
     throw new ThoughtStateError(`Поле ${field} должно быть списком строк.`, "THOUGHT_STATE_LIST");
   }
   return JSON.stringify(value);
 }
 
+function requireNonEmptyString(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new ThoughtStateError(`Поле ${field} должно быть непустой строкой.`, "THOUGHT_STATE_SHAPE");
+  }
+  return value;
+}
+
+function uniqueIds(ids: string[], field: string) {
+  if (new Set(ids).size !== ids.length) {
+    throw new ThoughtStateError(`Поле ${field} содержит повторяющиеся id.`, "THOUGHT_STATE_ID");
+  }
+}
+
+export function parseFacts(value: unknown): ThoughtFact[] {
+  if (!Array.isArray(value)) {
+    throw new ThoughtStateError("Поле facts должно быть списком.", "THOUGHT_STATE_SHAPE");
+  }
+  const facts = value.map((item, index) => {
+    if (!item || typeof item !== "object") {
+      throw new ThoughtStateError(`Факт ${index} должен быть объектом.`, "THOUGHT_STATE_SHAPE");
+    }
+    const row = item as Record<string, unknown>;
+    const sourceType = requireNonEmptyString(row.sourceType, `facts[${index}].sourceType`);
+    if (!FACT_SOURCE_TYPES.includes(sourceType as ThoughtFactSourceType)) {
+      throw new ThoughtStateError("Тип источника факта неизвестен.", "THOUGHT_STATE_SOURCE_TYPE");
+    }
+    return {
+      id: requireNonEmptyString(row.id, `facts[${index}].id`),
+      text: requireNonEmptyString(row.text, `facts[${index}].text`),
+      sourceType: sourceType as ThoughtFactSourceType,
+      sourceId: requireNonEmptyString(row.sourceId, `facts[${index}].sourceId`),
+    };
+  });
+  uniqueIds(facts.map((fact) => fact.id), "facts");
+  return facts;
+}
+
+export function parseGaps(value: unknown): ThoughtGap[] {
+  if (!Array.isArray(value)) {
+    throw new ThoughtStateError("Поле openGaps должно быть списком.", "THOUGHT_STATE_SHAPE");
+  }
+  const gaps = value.map((item, index) => {
+    if (!item || typeof item !== "object") {
+      throw new ThoughtStateError(`Пробел ${index} должен быть объектом.`, "THOUGHT_STATE_SHAPE");
+    }
+    const row = item as Record<string, unknown>;
+    const status = requireNonEmptyString(row.status, `openGaps[${index}].status`);
+    if (status !== "open" && status !== "resolved") {
+      throw new ThoughtStateError("Статус пробела должен быть open или resolved.", "THOUGHT_STATE_GAP_STATUS");
+    }
+    return {
+      id: requireNonEmptyString(row.id, `openGaps[${index}].id`),
+      text: requireNonEmptyString(row.text, `openGaps[${index}].text`),
+      status: status as ThoughtGap["status"],
+    };
+  });
+  uniqueIds(gaps.map((gap) => gap.id), "openGaps");
+  return gaps;
+}
+
 export function parseThoughtStateLists(row: Pick<ThoughtState, "factsJson" | "openGapsJson" | "decisionsJson">) {
   return {
-    facts: JSON.parse(row.factsJson) as string[],
-    openGaps: JSON.parse(row.openGapsJson) as string[],
+    facts: parseFacts(JSON.parse(row.factsJson)),
+    openGaps: parseGaps(JSON.parse(row.openGapsJson)),
     decisions: JSON.parse(row.decisionsJson) as string[],
   };
+}
+
+async function assertFactSources(
+  tx: Prisma.TransactionClient,
+  reelId: string,
+  facts: ThoughtFact[],
+) {
+  for (const fact of facts) {
+    if (fact.sourceType === "initial_note") {
+      if (fact.sourceId !== reelId) {
+        throw new ThoughtStateError("Исходная заметка должна принадлежать этой мысли.", "THOUGHT_STATE_SOURCE");
+      }
+      continue;
+    }
+    if (fact.sourceType === "transcript_revision") {
+      const revision = await tx.transcriptRevision.findUnique({
+        where: { id: fact.sourceId },
+        select: { take: { select: { reelId: true } } },
+      });
+      if (!revision || revision.take.reelId !== reelId) {
+        throw new ThoughtStateError("Ревизия расшифровки должна принадлежать этой мысли.", "THOUGHT_STATE_SOURCE");
+      }
+      continue;
+    }
+    const message = await tx.dialogueMessage.findUnique({
+      where: { id: fact.sourceId },
+      select: { role: true, thread: { select: { reelId: true } } },
+    });
+    if (!message || message.thread.reelId !== reelId) {
+      throw new ThoughtStateError("Сообщение должно принадлежать этой мысли.", "THOUGHT_STATE_SOURCE");
+    }
+    if (message.role !== "user") {
+      throw new ThoughtStateError("Факт мысли должен ссылаться на источник автора.", "THOUGHT_STATE_AUTHOR_SOURCE");
+    }
+  }
+}
+
+async function ownedThoughtState(tx: Prisma.TransactionClient, reelId: string, owner: string) {
+  return tx.thoughtState.findFirst({
+    where: { reelId, reel: { ownerUserId: owner } },
+  });
 }
 
 export async function ensureThoughtState(
   tx: Prisma.TransactionClient,
   input: { reelId: string; ownerUserId: string; workingTakeId?: string | null },
 ): Promise<ThoughtState> {
+  const reel = await tx.reel.findUnique({
+    where: { id: input.reelId },
+    select: { ownerUserId: true },
+  });
+  if (!reel) throw new ThoughtStateError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+  if (reel.ownerUserId !== input.ownerUserId) {
+    throw new ThoughtStateError("Владелец состояния должен совпадать с владельцем мысли.", "THOUGHT_STATE_OWNER");
+  }
   const existing = await tx.thoughtState.findUnique({ where: { reelId: input.reelId } });
   if (existing) return existing;
   return tx.thoughtState.create({
     data: {
       reelId: input.reelId,
-      ownerUserId: input.ownerUserId,
+      ownerUserId: reel.ownerUserId,
       workingTakeId: input.workingTakeId ?? null,
     },
   });
@@ -71,7 +196,7 @@ export async function syncThoughtStateWorkingTake(
 
 export async function getThoughtState(reelId: string) {
   const row = await prisma.thoughtState.findFirst({
-    where: { reelId, ownerUserId: ownerUserId() },
+    where: { reelId, reel: { ownerUserId: ownerUserId() } },
   });
   if (!row) throw new ThoughtStateError("Состояние мысли не найдено.", "THOUGHT_STATE_NOT_FOUND", 404);
   return { ...row, ...parseThoughtStateLists(row) };
@@ -85,9 +210,7 @@ export async function applyThoughtState(input: {
   const owner = ownerUserId();
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "ThoughtState" WHERE "reelId" = ${input.reelId} FOR UPDATE`;
-    const row = await tx.thoughtState.findFirst({
-      where: { reelId: input.reelId, ownerUserId: owner },
-    });
+    const row = await ownedThoughtState(tx, input.reelId, owner);
     if (!row) throw new ThoughtStateError("Состояние мысли не найдено.", "THOUGHT_STATE_NOT_FOUND", 404);
     if (row.revision !== input.expectedRevision) throw new StateVersionError();
 
@@ -96,9 +219,15 @@ export async function applyThoughtState(input: {
     if (input.patch.position !== undefined) data.position = input.patch.position;
     if (input.patch.takeTask !== undefined) data.takeTask = input.patch.takeTask;
     if (input.patch.audienceLocal !== undefined) data.audienceLocal = input.patch.audienceLocal;
-    if (input.patch.facts !== undefined) data.factsJson = asJsonList(input.patch.facts, "facts");
-    if (input.patch.openGaps !== undefined) data.openGapsJson = asJsonList(input.patch.openGaps, "openGaps");
-    if (input.patch.decisions !== undefined) data.decisionsJson = asJsonList(input.patch.decisions, "decisions");
+    if (input.patch.facts !== undefined) {
+      const facts = parseFacts(input.patch.facts);
+      await assertFactSources(tx, input.reelId, facts);
+      data.factsJson = JSON.stringify(facts);
+    }
+    if (input.patch.openGaps !== undefined) {
+      data.openGapsJson = JSON.stringify(parseGaps(input.patch.openGaps));
+    }
+    if (input.patch.decisions !== undefined) data.decisionsJson = asStringList(input.patch.decisions, "decisions");
 
     return tx.thoughtState.update({ where: { id: row.id }, data });
   });

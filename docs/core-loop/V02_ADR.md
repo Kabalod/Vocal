@@ -16,6 +16,16 @@ V02: **in progress**. Live migrate на Supabase не применять.
 
 `revision` растёт на каждый apply и на смену рабочего дубля. Несовпадение `expectedRevision` → 409, запись не применяется.
 
+## Факты и пробелы
+
+Факт — объект `{ id, text, sourceType, sourceId }`. `sourceType`: `dialogue_message` | `transcript_revision` | `initial_note`. Reducer проверяет форму и что источник принадлежит этой мысли. Сообщение ассистента не источник автора.
+
+Пробел — объект `{ id, text, status: open|resolved }` со стабильным id для ссылок V03.
+
+## Владелец
+
+`ThoughtState.ownerUserId` копируется из `Reel`. SQL-инвариант: `(reelId, ownerUserId) → Reel(id, ownerUserId)` в миграции 7. Чтение и apply идут через `reel.ownerUserId` сессии, не через одно только поле состояния.
+
 ## Prisma vs SQL
 
-В `schema.prisma` связь `workingTakeId → Take.id` простая, как у Reel: составной relation ломает `cuid()` на `Take`. Инвариант «тот же reel» — только миграция 6.
+В `schema.prisma` связь `workingTakeId → Take.id` простая, как у Reel: составной relation ломает `cuid()` на `Take`. Инвариант «тот же reel» — миграция 6. Инвариант владельца — миграция 7.

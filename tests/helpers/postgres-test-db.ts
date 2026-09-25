@@ -17,7 +17,11 @@ const MIGRATION_FILES = [
   "prisma/migrations/4_v01_working_take_same_reel/migration.sql",
   "prisma/migrations/5_v01_dialogue_head_lock/migration.sql",
   "prisma/migrations/6_v02_thought_state/migration.sql",
+  "prisma/migrations/7_v02_thought_state_owner/migration.sql",
 ] as const;
+
+export const PRE_THOUGHT_STATE_MIGRATIONS = MIGRATION_FILES.slice(0, 6);
+export const THOUGHT_STATE_MIGRATIONS = MIGRATION_FILES.slice(6);
 
 export type PostgresTestDb = {
   prisma: PrismaClient;
@@ -63,8 +67,13 @@ let cachedMigrationSql: string | undefined;
 
 function isolatedSchemaMigrationSql(): string {
   if (cachedMigrationSql !== undefined) return cachedMigrationSql;
+  cachedMigrationSql = migrationSqlFor(MIGRATION_FILES);
+  return cachedMigrationSql;
+}
+
+function migrationSqlFor(files: readonly string[]): string {
   const parts: string[] = [];
-  for (const rel of MIGRATION_FILES) {
+  for (const rel of files) {
     const file = path.join(repoRoot, rel);
     if (!existsSync(file)) {
       throw new Error(`Missing test migration ${rel}`);
@@ -75,8 +84,7 @@ function isolatedSchemaMigrationSql(): string {
     }
     parts.push(`-- ${rel}\n${sql}`);
   }
-  cachedMigrationSql = parts.join("\n\n");
-  return cachedMigrationSql;
+  return parts.join("\n\n");
 }
 
 function applyIsolatedSchema(baseUrl: string, schema: string) {
@@ -86,12 +94,27 @@ function applyIsolatedSchema(baseUrl: string, schema: string) {
   );
 }
 
+export function applyIsolatedSchemaFiles(
+  baseUrl: string,
+  schema: string,
+  files: readonly string[],
+  options: { createSchema?: boolean } = {},
+) {
+  const prefix =
+    options.createSchema === false
+      ? `SET search_path TO "${schema}";\n`
+      : `CREATE SCHEMA "${schema}";\nSET search_path TO "${schema}";\n`;
+  executeSql(baseUrl, `${prefix}${migrationSqlFor(files)}`);
+}
+
 export async function openPostgresTestDb(
   env: Record<string, string | undefined> = process.env,
+  files: readonly string[] = MIGRATION_FILES,
 ): Promise<PostgresTestDb> {
   const baseUrl = assertTestDatabaseUrl(env.TEST_DATABASE_URL?.trim() || "", env);
   const schema = `t_${randomBytes(6).toString("hex")}`;
-  applyIsolatedSchema(baseUrl, schema);
+  if (files === MIGRATION_FILES) applyIsolatedSchema(baseUrl, schema);
+  else applyIsolatedSchemaFiles(baseUrl, schema, files);
   const url = withSchema(baseUrl, schema);
   env.TEST_DATABASE_URL = url;
   env.DATABASE_URL = url;

@@ -27,6 +27,7 @@ model Reel {
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
 
+  @@unique([id, ownerUserId])
   @@index([ownerUserId, createdAt])
   @@index([workingTakeId])
   takes            Take[]
@@ -91,7 +92,8 @@ model ThoughtState {
   openGapsJson  String   @default("[]")
   decisionsJson String   @default("[]")
   workingTakeId String?
-  // SQL migration 6 adds (workingTakeId, reelId) → Take(id, reelId).
+  // SQL migration 6: (workingTakeId, reelId) → Take(id, reelId).
+  // SQL migration 7: (reelId, ownerUserId) → Reel(id, ownerUserId).
   workingTake   Take?    @relation("ThoughtStateWorkingTake", fields: [workingTakeId], references: [id], onDelete: Restrict)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

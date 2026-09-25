@@ -10,10 +10,12 @@ Live Supabase не менялся. V03 не начинать.
 ## Что сделано
 
 - Модель `ThoughtState` (1:1 с мыслью): замысел, позиция, факты/пробелы/решения этой мысли, локальная аудитория, задача дубля, зеркало `workingTakeId`.
+- Факты с источником автора; пробелы со стабильным id; reducer валидирует структуру и ссылки.
+- Владелец состояния = владелец Reel (SQL FK + проверка через relation).
 - Reducer `applyThoughtState` с CAS `revision` → 409 `StateVersionError`.
 - Состояние создаётся при `createReel` / `createThoughtFromText`; указатель синхронизируется со сменой рабочего дубля.
-- Составной FK `(workingTakeId, reelId) → Take(id, reelId)` только в SQL миграции 6.
-- Миграция не применяется на live Supabase.
+- SQL: миграция 6 — same-reel working take; миграция 7 — owner FK. Не на live Supabase.
+- Backfill миграции 6 проверяется на Reel, созданных после 0–5.
 
 ## Вне объёма
 
