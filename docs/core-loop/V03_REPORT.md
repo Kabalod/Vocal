@@ -17,6 +17,9 @@ Live Supabase не менялся. V04 не начинать.
 ## Что сделано
 
 - Контракт модели диалога: одно из `ask_question` | `suggest_take` | `content_sufficient` | `redirect_to_task`.
+- Схемы действий строгие: лишние поля (`reply`, `scriptProposal`, неизвестные) отклоняются.
+- Ответ автора в диалоге пишется в `ThoughtState` через `applyThoughtState` как факт с `dialogue_message`.
+- Снимок запроса включает `thoughtStateRevision`; перед записью `ThoughtState` блокируется и сверяется; устаревшее действие → 409.
 - Сервер проверяет схему, ссылки (пробел / факты), допустимость `content_sufficient` (только audio/video с ревизией).
 - Действие пишется в сообщение; `Reel.status` не меняется.
 - Старый JSON `reply` + `scriptProposal` больше не принимается. UI записи — V05.

@@ -16,4 +16,8 @@ V03: **in progress**. Live migrate на Supabase не применять.
 
 `suggest_take.evidenceRefs` — id фактов `ThoughtState` этой мысли.
 
+Ответ автора в диалоге становится фактом (`sourceType: dialogue_message`) через `applyThoughtState`. Это пользовательский путь к основаниям `suggest_take`, а не ручное заполнение состояния в тесте.
+
+Снимок `AiCall` и CAS перед записью включают `thoughtStateRevision`. Схемы действий — `.strict()`.
+
 Проверка схемы не доказывает смысловое качество.

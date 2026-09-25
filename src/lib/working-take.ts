@@ -10,6 +10,7 @@ export type DialogueMaterialSnapshot = {
   workingTakeId: string;
   transcriptRevisionId: string | null;
   reelUpdatedAt: string;
+  thoughtStateRevision: number;
   dialogueVersion: {
     threadId: string;
     messageCount: number;
@@ -68,11 +69,13 @@ export function snapshotFromLoaded(
   reel: { updatedAt: Date },
   take: { id: string; selectedTranscriptId: string | null },
   dialogueVersion: DialogueMaterialSnapshot["dialogueVersion"],
+  thoughtStateRevision: number,
 ): DialogueMaterialSnapshot {
   return {
     workingTakeId: take.id,
     transcriptRevisionId: take.selectedTranscriptId,
     reelUpdatedAt: reel.updatedAt.toISOString(),
+    thoughtStateRevision,
     dialogueVersion,
   };
 }
@@ -88,7 +91,8 @@ export function materialSnapshotChanged(
     current.dialogueVersion.threadId !== snapshot.dialogueVersion.threadId ||
     current.dialogueVersion.messageCount !== snapshot.dialogueVersion.messageCount ||
     current.dialogueVersion.lastMessageId !== snapshot.dialogueVersion.lastMessageId ||
-    current.dialogueVersion.headEpoch !== snapshot.dialogueVersion.headEpoch
+    current.dialogueVersion.headEpoch !== snapshot.dialogueVersion.headEpoch ||
+    current.thoughtStateRevision !== snapshot.thoughtStateRevision
   );
 }
 
@@ -111,7 +115,14 @@ export async function readMaterialSnapshot(
   if (!take) {
     throw new ReelError("Рабочий дубль должен принадлежать этой карточке.", "TAKE_NOT_IN_REEL");
   }
-  return snapshotFromLoaded(reel, take, await readDialogueVersion(threadId, db));
+  const thought = await db.thoughtState.findFirst({
+    where: { reelId, reel: { ownerUserId: ownerUserId() } },
+    select: { revision: true },
+  });
+  if (!thought) {
+    throw new ReelError("Состояние мысли не найдено.", "THOUGHT_STATE_NOT_FOUND", 404);
+  }
+  return snapshotFromLoaded(reel, take, await readDialogueVersion(threadId, db), thought.revision);
 }
 
 export async function commitDialogueReply(input: {
@@ -129,6 +140,7 @@ export async function commitDialogueReply(input: {
     await tx.$queryRaw`SELECT id FROM "DialogueThread" WHERE id = ${input.threadId} FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM "Reel" WHERE id = ${input.reelId} FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM "Take" WHERE id = ${input.snapshot.workingTakeId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "ThoughtState" WHERE "reelId" = ${input.reelId} FOR UPDATE`;
 
     const matches = async () => {
       const current = await readMaterialSnapshot(input.reelId, input.threadId, tx);

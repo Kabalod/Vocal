@@ -13,31 +13,39 @@ export class AgentActionError extends Error {
   }
 }
 
-const askQuestionSchema = z.object({
-  action: z.literal("ask_question"),
-  question: z.string().trim().min(1),
-  gapId: z.string().trim().min(1).optional(),
-  clarificationReason: z.string().trim().min(1).optional(),
-  whyUnknown: z.string().trim().min(1),
-});
+const askQuestionSchema = z
+  .object({
+    action: z.literal("ask_question"),
+    question: z.string().trim().min(1),
+    gapId: z.string().trim().min(1).optional(),
+    clarificationReason: z.string().trim().min(1).optional(),
+    whyUnknown: z.string().trim().min(1),
+  })
+  .strict();
 
-const suggestTakeSchema = z.object({
-  action: z.literal("suggest_take"),
-  mainIdea: z.string().trim().min(1),
-  takeTask: z.string().trim().min(1),
-  evidenceRefs: z.array(z.string().trim().min(1)).min(1),
-});
+const suggestTakeSchema = z
+  .object({
+    action: z.literal("suggest_take"),
+    mainIdea: z.string().trim().min(1),
+    takeTask: z.string().trim().min(1),
+    evidenceRefs: z.array(z.string().trim().min(1)).min(1),
+  })
+  .strict();
 
-const contentSufficientSchema = z.object({
-  action: z.literal("content_sufficient"),
-  checkedInTranscript: z.string().trim().min(1),
-  whyNoGaps: z.string().trim().min(1),
-});
+const contentSufficientSchema = z
+  .object({
+    action: z.literal("content_sufficient"),
+    checkedInTranscript: z.string().trim().min(1),
+    whyNoGaps: z.string().trim().min(1),
+  })
+  .strict();
 
-const redirectSchema = z.object({
-  action: z.literal("redirect_to_task"),
-  currentTask: z.string().trim().min(1),
-});
+const redirectSchema = z
+  .object({
+    action: z.literal("redirect_to_task"),
+    currentTask: z.string().trim().min(1),
+  })
+  .strict();
 
 export const agentActionSchema = z.discriminatedUnion("action", [
   askQuestionSchema,

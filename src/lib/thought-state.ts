@@ -232,3 +232,39 @@ export async function applyThoughtState(input: {
     return tx.thoughtState.update({ where: { id: row.id }, data });
   });
 }
+
+export async function recordAuthorFactFromDialogue(input: {
+  reelId: string;
+  messageId: string;
+  text: string;
+}): Promise<void> {
+  const text = input.text.trim();
+  if (!text) return;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const state = await getThoughtState(input.reelId);
+    if (state.facts.some((fact) => fact.sourceType === "dialogue_message" && fact.sourceId === input.messageId)) {
+      return;
+    }
+    try {
+      await applyThoughtState({
+        reelId: input.reelId,
+        expectedRevision: state.revision,
+        patch: {
+          facts: [
+            ...state.facts,
+            {
+              id: `fact_${input.messageId}`,
+              text,
+              sourceType: "dialogue_message",
+              sourceId: input.messageId,
+            },
+          ],
+        },
+      });
+      return;
+    } catch (error) {
+      if (error instanceof StateVersionError && attempt === 0) continue;
+      throw error;
+    }
+  }
+}

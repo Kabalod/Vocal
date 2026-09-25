@@ -20,7 +20,7 @@ import {
 } from "@/lib/working-take";
 import { v01TestSeams } from "@/lib/v01-test-seams";
 import { AgentActionError, parseAgentAction } from "@/lib/agent-action";
-import { getThoughtState } from "@/lib/thought-state";
+import { getThoughtState, recordAuthorFactFromDialogue } from "@/lib/thought-state";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
 
@@ -231,7 +231,13 @@ async function freezeThoughtPrompt(reelId: string, threadId: string, authorText:
   const script =
     scripts.find((row) => row.id === reel.selectedScriptId) ??
     scripts.find((row) => row.kind !== "ai_proposal" && row.kind !== "draft");
-  const material = snapshotFromLoaded(reel, { id: take.id, selectedTranscriptId: revisionId ?? null }, dialogueVersion);
+  const thought = await getThoughtState(reelId);
+  const material = snapshotFromLoaded(
+    reel,
+    { id: take.id, selectedTranscriptId: revisionId ?? null },
+    dialogueVersion,
+    thought.revision,
+  );
   const prompt = [
     `Мысль: ${reel.id}`,
     `Название: ${reel.title ?? ""}`,
@@ -245,26 +251,18 @@ async function freezeThoughtPrompt(reelId: string, threadId: string, authorText:
     `Подтверждённый профиль (только понимание): ${JSON.stringify(live.live.understandingOnly)}`,
     `Недавняя переписка:\n${recent}`,
     `Ответ автора: ${authorText}`,
-    `Состояние мысли: ${JSON.stringify(await thoughtStatePrompt(reelId))}`,
+    `Состояние мысли: ${JSON.stringify({
+      revision: thought.revision,
+      intent: thought.intent,
+      takeTask: thought.takeTask,
+      facts: thought.facts,
+      openGaps: thought.openGaps,
+    })}`,
     `JSON одного действия: {"action":"ask_question","question":"","gapId":"","clarificationReason":"","whyUnknown":""} или {"action":"suggest_take","mainIdea":"","takeTask":"","evidenceRefs":[]} или {"action":"content_sufficient","checkedInTranscript":"","whyNoGaps":""} или {"action":"redirect_to_task","currentTask":""}`,
   ]
     .filter(Boolean)
     .join("\n\n");
   return { prompt, material };
-}
-
-async function thoughtStatePrompt(reelId: string) {
-  try {
-    const state = await getThoughtState(reelId);
-    return {
-      intent: state.intent,
-      takeTask: state.takeTask,
-      facts: state.facts,
-      openGaps: state.openGaps,
-    };
-  } catch {
-    return { intent: "", takeTask: "", facts: [], openGaps: [] };
-  }
 }
 
 export async function buildThoughtMaterialContext(reelId: string): Promise<string> {
@@ -340,7 +338,7 @@ export async function sendDialogueMessage(
     if (raced) return listDialoguePage(reelId);
     await assertDailyTokenBudget();
 
-    await prisma.dialogueMessage.create({
+    const userMessage = await prisma.dialogueMessage.create({
       data: {
         threadId: thread.id,
         role: "user",
@@ -351,6 +349,7 @@ export async function sendDialogueMessage(
         idempotencyKey: key,
       },
     });
+    await recordAuthorFactFromDialogue({ reelId, messageId: userMessage.id, text });
     const processing = await prisma.dialogueMessage.create({
       data: {
         threadId: thread.id,
@@ -377,6 +376,7 @@ export async function sendDialogueMessage(
           transcriptRevisionId: material.transcriptRevisionId,
           reelUpdatedAt: material.reelUpdatedAt,
           dialogueVersion: material.dialogueVersion,
+          thoughtStateRevision: material.thoughtStateRevision,
         }),
       },
     });

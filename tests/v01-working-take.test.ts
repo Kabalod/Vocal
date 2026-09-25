@@ -421,12 +421,14 @@ test("AiCall snapshot stores working take, revision, reel and dialogue versions"
     workingTakeId: string;
     transcriptRevisionId: string | null;
     reelUpdatedAt: string;
+    thoughtStateRevision: number;
     dialogueVersion: { threadId: string; messageCount: number; lastMessageId: string | null; headEpoch: number };
   };
   assert.equal(snap.text, "зафиксируй материал");
   assert.equal(snap.workingTakeId, reel.workingTakeId);
   assert.ok(snap.transcriptRevisionId);
   assert.ok(snap.reelUpdatedAt);
+  assert.equal(typeof snap.thoughtStateRevision, "number");
   assert.ok(snap.dialogueVersion.threadId);
   assert.ok(snap.dialogueVersion.messageCount >= 2);
   assert.ok(snap.dialogueVersion.lastMessageId);
