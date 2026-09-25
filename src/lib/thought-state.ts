@@ -2,7 +2,8 @@ import type { Prisma, ThoughtState } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
 import { StateVersionError } from "@/lib/ai/usage-guard";
-import type { AgentAction } from "@/lib/agent-action";
+import type { AgentAction, ThoughtUpdate } from "@/lib/agent-action";
+import { AgentActionError } from "@/lib/agent-action";
 import { v03TestSeams } from "@/lib/v03-test-seams";
 
 export class ThoughtStateError extends Error {
@@ -211,9 +212,12 @@ export async function applyThoughtStateInTx(
     expectedRevision: number;
     patch: ThoughtStatePatch;
     ownerUserId?: string;
+    turnKey?: string;
   },
 ): Promise<ThoughtState> {
-  if (v03TestSeams.failThoughtStateApply) await v03TestSeams.failThoughtStateApply();
+  if (v03TestSeams.failThoughtStateApply) {
+    await v03TestSeams.failThoughtStateApply({ reelId: input.reelId, turnKey: input.turnKey });
+  }
   const owner = input.ownerUserId ?? ownerUserId();
   await tx.$queryRaw`SELECT id FROM "ThoughtState" WHERE "reelId" = ${input.reelId} FOR UPDATE`;
   const row = await ownedThoughtState(tx, input.reelId, owner);
@@ -246,56 +250,48 @@ export async function applyThoughtState(input: {
   return prisma.$transaction((tx) => applyThoughtStateInTx(tx, input));
 }
 
-const COMMAND_UTTERANCES = new Set(["можно снимать", "проверь дубль", "привет"]);
-const COMMAND_HEADS = new Set(["уточни", "снимай", "хватит"]);
-
-export function isAuthorCommand(text: string): boolean {
-  const normalized = text
-    .trim()
-    .toLowerCase()
-    .replace(/[.!?…]+$/g, "")
-    .replace(/\s+/g, " ");
-  if (!normalized) return true;
-  if (COMMAND_UTTERANCES.has(normalized)) return true;
-  const words = normalized.split(" ");
-  return COMMAND_HEADS.has(words[0] ?? "") && words.length <= 3;
+export function candidateFactId(userMessageId: string) {
+  return `fact_${userMessageId}`;
 }
 
 export function buildDialogueThoughtPatch(input: {
   action: AgentAction;
-  userText: string;
+  thoughtUpdate: ThoughtUpdate;
   userMessageId: string;
   facts: ThoughtFact[];
   openGaps: ThoughtGap[];
-  pendingGapId: string | null;
 }): ThoughtStatePatch | null {
   const patch: ThoughtStatePatch = {};
-  const command = isAuthorCommand(input.userText);
-  const addFact =
-    input.action.action !== "redirect_to_task" &&
-    !command &&
-    !input.facts.some((fact) => fact.sourceType === "dialogue_message" && fact.sourceId === input.userMessageId);
-
-  if (addFact) {
-    patch.facts = [
-      ...input.facts,
-      {
-        id: `fact_${input.userMessageId}`,
-        text: input.userText.trim(),
-        sourceType: "dialogue_message",
-        sourceId: input.userMessageId,
-      },
-    ];
+  const accepted = input.thoughtUpdate.fact;
+  if (accepted) {
+    if (accepted.sourceId !== input.userMessageId) {
+      throw new AgentActionError("Источник факта должен быть текущим сообщением автора.", "ACTION_EVIDENCE");
+    }
+    if (!input.facts.some((fact) => fact.sourceType === "dialogue_message" && fact.sourceId === input.userMessageId)) {
+      patch.facts = [
+        ...input.facts,
+        {
+          id: candidateFactId(input.userMessageId),
+          text: accepted.text,
+          sourceType: "dialogue_message",
+          sourceId: input.userMessageId,
+        },
+      ];
+    }
   }
 
-  if (addFact && input.pendingGapId) {
-    const source = patch.facts ? input.openGaps : input.openGaps;
-    const gaps = source.map((gap) =>
-      gap.id === input.pendingGapId && gap.status === "open" ? { ...gap, status: "resolved" as const } : gap,
+  if (input.thoughtUpdate.closeGapIds.length) {
+    const unknown = input.thoughtUpdate.closeGapIds.filter(
+      (id) => !input.openGaps.some((gap) => gap.id === id && gap.status === "open"),
     );
-    if (gaps.some((gap) => gap.id === input.pendingGapId && gap.status === "resolved")) {
-      patch.openGaps = gaps;
+    if (unknown.length) {
+      throw new AgentActionError("Закрыть можно только открытый пробел этой мысли.", "ACTION_GAP");
     }
+    patch.openGaps = input.openGaps.map((gap) =>
+      input.thoughtUpdate.closeGapIds.includes(gap.id) && gap.status === "open"
+        ? { ...gap, status: "resolved" as const }
+        : gap,
+    );
   }
 
   if (input.action.action === "suggest_take") {

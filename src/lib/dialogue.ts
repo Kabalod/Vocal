@@ -15,14 +15,15 @@ import { listTranscriptBundle } from "@/lib/transcripts";
 import {
   commitDialogueReply,
   readDialogueVersion,
+  readMaterialSnapshot,
   requireWorkingTake,
   snapshotFromLoaded,
+  type DialogueMaterialSnapshot,
 } from "@/lib/working-take";
 import { v01TestSeams } from "@/lib/v01-test-seams";
-import { AgentActionError, parseAgentAction } from "@/lib/agent-action";
-import { getThoughtState, ThoughtStateError } from "@/lib/thought-state";
+import { AgentActionError, parseAgentReply } from "@/lib/agent-action";
+import { candidateFactId, getThoughtState, ThoughtStateError } from "@/lib/thought-state";
 import { v03TestSeams } from "@/lib/v03-test-seams";
-import type { DialogueMaterialSnapshot } from "@/lib/working-take";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
 
@@ -39,7 +40,7 @@ export class DialogueError extends Error {
   }
 }
 
-const DIALOGUE_SYSTEM = `Ты Vocal. Помогаешь автору раскрыть свою мысль. Опирайся только на материал и переписку. Не выдумывай факты и мотивы. Не ставь баллы. Действия не являются статусом мысли. Верни только JSON одного действия: ask_question, suggest_take, content_sufficient или redirect_to_task.`;
+const DIALOGUE_SYSTEM = `Ты Vocal. Помогаешь автору раскрыть свою мысль. Опирайся только на материал и переписку. Не выдумывай факты и мотивы. Не ставь баллы. Действия не являются статусом мысли. Верни JSON одного действия и thoughtUpdate: добавлять ли факт, текст факта, sourceId текущего сообщения автора, какие gapId закрыты. Без явного thoughtUpdate состояние мысли не меняется. Команды, «не знаю» и уход от темы не становятся фактами и не закрывают пробелы.`;
 
 type Payload = {
   voiceDurationLabel?: string;
@@ -214,7 +215,24 @@ export async function listDialoguePage(
   };
 }
 
-async function freezeThoughtPrompt(reelId: string, threadId: string, authorText: string) {
+function turnClaimKey(threadId: string, key: string) {
+  return `dialogue-turn:${threadId}:${key}`;
+}
+
+function parseTurnPayload(raw: string): { userMessageId?: string; aiCallId?: string; idempotencyKey?: string } {
+  try {
+    return JSON.parse(raw) as { userMessageId?: string; aiCallId?: string; idempotencyKey?: string };
+  } catch {
+    return {};
+  }
+}
+
+async function freezeThoughtPrompt(
+  reelId: string,
+  threadId: string,
+  authorText: string,
+  turn?: { userMessageId: string },
+) {
   const { reel, take } = await requireWorkingTake(reelId);
   if (v01TestSeams.afterWorkingTakeRead) await v01TestSeams.afterWorkingTakeRead();
   const [scripts, transcript, dialogueVersion, recent, live] = await Promise.all([
@@ -253,6 +271,9 @@ async function freezeThoughtPrompt(reelId: string, threadId: string, authorText:
     `Подтверждённый профиль (только понимание): ${JSON.stringify(live.live.understandingOnly)}`,
     `Недавняя переписка:\n${recent}`,
     `Ответ автора: ${authorText}`,
+    turn
+      ? `Текущее сообщение автора: ${turn.userMessageId}. Кандидат факта: ${candidateFactId(turn.userMessageId)}. Если принимаешь этот ответ как факт, укажи thoughtUpdate.fact.sourceId = это сообщение и evidenceRefs = [${candidateFactId(turn.userMessageId)}].`
+      : "",
     `Состояние мысли: ${JSON.stringify({
       revision: thought.revision,
       intent: thought.intent,
@@ -260,7 +281,7 @@ async function freezeThoughtPrompt(reelId: string, threadId: string, authorText:
       facts: thought.facts,
       openGaps: thought.openGaps,
     })}`,
-    `JSON одного действия: {"action":"ask_question","question":"","gapId":"","clarificationReason":"","whyUnknown":""} или {"action":"suggest_take","mainIdea":"","takeTask":"","evidenceRefs":[]} или {"action":"content_sufficient","checkedInTranscript":"","whyNoGaps":""} или {"action":"redirect_to_task","currentTask":""}`,
+    `JSON: действие и thoughtUpdate. Без явного thoughtUpdate состояние не меняется. Пример: {"action":"suggest_take","mainIdea":"","takeTask":"","evidenceRefs":["fact_id"],"thoughtUpdate":{"fact":{"text":"","sourceType":"dialogue_message","sourceId":""},"closeGapIds":[]}}`,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -314,23 +335,29 @@ function snapshotFromCallJson(raw: string): DialogueMaterialSnapshot {
   };
 }
 
-async function isDialogueTurnComplete(reelId: string, threadId: string, userMessageId: string) {
-  const user = await prisma.dialogueMessage.findUnique({ where: { id: userMessageId } });
-  if (!user) return false;
-  const call = await prisma.aiCall.findFirst({
-    where: { reelId, kind: "dialogue", status: "done" },
-    orderBy: { createdAt: "desc" },
+async function isDialogueTurnComplete(threadId: string, userMessageId: string, key: string) {
+  const processing = await prisma.dialogueMessage.findFirst({
+    where: { threadId, claimKey: turnClaimKey(threadId, key) },
   });
-  const assistant = await prisma.dialogueMessage.findFirst({
-    where: {
-      threadId,
-      role: "assistant",
-      status: "done",
-      kind: { in: ["question", "text"] },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  return Boolean(call && assistant && assistant.createdAt >= user.createdAt);
+  if (!processing || processing.status !== "done" || (processing.kind !== "question" && processing.kind !== "text")) {
+    return false;
+  }
+  const payload = parseTurnPayload(processing.payloadJson);
+  if (payload.userMessageId !== userMessageId || !payload.aiCallId) return false;
+  const call = await prisma.aiCall.findUnique({ where: { id: payload.aiCallId } });
+  return call?.status === "done";
+}
+
+async function snapshotForResume(storedJson: string, reelId: string, threadId: string) {
+  const stored = snapshotFromCallJson(storedJson);
+  const current = await readMaterialSnapshot(reelId, threadId);
+  if (
+    current.workingTakeId !== stored.workingTakeId ||
+    current.transcriptRevisionId !== stored.transcriptRevisionId
+  ) {
+    throw new StateVersionError();
+  }
+  return current;
 }
 
 export async function sendDialogueMessage(
@@ -353,7 +380,7 @@ export async function sendDialogueMessage(
   const existing = await prisma.dialogueMessage.findFirst({
     where: { threadId: thread.id, idempotencyKey: key },
   });
-  if (existing && (await isDialogueTurnComplete(reelId, thread.id, existing.id))) {
+  if (existing && (await isDialogueTurnComplete(thread.id, existing.id, key))) {
     return listDialoguePage(reelId);
   }
 
@@ -369,7 +396,7 @@ export async function sendDialogueMessage(
     let userMessage = await prisma.dialogueMessage.findFirst({
       where: { threadId: thread.id, idempotencyKey: key },
     });
-    if (userMessage && (await isDialogueTurnComplete(reelId, thread.id, userMessage.id))) {
+    if (userMessage && (await isDialogueTurnComplete(thread.id, userMessage.id, key))) {
       return listDialoguePage(reelId);
     }
     if (!userMessage) await assertDailyTokenBudget();
@@ -388,14 +415,9 @@ export async function sendDialogueMessage(
     }
     if (v03TestSeams.afterUserMessageCreate) await v03TestSeams.afterUserMessageCreate();
 
+    const claimKey = turnClaimKey(thread.id, key);
     let processing = await prisma.dialogueMessage.findFirst({
-      where: {
-        threadId: thread.id,
-        role: "assistant",
-        createdAt: { gte: userMessage.createdAt },
-        kind: { in: ["processing", "error"] },
-      },
-      orderBy: { createdAt: "asc" },
+      where: { threadId: thread.id, claimKey },
     });
     if (!processing) {
       processing = await prisma.dialogueMessage.create({
@@ -405,40 +427,59 @@ export async function sendDialogueMessage(
           kind: "processing",
           body: "Разбираю вашу мысль…",
           status: "pending",
+          claimKey,
+          idempotencyKey: `assistant:${key}`,
+          payloadJson: JSON.stringify({ userMessageId: userMessage.id, idempotencyKey: key }),
         },
       });
     }
 
-    const reusableCalls = await prisma.aiCall.findMany({
-      where: {
-        reelId,
-        kind: "dialogue",
-        ownerUserId: ownerUserId(),
-        status: { not: "done" },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    const reusable = reusableCalls.find((row) => {
-      if (!row.responseText) return false;
-      try {
-        const snap = JSON.parse(row.inputSnapshotJson) as { idempotencyKey?: string };
-        return snap.idempotencyKey === key;
-      } catch {
-        return false;
-      }
-    });
+    let boundCallId = parseTurnPayload(processing.payloadJson).aiCallId;
+    if (!boundCallId) {
+      const placeholder = await prisma.aiCall.create({
+        data: {
+          kind: "dialogue",
+          reelId,
+          model: LLM_MODEL,
+          status: "running",
+          ownerUserId: ownerUserId(),
+          promptText: "",
+          inputSnapshotJson: JSON.stringify({
+            text,
+            playbook: false,
+            idempotencyKey: key,
+            userMessageId: userMessage.id,
+            processingId: processing.id,
+          }),
+        },
+      });
+      processing = await prisma.dialogueMessage.update({
+        where: { id: processing.id },
+        data: {
+          payloadJson: JSON.stringify({
+            userMessageId: userMessage.id,
+            idempotencyKey: key,
+            aiCallId: placeholder.id,
+          }),
+        },
+      });
+      boundCallId = placeholder.id;
+    }
+    const reusable = await prisma.aiCall.findUnique({ where: { id: boundCallId } });
 
     try {
-      if (reusable?.responseText) {
-        const action = parseAgentAction(parseJsonObject(reusable.responseText));
+      if (reusable?.responseText && reusable.status !== "done") {
+        const reply = parseAgentReply(parseJsonObject(reusable.responseText));
         await commitDialogueReply({
           reelId,
           threadId: thread.id,
-          snapshot: snapshotFromCallJson(reusable.inputSnapshotJson),
+          snapshot: await snapshotForResume(reusable.inputSnapshotJson, reelId, thread.id),
           callId: reusable.id,
           processingId: processing.id,
           userMessageId: userMessage.id,
-          action,
+          turnKey: key,
+          action: reply.action,
+          thoughtUpdate: reply.thoughtUpdate,
           rawText: reusable.responseText,
           promptTokens: reusable.promptTokens,
           completionTokens: reusable.completionTokens,
@@ -446,20 +487,20 @@ export async function sendDialogueMessage(
         return listDialoguePage(reelId);
       }
 
-      const { prompt: userPrompt, material } = await freezeThoughtPrompt(reelId, thread.id, text);
-      const call = await prisma.aiCall.create({
+      const { prompt: userPrompt, material } = await freezeThoughtPrompt(reelId, thread.id, text, {
+        userMessageId: userMessage.id,
+      });
+      const call = reusable ?? (await prisma.aiCall.findUniqueOrThrow({ where: { id: boundCallId } }));
+      await prisma.aiCall.update({
+        where: { id: call.id },
         data: {
-          kind: "dialogue",
-          reelId,
-          model: LLM_MODEL,
-          status: "running",
-          ownerUserId: ownerUserId(),
           promptText: userPrompt,
           inputSnapshotJson: JSON.stringify({
             text,
             playbook: false,
             idempotencyKey: key,
             userMessageId: userMessage.id,
+            processingId: processing.id,
             workingTakeId: material.workingTakeId,
             transcriptRevisionId: material.transcriptRevisionId,
             reelUpdatedAt: material.reelUpdatedAt,
@@ -468,21 +509,26 @@ export async function sendDialogueMessage(
           }),
         },
       });
-      const raw = await complete({
-        model: LLM_MODEL,
-        system: DIALOGUE_SYSTEM,
-        user: userPrompt,
-        label: "dialogue",
-      });
-      await prisma.aiCall.update({
-        where: { id: call.id },
-        data: {
-          responseText: raw.text,
-          promptTokens: raw.usage?.promptTokens ?? null,
-          completionTokens: raw.usage?.completionTokens ?? null,
-        },
-      });
-      const action = parseAgentAction(parseJsonObject(raw.text));
+      if (!call.responseText) {
+        const raw = await complete({
+          model: LLM_MODEL,
+          system: DIALOGUE_SYSTEM,
+          user: userPrompt,
+          label: "dialogue",
+        });
+        await prisma.aiCall.update({
+          where: { id: call.id },
+          data: {
+            responseText: raw.text,
+            promptTokens: raw.usage?.promptTokens ?? null,
+            completionTokens: raw.usage?.completionTokens ?? null,
+          },
+        });
+        call.responseText = raw.text;
+        call.promptTokens = raw.usage?.promptTokens ?? null;
+        call.completionTokens = raw.usage?.completionTokens ?? null;
+      }
+      const reply = parseAgentReply(parseJsonObject(call.responseText));
       await commitDialogueReply({
         reelId,
         threadId: thread.id,
@@ -490,10 +536,12 @@ export async function sendDialogueMessage(
         callId: call.id,
         processingId: processing.id,
         userMessageId: userMessage.id,
-        action,
-        rawText: raw.text,
-        promptTokens: raw.usage?.promptTokens ?? null,
-        completionTokens: raw.usage?.completionTokens ?? null,
+        turnKey: key,
+        action: reply.action,
+        thoughtUpdate: reply.thoughtUpdate,
+        rawText: call.responseText,
+        promptTokens: call.promptTokens,
+        completionTokens: call.completionTokens,
       });
     } catch (error) {
       const stale = error instanceof StateVersionError || error instanceof ReelError;
@@ -504,15 +552,17 @@ export async function sendDialogueMessage(
         : error instanceof Error
           ? error.message
           : "Не удалось ответить.";
-      const failedCall = await prisma.aiCall.findFirst({
-        where: { reelId, kind: "dialogue", ownerUserId: ownerUserId() },
-        orderBy: { createdAt: "desc" },
-      });
-      if (failedCall && failedCall.status !== "done") {
-        await prisma.aiCall.update({
-          where: { id: failedCall.id },
-          data: { status: "error", errorMessage: stale ? "STATE_VERSION" : message },
-        });
+      const turnCallId = parseTurnPayload(
+        (await prisma.dialogueMessage.findUniqueOrThrow({ where: { id: processing.id } })).payloadJson,
+      ).aiCallId;
+      if (turnCallId) {
+        const failedCall = await prisma.aiCall.findUnique({ where: { id: turnCallId } });
+        if (failedCall && failedCall.status !== "done") {
+          await prisma.aiCall.update({
+            where: { id: failedCall.id },
+            data: { status: "error", errorMessage: stale ? "STATE_VERSION" : message },
+          });
+        }
       }
       if (error instanceof ThoughtStateError) throw error;
       await prisma.dialogueMessage.update({

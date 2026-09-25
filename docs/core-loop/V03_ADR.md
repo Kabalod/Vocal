@@ -16,7 +16,7 @@ V03: **in progress**. Live migrate на Supabase не применять.
 
 `suggest_take.evidenceRefs` — id фактов `ThoughtState` этой мысли.
 
-Состояние обновляет смысловой reducer в той же транзакции, что и действие. Факт пишется только из содержательного ответа автора. Команды (`снимай`, `хватит`, `уточни`) и `redirect_to_task` в факты не попадают. Ответ на вопрос с `gapId` закрывает пробел. `suggest_take` записывает `takeTask`. Незавершённый запрос с тем же `idempotencyKey` восстанавливается без второго вызова модели.
+Состояние меняет только явное `thoughtUpdate` модели: факт (текст и sourceId текущего сообщения) и `closeGapIds`. Список команд не решает содержательность. `suggest_take` может сослаться на `fact_${userMessageId}` в том же ходе. Ход связан тройкой userMessageId + processing.claimKey + AiCall.id.
 
 Снимок `AiCall` и CAS перед записью включают `thoughtStateRevision`. Схемы действий — `.strict()`.
 

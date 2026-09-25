@@ -10,7 +10,7 @@ import { applyThoughtState, getThoughtState, ThoughtStateError } from "../src/li
 import { StateVersionError } from "../src/lib/ai/usage-guard";
 import { v03TestSeams } from "../src/lib/v03-test-seams";
 import { ensureOriginalFromText } from "../src/lib/transcripts";
-import { askQuestionJson } from "./helpers/agent-action-json";
+import { askQuestionJson, thoughtUpdateForUserText } from "./helpers/agent-action-json";
 
 test("old reply JSON is rejected and does not become an action", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
@@ -119,7 +119,7 @@ test("suggest_take requires fact ids from this thought", async (t) => {
 });
 
 test("user reply becomes a fact and then suggest_take can cite it", async (t) => {
-  await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();
   const { reel } = await createThoughtFromText({
     title: "V03 user fact",
@@ -130,10 +130,13 @@ test("user reply becomes a fact and then suggest_take can cite it", async (t) =>
   assert.equal(empty.facts.length, 0);
   assert.equal(empty.openGaps.length, 0);
 
-  await sendDialogueMessage(reel.id, { text: "Главное — тихий вечер.", idempotencyKey: "v03-user-fact-1" }, async () => ({
-    text: askQuestionJson("Что ещё важно сказать?"),
-    usage: { promptTokens: 1, completionTokens: 1 },
-  }));
+  await sendDialogueMessage(reel.id, { text: "Главное — тихий вечер.", idempotencyKey: "v03-user-fact-1" }, async () => {
+    const update = await thoughtUpdateForUserText(prisma, reel.id, "Главное — тихий вечер.");
+    return {
+      text: askQuestionJson("Что ещё важно сказать?", update),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    };
+  });
   const afterReply = await getThoughtState(reel.id);
   const authorFact = afterReply.facts.find((fact) => fact.sourceType === "dialogue_message");
   assert.ok(authorFact);
@@ -197,7 +200,7 @@ test("command utterances do not become facts", async (t) => {
 });
 
 test("answering a gap closes that openGap", async (t) => {
-  await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();
   const { reel } = await createThoughtFromText({
     title: "V03 close gap",
@@ -220,10 +223,13 @@ test("answering a gap closes that openGap", async (t) => {
     }),
     usage: { promptTokens: 1, completionTokens: 1 },
   }));
-  await sendDialogueMessage(reel.id, { text: "Сцена на кухне вечером.", idempotencyKey: "v03-close-gap-a" }, async () => ({
-    text: askQuestionJson("Что ещё важно?"),
-    usage: { promptTokens: 1, completionTokens: 1 },
-  }));
+  await sendDialogueMessage(reel.id, { text: "Сцена на кухне вечером.", idempotencyKey: "v03-close-gap-a" }, async () => {
+    const update = await thoughtUpdateForUserText(prisma, reel.id, "Сцена на кухне вечером.", ["gap_open"]);
+    return {
+      text: askQuestionJson("Что ещё важно?", update),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    };
+  });
   const state = await getThoughtState(reel.id);
   assert.equal(state.openGaps.find((gap) => gap.id === "gap_open")?.status, "resolved");
   assert.ok(state.facts.some((fact) => fact.text.includes("кухне вечером")));
@@ -255,8 +261,9 @@ test("retry after ThoughtState failure completes once without a second model cal
   let completeCalls = 0;
   const complete = async () => {
     completeCalls += 1;
+    const update = await thoughtUpdateForUserText(prisma, reel.id, "Главное — тихий вечер.");
     return {
-      text: askQuestionJson("Что главное в этой мысли?"),
+      text: askQuestionJson("Что главное в этой мысли?", update),
       usage: { promptTokens: 1, completionTokens: 1 },
     };
   };
@@ -280,6 +287,209 @@ test("retry after ThoughtState failure completes once without a second model cal
   assert.equal(await prisma.aiCall.count({ where: { reelId: reel.id, kind: "dialogue" } }), 1);
   assert.equal((await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id } })).status, "done");
   assert.ok(afterCreate >= 1);
+});
+
+test("unknown and repeat replies do not create facts or close gaps", async (t) => {
+  await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "V03 unknown",
+    body: "Материал с пробелом.",
+    idempotencyKey: "v03-unknown",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: { openGaps: [{ id: "gap_open", text: "неясна сцена", status: "open" }] },
+  });
+  await sendDialogueMessage(reel.id, { text: "уточни", idempotencyKey: "v03-unknown-q" }, async () => ({
+    text: JSON.stringify({
+      action: "ask_question",
+      question: "Где происходит сцена?",
+      gapId: "gap_open",
+      whyUnknown: "в материале места нет",
+      thoughtUpdate: { fact: null, closeGapIds: [] },
+    }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  await sendDialogueMessage(reel.id, { text: "Не знаю", idempotencyKey: "v03-unknown-a" }, async () => ({
+    text: askQuestionJson("Где происходит сцена?", { fact: null, closeGapIds: [] }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  await sendDialogueMessage(reel.id, { text: "Повтори вопрос", idempotencyKey: "v03-repeat-a" }, async () => ({
+    text: askQuestionJson("Где происходит сцена?", { fact: null, closeGapIds: [] }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  const state = await getThoughtState(reel.id);
+  assert.equal(state.facts.length, 0);
+  assert.equal(state.openGaps.find((gap) => gap.id === "gap_open")?.status, "open");
+});
+
+test("off-topic answer does not close the current gap", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "V03 offtopic",
+    body: "Материал с пробелом.",
+    idempotencyKey: "v03-offtopic",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: { openGaps: [{ id: "gap_open", text: "неясна сцена", status: "open" }] },
+  });
+  await sendDialogueMessage(reel.id, { text: "уточни", idempotencyKey: "v03-off-q" }, async () => ({
+    text: JSON.stringify({
+      action: "ask_question",
+      question: "Где происходит сцена?",
+      gapId: "gap_open",
+      whyUnknown: "в материале места нет",
+    }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  await sendDialogueMessage(reel.id, { text: "Это не относится к ролику", idempotencyKey: "v03-off-a" }, async () => {
+    const update = await thoughtUpdateForUserText(prisma, reel.id, "Это не относится к ролику", []);
+    return {
+      text: askQuestionJson("Вернёмся к сцене.", update),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    };
+  });
+  const state = await getThoughtState(reel.id);
+  assert.equal(state.openGaps.find((gap) => gap.id === "gap_open")?.status, "open");
+});
+
+test("only an explicit thoughtUpdate changes ThoughtState", async (t) => {
+  await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "V03 explicit",
+    body: "Материал без обновления.",
+    idempotencyKey: "v03-explicit",
+  });
+  await sendDialogueMessage(reel.id, { text: "Главное — тихий вечер.", idempotencyKey: "v03-explicit-1" }, async () => ({
+    text: askQuestionJson("Что ещё важно?"),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  const state = await getThoughtState(reel.id);
+  assert.equal(state.facts.length, 0);
+  assert.equal(state.takeTask, "");
+});
+
+test("same turn can suggest_take citing the current answer fact", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "V03 same turn",
+    body: "Исходник с одним пробелом.",
+    idempotencyKey: "v03-same-turn",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: { openGaps: [{ id: "gap_last", text: "неясна сцена", status: "open" }] },
+  });
+  const page = await sendDialogueMessage(
+    reel.id,
+    { text: "Сцена на кухне вечером.", idempotencyKey: "v03-same-turn-1" },
+    async () => {
+      const update = await thoughtUpdateForUserText(prisma, reel.id, "Сцена на кухне вечером.", ["gap_last"]);
+      return {
+        text: JSON.stringify({
+          action: "suggest_take",
+          mainIdea: "тихий вечер на кухне",
+          takeTask: "сказать про кухню спокойно",
+          evidenceRefs: [update.factId],
+          thoughtUpdate: { fact: update.fact, closeGapIds: update.closeGapIds },
+        }),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+    },
+  );
+  assert.ok(page.messages.some((item) => item.body.includes("сказать про кухню")));
+  const state = await getThoughtState(reel.id);
+  assert.equal(state.facts.length, 1);
+  assert.equal(state.facts[0]?.id, `fact_${state.facts[0]?.sourceId}`);
+  assert.equal(state.openGaps.find((gap) => gap.id === "gap_last")?.status, "resolved");
+  assert.equal(state.takeTask, "сказать про кухню спокойно");
+});
+
+test("parallel turns recover without stealing the other call", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  t.after(() => {
+    v03TestSeams.afterUserMessageCreate = null;
+    v03TestSeams.failThoughtStateApply = null;
+  });
+  const { reel } = await createThoughtFromText({
+    title: "V03 parallel",
+    body: "Материал для двух ходов.",
+    idempotencyKey: "v03-par",
+  });
+  let startB: (() => void) | undefined;
+  const bGate = new Promise<void>((resolve) => {
+    startB = resolve;
+  });
+  let failedA = false;
+  v03TestSeams.afterUserMessageCreate = async () => {
+    startB?.();
+  };
+  v03TestSeams.failThoughtStateApply = async ({ turnKey }) => {
+    if (turnKey === "v03-par-a" && !failedA) {
+      failedA = true;
+      throw new ThoughtStateError("не удалось обновить состояние A", "THOUGHT_STATE_INJECT");
+    }
+  };
+  let callsA = 0;
+  let callsB = 0;
+  const sendA = sendDialogueMessage(reel.id, { text: "Ответ хода A про вечер.", idempotencyKey: "v03-par-a" }, async () => {
+    callsA += 1;
+    const update = await thoughtUpdateForUserText(prisma, reel.id, "Ответ хода A про вечер.");
+    return { text: askQuestionJson("уточнение A", update), usage: { promptTokens: 1, completionTokens: 1 } };
+  });
+  const sendB = bGate.then(() =>
+    sendDialogueMessage(reel.id, { text: "Ответ хода B про утро.", idempotencyKey: "v03-par-b" }, async () => {
+      callsB += 1;
+      const update = await thoughtUpdateForUserText(prisma, reel.id, "Ответ хода B про утро.");
+      return { text: askQuestionJson("уточнение B", update), usage: { promptTokens: 1, completionTokens: 1 } };
+    }),
+  );
+  const settled = await Promise.allSettled([sendA, sendB]);
+  assert.equal(settled[0]?.status, "rejected");
+  assert.equal(callsA, 1);
+  const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId: reel.id } });
+  const procA = await prisma.dialogueMessage.findFirstOrThrow({
+    where: { threadId: thread.id, claimKey: `dialogue-turn:${thread.id}:v03-par-a` },
+  });
+  const procB = await prisma.dialogueMessage.findFirstOrThrow({
+    where: { threadId: thread.id, claimKey: `dialogue-turn:${thread.id}:v03-par-b` },
+  });
+  const payloadA = JSON.parse(procA.payloadJson) as { aiCallId: string };
+  const payloadB = JSON.parse(procB.payloadJson) as { aiCallId: string };
+  assert.notEqual(payloadA.aiCallId, payloadB.aiCallId);
+  const callA = await prisma.aiCall.findUniqueOrThrow({ where: { id: payloadA.aiCallId } });
+  const callB = await prisma.aiCall.findUniqueOrThrow({ where: { id: payloadB.aiCallId } });
+  assert.equal(callA.status === "done" && callB.status === "done", false);
+  v03TestSeams.afterUserMessageCreate = null;
+  v03TestSeams.failThoughtStateApply = null;
+  const page = await sendDialogueMessage(
+    reel.id,
+    { text: "Ответ хода A про вечер.", idempotencyKey: "v03-par-a" },
+    async () => {
+      callsA += 1;
+      return { text: askQuestionJson("не должен вызваться"), usage: { promptTokens: 1, completionTokens: 1 } };
+    },
+  );
+  assert.equal(callsA, 1);
+  assert.ok(page.messages.some((item) => item.body.includes("уточнение A")));
+  const afterA = await prisma.aiCall.findUniqueOrThrow({ where: { id: payloadA.aiCallId } });
+  const afterB = await prisma.aiCall.findUniqueOrThrow({ where: { id: payloadB.aiCallId } });
+  assert.equal(afterA.status, "done");
+  assert.equal(afterB.id, payloadB.aiCallId);
+  const doneA = await prisma.dialogueMessage.findUniqueOrThrow({ where: { id: procA.id } });
+  const doneB = await prisma.dialogueMessage.findUniqueOrThrow({ where: { id: procB.id } });
+  assert.equal(doneA.status, "done");
+  assert.equal(JSON.parse(doneA.payloadJson).aiCallId, payloadA.aiCallId);
+  assert.equal(JSON.parse(doneB.payloadJson).aiCallId, payloadB.aiCallId);
 });
 
 test("stale ThoughtState mid-flight is not saved", async (t) => {

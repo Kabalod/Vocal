@@ -54,21 +54,52 @@ export const agentActionSchema = z.discriminatedUnion("action", [
   redirectSchema,
 ]);
 
-export type AgentAction = z.infer<typeof agentActionSchema>;
+export const thoughtUpdateSchema = z
+  .object({
+    fact: z
+      .object({
+        text: z.string().trim().min(1),
+        sourceType: z.literal("dialogue_message"),
+        sourceId: z.string().trim().min(1),
+      })
+      .strict()
+      .nullable(),
+    closeGapIds: z.array(z.string().trim().min(1)),
+  })
+  .strict();
 
-export function parseAgentAction(raw: unknown): AgentAction {
-  const parsed = agentActionSchema.safeParse(raw);
+export type AgentAction = z.infer<typeof agentActionSchema>;
+export type ThoughtUpdate = z.infer<typeof thoughtUpdateSchema>;
+
+export const emptyThoughtUpdate = (): ThoughtUpdate => ({ fact: null, closeGapIds: [] });
+
+export function parseAgentReply(raw: unknown): { action: AgentAction; thoughtUpdate: ThoughtUpdate } {
+  if (!raw || typeof raw !== "object") {
+    throw new AgentActionError("Модель вернула недопустимое действие.", "AGENT_ACTION_INVALID");
+  }
+  const { thoughtUpdate, ...actionRaw } = raw as Record<string, unknown>;
+  const parsed = agentActionSchema.safeParse(actionRaw);
   if (!parsed.success) {
     throw new AgentActionError("Модель вернула недопустимое действие.", "AGENT_ACTION_INVALID");
   }
-  if (
-    parsed.data.action === "ask_question" &&
-    !parsed.data.gapId &&
-    !parsed.data.clarificationReason
-  ) {
+  if (parsed.data.action === "ask_question" && !parsed.data.gapId && !parsed.data.clarificationReason) {
     throw new AgentActionError("Нужен id пробела или причина уточнения.", "AGENT_ACTION_INVALID");
   }
-  return parsed.data;
+  if (thoughtUpdate === undefined) {
+    return { action: parsed.data, thoughtUpdate: emptyThoughtUpdate() };
+  }
+  const update = thoughtUpdateSchema.safeParse(thoughtUpdate);
+  if (!update.success) {
+    throw new AgentActionError("Модель вернула недопустимое обновление состояния.", "AGENT_ACTION_INVALID");
+  }
+  if (update.data.closeGapIds.length && !update.data.fact) {
+    throw new AgentActionError("Нельзя закрыть пробел без принятого факта.", "ACTION_GAP");
+  }
+  return { action: parsed.data, thoughtUpdate: update.data };
+}
+
+export function parseAgentAction(raw: unknown): AgentAction {
+  return parseAgentReply(raw).action;
 }
 
 export function hasProcessedWorkingTake(take: { inputType: string; selectedTranscriptId: string | null }) {

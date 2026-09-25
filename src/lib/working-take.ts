@@ -4,7 +4,7 @@ import { ReelError } from "@/lib/reels";
 import { StateVersionError } from "@/lib/ai/usage-guard";
 import { v01TestSeams } from "@/lib/v01-test-seams";
 import type { Prisma } from "@prisma/client";
-import { actionMessage, assertAgentActionAllowed, type AgentAction } from "@/lib/agent-action";
+import { actionMessage, assertAgentActionAllowed, type AgentAction, type ThoughtUpdate } from "@/lib/agent-action";
 import { applyThoughtStateInTx, buildDialogueThoughtPatch, parseThoughtStateLists } from "@/lib/thought-state";
 
 export type DialogueMaterialSnapshot = {
@@ -133,7 +133,9 @@ export async function commitDialogueReply(input: {
   callId: string;
   processingId: string;
   userMessageId: string;
+  turnKey: string;
   action: AgentAction;
+  thoughtUpdate: ThoughtUpdate;
   rawText: string;
   promptTokens: number | null;
   completionTokens: number | null;
@@ -159,30 +161,11 @@ export async function commitDialogueReply(input: {
       select: { inputType: true, selectedTranscriptId: true },
     });
     if (!take) throw new ReelError("Рабочий дубль должен принадлежать этой карточке.", "TAKE_NOT_IN_REEL");
-    await assertAgentActionAllowed(tx, input.reelId, input.action, take);
 
     const userMessage = await tx.dialogueMessage.findUniqueOrThrow({
       where: { id: input.userMessageId },
-      select: { id: true, body: true, createdAt: true },
+      select: { id: true },
     });
-    const priorAsk = await tx.dialogueMessage.findFirst({
-      where: {
-        threadId: input.threadId,
-        role: "assistant",
-        status: "done",
-        kind: { in: ["question", "text"] },
-        createdAt: { lt: userMessage.createdAt },
-      },
-      orderBy: { createdAt: "desc" },
-      select: { payloadJson: true },
-    });
-    let pendingGapId: string | null = null;
-    try {
-      const payload = JSON.parse(priorAsk?.payloadJson ?? "{}") as { action?: { gapId?: string } };
-      pendingGapId = payload.action?.gapId?.trim() || null;
-    } catch {
-      pendingGapId = null;
-    }
     const state = await tx.thoughtState.findFirst({
       where: { reelId: input.reelId, reel: { ownerUserId: ownerUserId() } },
     });
@@ -190,19 +173,20 @@ export async function commitDialogueReply(input: {
     const lists = parseThoughtStateLists(state);
     const patch = buildDialogueThoughtPatch({
       action: input.action,
-      userText: userMessage.body,
+      thoughtUpdate: input.thoughtUpdate,
       userMessageId: userMessage.id,
       facts: lists.facts,
       openGaps: lists.openGaps,
-      pendingGapId,
     });
     if (patch) {
       await applyThoughtStateInTx(tx, {
         reelId: input.reelId,
         expectedRevision: input.snapshot.thoughtStateRevision,
         patch,
+        turnKey: input.turnKey,
       });
     }
+    await assertAgentActionAllowed(tx, input.reelId, input.action, take);
 
     const message = actionMessage(input.action);
     await tx.aiCall.update({
@@ -215,12 +199,26 @@ export async function commitDialogueReply(input: {
         completionTokens: input.completionTokens,
       },
     });
+    const priorRow = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: input.processingId } });
+    let priorPayload: Record<string, unknown> = {};
+    try {
+      priorPayload = JSON.parse(priorRow.payloadJson) as Record<string, unknown>;
+    } catch {
+      priorPayload = {};
+    }
     await tx.dialogueMessage.update({
       where: { id: input.processingId },
       data: {
         kind: message.kind,
         body: message.body,
-        payloadJson: JSON.stringify({ action: input.action }),
+        payloadJson: JSON.stringify({
+          ...priorPayload,
+          action: input.action,
+          thoughtUpdate: input.thoughtUpdate,
+          userMessageId: input.userMessageId,
+          aiCallId: input.callId,
+          idempotencyKey: input.turnKey,
+        }),
         status: "done",
       },
     });
