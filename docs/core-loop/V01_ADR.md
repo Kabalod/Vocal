@@ -3,7 +3,7 @@
 Ветка `feat/v01-from-base` от BASE `34abcd78c70b2fa31bd717aeff56acc31577c0d1`.
 AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 V01: **accepted** на `V01_HEAD` `d34e8dee2243ae109f2e535a439784117cef3aff`.
-V02: **not started**. BASE для V02 не назначен.
+V02: **not started**. V02_BASE_SHA: `4223599e6ddb9e6be0d1a09d9c6b433d84912779`.
 Live baseline / `migrate resolve` на Supabase не применять.
 
 ## Рабочий дубль
