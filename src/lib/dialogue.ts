@@ -16,6 +16,7 @@ import { replaceScriptDraft } from "@/lib/scripts";
 import { listTranscriptBundle } from "@/lib/transcripts";
 import {
   commitDialogueReply,
+  isCommittedAssistantTurn,
   readDialogueVersion,
   readMaterialSnapshot,
   requireWorkingTake,
@@ -440,7 +441,7 @@ async function isDialogueTurnComplete(threadId: string, userMessageId: string, k
   const processing = await prisma.dialogueMessage.findFirst({
     where: { threadId, claimKey: turnClaimKey(threadId, key) },
   });
-  if (!processing || processing.status !== "done" || (processing.kind !== "question" && processing.kind !== "text")) {
+  if (!processing || !isCommittedAssistantTurn(processing)) {
     return false;
   }
   const payload = parseTurnPayload(processing.payloadJson);
@@ -547,6 +548,12 @@ export async function runDialogueTurn(
 
   try {
     if (reusable.responseText && reusable.status !== "done") {
+      if (v03TestSeams.beforeCommitDialogueReply) {
+        await v03TestSeams.beforeCommitDialogueReply({ processingId: processing.id, callId: reusable.id });
+      }
+      if (await isDialogueTurnComplete(thread.id, userMessage.id, key)) {
+        return listDialoguePage(reelId);
+      }
       const reply = parseAgentReply(parseJsonObject(reusable.responseText));
       await commitDialogueReply({
         reelId,
@@ -638,6 +645,12 @@ export async function runDialogueTurn(
     if (await isDialogueTurnComplete(thread.id, userMessage.id, key)) {
       return listDialoguePage(reelId);
     }
+    if (v03TestSeams.beforeCommitDialogueReply) {
+      await v03TestSeams.beforeCommitDialogueReply({ processingId: processing.id, callId: call.id });
+    }
+    if (await isDialogueTurnComplete(thread.id, userMessage.id, key)) {
+      return listDialoguePage(reelId);
+    }
     const reply = parseAgentReply(parseJsonObject(call.responseText));
     await commitDialogueReply({
       reelId,
@@ -654,6 +667,13 @@ export async function runDialogueTurn(
       completionTokens: call.completionTokens,
     });
   } catch (error) {
+    if (await isDialogueTurnComplete(thread.id, userMessage.id, key)) {
+      return listDialoguePage(reelId);
+    }
+    const latestProcessing = await prisma.dialogueMessage.findUniqueOrThrow({ where: { id: processing.id } });
+    if (isCommittedAssistantTurn(latestProcessing)) {
+      return listDialoguePage(reelId);
+    }
     const stale = error instanceof StateVersionError || error instanceof ReelError;
     const message = stale
       ? error instanceof StateVersionError
@@ -662,9 +682,7 @@ export async function runDialogueTurn(
       : error instanceof Error
         ? error.message
         : "Не удалось ответить.";
-    const turnCallId = parseTurnPayload(
-      (await prisma.dialogueMessage.findUniqueOrThrow({ where: { id: processing.id } })).payloadJson,
-    ).aiCallId;
+    const turnCallId = parseTurnPayload(latestProcessing.payloadJson).aiCallId;
     if (turnCallId) {
       const failedCall = await prisma.aiCall.findUnique({ where: { id: turnCallId } });
       if (failedCall && failedCall.status !== "done") {
@@ -675,10 +693,18 @@ export async function runDialogueTurn(
       }
     }
     if (error instanceof ThoughtStateError) throw error;
-    await prisma.dialogueMessage.update({
-      where: { id: processing.id },
+    await prisma.dialogueMessage.updateMany({
+      where: {
+        id: processing.id,
+        status: { not: "done" },
+        kind: { notIn: ["question", "text"] },
+      },
       data: { kind: "error", body: message, status: "error" },
     });
+    const afterFailure = await prisma.dialogueMessage.findUniqueOrThrow({ where: { id: processing.id } });
+    if (isCommittedAssistantTurn(afterFailure) || (await isDialogueTurnComplete(thread.id, userMessage.id, key))) {
+      return listDialoguePage(reelId);
+    }
     if (error instanceof StateVersionError) throw error;
     if (error instanceof ReelError) throw new StateVersionError();
     if (error instanceof AgentActionError) throw error;

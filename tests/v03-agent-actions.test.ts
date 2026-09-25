@@ -1077,3 +1077,72 @@ test("expired lease lets a second executor finish and fences the first write", a
   assert.ok(secondPage.messages.some((item) => item.body.includes("ответ второго")));
   assert.ok(firstPage.messages.some((item) => item.body.includes("ответ второго")));
 });
+
+test("two executors colliding on commit keep the successful processing message", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  t.after(() => {
+    v03TestSeams.beforeCommitDialogueReply = null;
+  });
+  const { reel } = await createThoughtFromText({
+    title: "V03 commit race",
+    body: "Материал для записи хода.",
+    idempotencyKey: "v03-commit-race",
+  });
+  let releaseBarrier: (() => void) | undefined;
+  const barrier = new Promise<void>((resolve) => {
+    releaseBarrier = resolve;
+  });
+  let waiting = 0;
+  let firstWaiting: (() => void) | undefined;
+  const sawFirst = new Promise<void>((resolve) => {
+    firstWaiting = resolve;
+  });
+  let bothWaiting: (() => void) | undefined;
+  const sawBoth = new Promise<void>((resolve) => {
+    bothWaiting = resolve;
+  });
+  v03TestSeams.beforeCommitDialogueReply = async ({ processingId }) => {
+    waiting += 1;
+    if (waiting === 1) firstWaiting?.();
+    if (waiting === 2) bothWaiting?.();
+    await barrier;
+    const row = await prisma.dialogueMessage.findUniqueOrThrow({ where: { id: processingId } });
+    if (row.status === "done" && (row.kind === "question" || row.kind === "text")) {
+      throw new StateVersionError();
+    }
+  };
+  let completeCalls = 0;
+  const complete = async () => {
+    completeCalls += 1;
+    const update = await thoughtUpdateForUserText(prisma, reel.id, "Главное — тихий вечер.");
+    return { text: askQuestionJson("Итог одного хода", update), usage: { promptTokens: 1, completionTokens: 1 } };
+  };
+  const input = { text: "Главное — тихий вечер.", idempotencyKey: "v03-commit-1" };
+  const firstRun = runDialogueTurn(reel.id, input, complete);
+  await sawFirst;
+  const secondRun = runDialogueTurn(reel.id, input, complete);
+  await sawBoth;
+  assert.equal(waiting, 2);
+  releaseBarrier?.();
+  const [one, two] = await Promise.all([firstRun, secondRun]);
+  const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId: reel.id } });
+  const processing = await prisma.dialogueMessage.findFirstOrThrow({
+    where: { threadId: thread.id, claimKey: turnClaimKey(thread.id, "v03-commit-1") },
+  });
+  assert.equal(processing.status, "done");
+  assert.equal(processing.kind, "question");
+  assert.match(processing.body, /Итог одного хода/);
+  assert.equal(
+    await prisma.dialogueMessage.count({
+      where: { threadId: thread.id, role: "assistant", kind: "error" },
+    }),
+    0,
+  );
+  assert.equal((await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id, kind: "dialogue" } })).status, "done");
+  assert.equal(completeCalls, 1);
+  assert.ok(one.messages.some((item) => item.body.includes("Итог одного хода")));
+  assert.ok(two.messages.some((item) => item.body.includes("Итог одного хода")));
+  assert.ok(!one.messages.some((item) => item.kind === "error"));
+  assert.ok(!two.messages.some((item) => item.kind === "error"));
+});

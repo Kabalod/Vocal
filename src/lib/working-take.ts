@@ -81,6 +81,10 @@ export function snapshotFromLoaded(
   };
 }
 
+export function isCommittedAssistantTurn(row: { status: string; kind: string }) {
+  return row.status === "done" && (row.kind === "question" || row.kind === "text");
+}
+
 export function materialSnapshotChanged(
   current: DialogueMaterialSnapshot,
   snapshot: DialogueMaterialSnapshot,
@@ -147,10 +151,7 @@ export async function commitDialogueReply(input: {
     await tx.$queryRaw`SELECT id FROM "ThoughtState" WHERE "reelId" = ${input.reelId} FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM "DialogueMessage" WHERE id = ${input.processingId} FOR UPDATE`;
     const processingRow = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: input.processingId } });
-    if (
-      processingRow.status === "done" &&
-      (processingRow.kind === "question" || processingRow.kind === "text")
-    ) {
+    if (isCommittedAssistantTurn(processingRow)) {
       return;
     }
 
@@ -159,7 +160,11 @@ export async function commitDialogueReply(input: {
       return !materialSnapshotChanged(current, input.snapshot);
     };
 
-    if (!(await matches())) throw new StateVersionError();
+    if (!(await matches())) {
+      const latest = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: input.processingId } });
+      if (isCommittedAssistantTurn(latest)) return;
+      throw new StateVersionError();
+    }
     if (v01TestSeams.afterMaterialCheck) await v01TestSeams.afterMaterialCheck();
     if (!(await matches())) throw new StateVersionError();
     if (v01TestSeams.afterLastMaterialCheck) await v01TestSeams.afterLastMaterialCheck();

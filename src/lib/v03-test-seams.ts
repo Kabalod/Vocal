@@ -4,6 +4,7 @@ export const v03TestSeams = {
   failThoughtStateApply: null as ((ctx: { reelId: string; turnKey?: string }) => Promise<void>) | null,
   afterAiCallBeforeBind: null as ((ctx: { turnKey: string; callId: string }) => Promise<void>) | null,
   afterClaimBeforeComplete: null as ((ctx: { callId: string; ownerId: string; generation: number }) => Promise<void>) | null,
+  beforeCommitDialogueReply: null as ((ctx: { processingId: string; callId: string }) => Promise<void>) | null,
   dialogueLeaseMs: null as number | null,
   now: null as (() => Date) | null,
 };
