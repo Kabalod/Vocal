@@ -15,14 +15,26 @@ export async function insertTestScriptProposal(prisma: PrismaClient, threadId: s
 
 export function askQuestionJson(
   question: string,
-  thoughtUpdate?: { fact: { text: string; sourceType: "dialogue_message"; sourceId: string } | null; closeGapIds: string[] },
+  thoughtUpdate?: {
+    fact: { text: string; sourceType: "dialogue_message"; sourceId: string } | null;
+    closeGapIds: string[];
+    answeredGapId?: string;
+  },
 ) {
   return JSON.stringify({
     action: "ask_question",
     question,
     clarificationReason: "нужно уточнение задачи",
     whyUnknown: "в материале этой мысли ответа ещё нет",
-    ...(thoughtUpdate ? { thoughtUpdate: { fact: thoughtUpdate.fact, closeGapIds: thoughtUpdate.closeGapIds } } : {}),
+    ...(thoughtUpdate
+      ? {
+          thoughtUpdate: {
+            fact: thoughtUpdate.fact,
+            closeGapIds: thoughtUpdate.closeGapIds,
+            ...(thoughtUpdate.answeredGapId ? { answeredGapId: thoughtUpdate.answeredGapId } : {}),
+          },
+        }
+      : {}),
   });
 }
 

@@ -145,6 +145,14 @@ export async function commitDialogueReply(input: {
     await tx.$queryRaw`SELECT id FROM "Reel" WHERE id = ${input.reelId} FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM "Take" WHERE id = ${input.snapshot.workingTakeId} FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM "ThoughtState" WHERE "reelId" = ${input.reelId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "DialogueMessage" WHERE id = ${input.processingId} FOR UPDATE`;
+    const processingRow = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: input.processingId } });
+    if (
+      processingRow.status === "done" &&
+      (processingRow.kind === "question" || processingRow.kind === "text")
+    ) {
+      return;
+    }
 
     const matches = async () => {
       const current = await readMaterialSnapshot(input.reelId, input.threadId, tx);

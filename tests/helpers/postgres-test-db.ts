@@ -19,6 +19,7 @@ const MIGRATION_FILES = [
   "prisma/migrations/6_v02_thought_state/migration.sql",
   "prisma/migrations/7_v02_thought_state_owner/migration.sql",
   "prisma/migrations/8_v03_dialogue_turn_key/migration.sql",
+  "prisma/migrations/9_v03_dialogue_exec_lease/migration.sql",
 ] as const;
 
 export const PRE_THOUGHT_STATE_MIGRATIONS = MIGRATION_FILES.slice(0, 6);

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -25,6 +26,13 @@ import { v01TestSeams } from "@/lib/v01-test-seams";
 import { AgentActionError, parseAgentReply } from "@/lib/agent-action";
 import { candidateFactId, getThoughtState, ThoughtStateError } from "@/lib/thought-state";
 import { v03TestSeams } from "@/lib/v03-test-seams";
+import {
+  claimDialogueModelExecution,
+  DialogueTurnExecError,
+  releaseDialogueModelClaim,
+  waitForDialogueModelResponse,
+  writeDialogueModelResponse,
+} from "@/lib/dialogue-exec";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
 
@@ -224,6 +232,10 @@ export function dialogueTurnKey(threadId: string, key: string) {
   return `dialogue:${threadId}:${key}`;
 }
 
+function isUniqueConflict(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
 export async function ensureDialogueTurnBinding(input: {
   reelId: string;
   threadId: string;
@@ -233,10 +245,10 @@ export async function ensureDialogueTurnBinding(input: {
 }) {
   const claimKey = turnClaimKey(input.threadId, input.key);
   const turnKey = dialogueTurnKey(input.threadId, input.key);
-  const created = await prisma.$transaction(async (tx) => {
-    let processing = await tx.dialogueMessage.findFirst({ where: { claimKey } });
-    if (!processing) {
-      processing = await tx.dialogueMessage.create({
+  let processing = await prisma.dialogueMessage.findFirst({ where: { claimKey } });
+  if (!processing) {
+    try {
+      processing = await prisma.dialogueMessage.create({
         data: {
           threadId: input.threadId,
           role: "assistant",
@@ -248,60 +260,62 @@ export async function ensureDialogueTurnBinding(input: {
           payloadJson: JSON.stringify({ userMessageId: input.userMessageId, idempotencyKey: input.key }),
         },
       });
+    } catch (error) {
+      if (!isUniqueConflict(error)) throw error;
+      processing = await prisma.dialogueMessage.findFirst({ where: { claimKey } });
+      if (!processing) throw error;
     }
-    await tx.$queryRaw`SELECT id FROM "DialogueMessage" WHERE id = ${processing.id} FOR UPDATE`;
-    let call = await tx.aiCall.findUnique({ where: { turnKey } });
-    if (!call) {
-      try {
-        call = await tx.aiCall.create({
-          data: {
-            kind: "dialogue",
-            reelId: input.reelId,
-            model: LLM_MODEL,
-            status: "running",
-            ownerUserId: ownerUserId(),
-            turnKey,
-            promptText: "",
-            inputSnapshotJson: JSON.stringify({
-              text: input.text,
-              playbook: false,
-              idempotencyKey: input.key,
-              userMessageId: input.userMessageId,
-              processingId: processing.id,
-            }),
-          },
-        });
-      } catch (error) {
-        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-        call = await tx.aiCall.findUniqueOrThrow({ where: { turnKey } });
-      }
+  }
+  let call = await prisma.aiCall.findUnique({ where: { turnKey } });
+  if (!call) {
+    try {
+      call = await prisma.aiCall.create({
+        data: {
+          kind: "dialogue",
+          reelId: input.reelId,
+          model: LLM_MODEL,
+          status: "running",
+          ownerUserId: ownerUserId(),
+          turnKey,
+          promptText: "",
+          inputSnapshotJson: JSON.stringify({
+            text: input.text,
+            playbook: false,
+            idempotencyKey: input.key,
+            userMessageId: input.userMessageId,
+            processingId: processing.id,
+          }),
+        },
+      });
+    } catch (error) {
+      if (!isUniqueConflict(error)) throw error;
+      call = await prisma.aiCall.findUniqueOrThrow({ where: { turnKey } });
     }
-    return { processing, call };
-  });
+  }
   if (v03TestSeams.afterAiCallBeforeBind) {
-    await v03TestSeams.afterAiCallBeforeBind({ turnKey, callId: created.call.id });
+    await v03TestSeams.afterAiCallBeforeBind({ turnKey, callId: call.id });
   }
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "DialogueMessage" WHERE id = ${created.processing.id} FOR UPDATE`;
-    const processing = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: created.processing.id } });
-    const payload = parseTurnPayload(processing.payloadJson);
-    const call = await tx.aiCall.findUniqueOrThrow({ where: { turnKey } });
-    if (payload.aiCallId !== call.id) {
+    await tx.$queryRaw`SELECT id FROM "DialogueMessage" WHERE id = ${processing.id} FOR UPDATE`;
+    const locked = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: processing.id } });
+    const payload = parseTurnPayload(locked.payloadJson);
+    const bound = await tx.aiCall.findUniqueOrThrow({ where: { turnKey } });
+    if (payload.aiCallId !== bound.id) {
       await tx.dialogueMessage.update({
-        where: { id: processing.id },
+        where: { id: locked.id },
         data: {
           payloadJson: JSON.stringify({
             ...payload,
             userMessageId: input.userMessageId,
             idempotencyKey: input.key,
-            aiCallId: call.id,
+            aiCallId: bound.id,
           }),
         },
       });
     }
     return {
-      processing: await tx.dialogueMessage.findUniqueOrThrow({ where: { id: processing.id } }),
-      call,
+      processing: await tx.dialogueMessage.findUniqueOrThrow({ where: { id: locked.id } }),
+      call: bound,
     };
   });
 }
@@ -463,14 +477,6 @@ export async function sendDialogueMessage(
   const key = input.idempotencyKey.trim();
   if (!key) throw new DialogueError("Нужен ключ повтора.", "IDEMPOTENCY");
   await assertDialogueStateVersion(reelId, input);
-  const thread = await ensureReelThread(reelId);
-  const existing = await prisma.dialogueMessage.findFirst({
-    where: { threadId: thread.id, idempotencyKey: key },
-  });
-  if (existing && (await isDialogueTurnComplete(thread.id, existing.id, key))) {
-    return listDialoguePage(reelId);
-  }
-
   return withAiInflight(
     aiOperationKey({
       ownerUserId: ownerUserId(),
@@ -479,15 +485,34 @@ export async function sendDialogueMessage(
       operationType: "dialogue",
       idempotencyKey: key,
     }),
-    async () => {
-    let userMessage = await prisma.dialogueMessage.findFirst({
-      where: { threadId: thread.id, idempotencyKey: key },
-    });
-    if (userMessage && (await isDialogueTurnComplete(thread.id, userMessage.id, key))) {
-      return listDialoguePage(reelId);
-    }
-    if (!userMessage) await assertDailyTokenBudget();
-    if (!userMessage) {
+    () => runDialogueTurn(reelId, { ...input, text, idempotencyKey: key }, complete),
+  );
+}
+
+export async function runDialogueTurn(
+  reelId: string,
+  input: {
+    text: string;
+    idempotencyKey: string;
+    voiceDurationLabel?: string;
+  },
+  complete: CompleteJsonFn = defaultCompleteJson,
+): Promise<DialoguePageDto> {
+  const text = input.text.trim();
+  const key = input.idempotencyKey.trim();
+  const thread = await ensureReelThread(reelId);
+  let userMessage = await prisma.dialogueMessage.findFirst({
+    where: { threadId: thread.id, idempotencyKey: key },
+  });
+  if (userMessage && userMessage.body !== text) {
+    throw new DialogueError("Этот ключ повтора уже использован с другим текстом.", "IDEMPOTENCY_CONFLICT", 409);
+  }
+  if (userMessage && (await isDialogueTurnComplete(thread.id, userMessage.id, key))) {
+    return listDialoguePage(reelId);
+  }
+  if (!userMessage) await assertDailyTokenBudget();
+  if (!userMessage) {
+    try {
       userMessage = await prisma.dialogueMessage.create({
         data: {
           threadId: thread.id,
@@ -499,125 +524,169 @@ export async function sendDialogueMessage(
           idempotencyKey: key,
         },
       });
+    } catch (error) {
+      if (!isUniqueConflict(error)) throw error;
+      userMessage = await prisma.dialogueMessage.findFirst({
+        where: { threadId: thread.id, idempotencyKey: key },
+      });
+      if (!userMessage) throw error;
+      if (userMessage.body !== text) {
+        throw new DialogueError("Этот ключ повтора уже использован с другим текстом.", "IDEMPOTENCY_CONFLICT", 409);
+      }
     }
-    if (v03TestSeams.afterUserMessageCreate) await v03TestSeams.afterUserMessageCreate();
+  }
+  if (v03TestSeams.afterUserMessageCreate) await v03TestSeams.afterUserMessageCreate();
 
-    const { processing, call: reusable } = await ensureDialogueTurnBinding({
-      reelId,
-      threadId: thread.id,
-      userMessageId: userMessage.id,
-      key,
-      text,
-    });
+  const { processing, call: reusable } = await ensureDialogueTurnBinding({
+    reelId,
+    threadId: thread.id,
+    userMessageId: userMessage.id,
+    key,
+    text,
+  });
 
-    try {
-      if (reusable?.responseText && reusable.status !== "done") {
-        const reply = parseAgentReply(parseJsonObject(reusable.responseText));
-        await commitDialogueReply({
-          reelId,
-          threadId: thread.id,
-          snapshot: await snapshotForResume(reusable.inputSnapshotJson, reelId, thread.id),
-          callId: reusable.id,
-          processingId: processing.id,
-          userMessageId: userMessage.id,
-          turnKey: key,
-          action: reply.action,
-          thoughtUpdate: reply.thoughtUpdate,
-          rawText: reusable.responseText,
-          promptTokens: reusable.promptTokens,
-          completionTokens: reusable.completionTokens,
-        });
-        return listDialoguePage(reelId);
-      }
-
-      const { prompt: userPrompt, material } = await freezeThoughtPrompt(reelId, thread.id, text, {
-        userMessageId: userMessage.id,
-      });
-      const call = reusable;
-      await prisma.aiCall.update({
-        where: { id: call.id },
-        data: {
-          promptText: userPrompt,
-          inputSnapshotJson: JSON.stringify({
-            text,
-            playbook: false,
-            idempotencyKey: key,
-            userMessageId: userMessage.id,
-            processingId: processing.id,
-            workingTakeId: material.workingTakeId,
-            transcriptRevisionId: material.transcriptRevisionId,
-            reelUpdatedAt: material.reelUpdatedAt,
-            dialogueVersion: material.dialogueVersion,
-            thoughtStateRevision: material.thoughtStateRevision,
-          }),
-        },
-      });
-      if (!call.responseText) {
-        const raw = await complete({
-          model: LLM_MODEL,
-          system: DIALOGUE_SYSTEM,
-          user: userPrompt,
-          label: "dialogue",
-        });
-        await prisma.aiCall.update({
-          where: { id: call.id },
-          data: {
-            responseText: raw.text,
-            promptTokens: raw.usage?.promptTokens ?? null,
-            completionTokens: raw.usage?.completionTokens ?? null,
-          },
-        });
-        call.responseText = raw.text;
-        call.promptTokens = raw.usage?.promptTokens ?? null;
-        call.completionTokens = raw.usage?.completionTokens ?? null;
-      }
-      const reply = parseAgentReply(parseJsonObject(call.responseText));
+  try {
+    if (reusable.responseText && reusable.status !== "done") {
+      const reply = parseAgentReply(parseJsonObject(reusable.responseText));
       await commitDialogueReply({
         reelId,
         threadId: thread.id,
-        snapshot: material,
-        callId: call.id,
+        snapshot: await snapshotForResume(reusable.inputSnapshotJson, reelId, thread.id),
+        callId: reusable.id,
         processingId: processing.id,
         userMessageId: userMessage.id,
         turnKey: key,
         action: reply.action,
         thoughtUpdate: reply.thoughtUpdate,
-        rawText: call.responseText,
-        promptTokens: call.promptTokens,
-        completionTokens: call.completionTokens,
+        rawText: reusable.responseText,
+        promptTokens: reusable.promptTokens,
+        completionTokens: reusable.completionTokens,
       });
-    } catch (error) {
-      const stale = error instanceof StateVersionError || error instanceof ReelError;
-      const message = stale
-        ? error instanceof StateVersionError
-          ? error.message
-          : "Состояние мысли уже изменилось. Обновите и повторите."
-        : error instanceof Error
-          ? error.message
-          : "Не удалось ответить.";
-      const turnCallId = parseTurnPayload(
-        (await prisma.dialogueMessage.findUniqueOrThrow({ where: { id: processing.id } })).payloadJson,
-      ).aiCallId;
-      if (turnCallId) {
-        const failedCall = await prisma.aiCall.findUnique({ where: { id: turnCallId } });
-        if (failedCall && failedCall.status !== "done") {
-          await prisma.aiCall.update({
-            where: { id: failedCall.id },
-            data: { status: "error", errorMessage: stale ? "STATE_VERSION" : message },
-          });
-        }
-      }
-      if (error instanceof ThoughtStateError) throw error;
-      await prisma.dialogueMessage.update({
-        where: { id: processing.id },
-        data: { kind: "error", body: message, status: "error" },
-      });
-      if (error instanceof StateVersionError) throw error;
-      if (error instanceof ReelError) throw new StateVersionError();
-      if (error instanceof AgentActionError) throw error;
+      return listDialoguePage(reelId);
     }
-    return listDialoguePage(reelId);
-  });
+
+    const { prompt: userPrompt, material } = await freezeThoughtPrompt(reelId, thread.id, text, {
+      userMessageId: userMessage.id,
+    });
+    await prisma.aiCall.update({
+      where: { id: reusable.id },
+      data: {
+        promptText: userPrompt,
+        inputSnapshotJson: JSON.stringify({
+          text,
+          playbook: false,
+          idempotencyKey: key,
+          userMessageId: userMessage.id,
+          processingId: processing.id,
+          workingTakeId: material.workingTakeId,
+          transcriptRevisionId: material.transcriptRevisionId,
+          reelUpdatedAt: material.reelUpdatedAt,
+          dialogueVersion: material.dialogueVersion,
+          thoughtStateRevision: material.thoughtStateRevision,
+        }),
+      },
+    });
+    let call = await prisma.aiCall.findUniqueOrThrow({ where: { id: reusable.id } });
+    if (!call.responseText) {
+      const ownerId = randomUUID();
+      while (!call.responseText) {
+        const claim = await claimDialogueModelExecution(call.id, ownerId);
+        if (claim.claimed) {
+          try {
+            if (v03TestSeams.afterClaimBeforeComplete) {
+              await v03TestSeams.afterClaimBeforeComplete({
+                callId: call.id,
+                ownerId,
+                generation: claim.generation,
+              });
+            }
+            const raw = await complete({
+              model: LLM_MODEL,
+              system: DIALOGUE_SYSTEM,
+              user: userPrompt,
+              label: "dialogue",
+            });
+            try {
+              await writeDialogueModelResponse({
+                callId: call.id,
+                ownerId,
+                generation: claim.generation,
+                responseText: raw.text,
+                promptTokens: raw.usage?.promptTokens ?? null,
+                completionTokens: raw.usage?.completionTokens ?? null,
+              });
+            } catch (error) {
+              if (!(error instanceof DialogueTurnExecError) || error.code !== "TURN_FENCE") throw error;
+            }
+          } catch (error) {
+            await releaseDialogueModelClaim(call.id, ownerId, claim.generation);
+            throw error;
+          }
+          call = await prisma.aiCall.findUniqueOrThrow({ where: { id: call.id } });
+          break;
+        }
+        if (claim.reason === "has_response") {
+          call = await prisma.aiCall.findUniqueOrThrow({ where: { id: call.id } });
+          break;
+        }
+        call = await waitForDialogueModelResponse(call.id);
+      }
+    }
+    if (!call.responseText) {
+      throw new DialogueError("Не удалось получить ответ модели для хода.", "TURN_EMPTY");
+    }
+    if (await isDialogueTurnComplete(thread.id, userMessage.id, key)) {
+      return listDialoguePage(reelId);
+    }
+    const reply = parseAgentReply(parseJsonObject(call.responseText));
+    await commitDialogueReply({
+      reelId,
+      threadId: thread.id,
+      snapshot: material,
+      callId: call.id,
+      processingId: processing.id,
+      userMessageId: userMessage.id,
+      turnKey: key,
+      action: reply.action,
+      thoughtUpdate: reply.thoughtUpdate,
+      rawText: call.responseText,
+      promptTokens: call.promptTokens,
+      completionTokens: call.completionTokens,
+    });
+  } catch (error) {
+    const stale = error instanceof StateVersionError || error instanceof ReelError;
+    const message = stale
+      ? error instanceof StateVersionError
+        ? error.message
+        : "Состояние мысли уже изменилось. Обновите и повторите."
+      : error instanceof Error
+        ? error.message
+        : "Не удалось ответить.";
+    const turnCallId = parseTurnPayload(
+      (await prisma.dialogueMessage.findUniqueOrThrow({ where: { id: processing.id } })).payloadJson,
+    ).aiCallId;
+    if (turnCallId) {
+      const failedCall = await prisma.aiCall.findUnique({ where: { id: turnCallId } });
+      if (failedCall && failedCall.status !== "done") {
+        await prisma.aiCall.update({
+          where: { id: failedCall.id },
+          data: { status: "error", errorMessage: stale ? "STATE_VERSION" : message },
+        });
+      }
+    }
+    if (error instanceof ThoughtStateError) throw error;
+    await prisma.dialogueMessage.update({
+      where: { id: processing.id },
+      data: { kind: "error", body: message, status: "error" },
+    });
+    if (error instanceof StateVersionError) throw error;
+    if (error instanceof ReelError) throw new StateVersionError();
+    if (error instanceof AgentActionError) throw error;
+    if (error instanceof DialogueTurnExecError) {
+      throw new DialogueError(error.message, error.code, error.status);
+    }
+  }
+  return listDialoguePage(reelId);
 }
 
 export async function sendDialogueVoice(

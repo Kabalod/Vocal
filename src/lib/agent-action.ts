@@ -102,6 +102,12 @@ export function parseAgentReply(raw: unknown): { action: AgentAction; thoughtUpd
   if (update.data.closeGapIds.length > 1) {
     throw new AgentActionError("Одним ответом можно закрыть только один пробел.", "ACTION_GAP");
   }
+  if (update.data.answeredGapId && update.data.closeGapIds[0] !== update.data.answeredGapId) {
+    throw new AgentActionError("answeredGapId должен совпадать с закрываемым пробелом.", "ACTION_GAP");
+  }
+  if (update.data.answeredGapId && !update.data.closeGapIds.length) {
+    throw new AgentActionError("answeredGapId без закрытия пробела недопустим.", "ACTION_GAP");
+  }
   return { action: parsed.data, thoughtUpdate: update.data };
 }
 

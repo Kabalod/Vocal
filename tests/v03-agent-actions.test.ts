@@ -1,16 +1,50 @@
 import assert from "node:assert/strict";
+import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { AgentActionError, parseAgentAction } from "../src/lib/agent-action";
-import { ensureDialogueTurnBinding, sendDialogueMessage } from "../src/lib/dialogue";
+import { DialogueError, ensureDialogueTurnBinding, runDialogueTurn, sendDialogueMessage, turnClaimKey } from "../src/lib/dialogue";
 import { createTake } from "../src/lib/reels";
 import { createThoughtFromText } from "../src/lib/thought-create";
-import { applyThoughtState, getThoughtState, ThoughtStateError } from "../src/lib/thought-state";
+import { applyThoughtState, getThoughtState, isNonContentUtterance, ThoughtStateError } from "../src/lib/thought-state";
 import { StateVersionError } from "../src/lib/ai/usage-guard";
 import { v03TestSeams } from "../src/lib/v03-test-seams";
 import { ensureOriginalFromText } from "../src/lib/transcripts";
 import { askQuestionJson, thoughtUpdateForUserText } from "./helpers/agent-action-json";
+import type { PrismaClient } from "@prisma/client";
+
+async function committedAssistantActions(prisma: PrismaClient, reelId: string) {
+  const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId } });
+  return prisma.dialogueMessage.findMany({
+    where: {
+      threadId: thread.id,
+      role: "assistant",
+      status: "done",
+      kind: { in: ["question", "text"] },
+    },
+  });
+}
+
+async function assertStateAndActionUnchanged(
+  prisma: PrismaClient,
+  reelId: string,
+  before: Awaited<ReturnType<typeof getThoughtState>>,
+  actionCount: number,
+) {
+  const after = await getThoughtState(reelId);
+  assert.equal(after.revision, before.revision);
+  assert.deepEqual(after.facts, before.facts);
+  assert.deepEqual(after.openGaps, before.openGaps);
+  assert.equal((await committedAssistantActions(prisma, reelId)).length, actionCount);
+}
+
+test("non-content utterance matcher is limited and explicit", () => {
+  for (const text of ["Я не знаю", "Не знаю ответа", "Можешь повторить?", "Я не понял вопрос", "Не знаю", "повтори"]) {
+    assert.equal(isNonContentUtterance(text), true);
+  }
+  assert.equal(isNonContentUtterance("не знаю, но сцена на кухне вечером"), false);
+});
 
 test("old reply JSON is rejected and does not become an action", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
@@ -348,20 +382,23 @@ test("a mistaken fact on не знаю or повтори is rejected", async (t)
     }),
     usage: { promptTokens: 1, completionTokens: 1 },
   }));
-  await assert.rejects(
-    () =>
-      sendDialogueMessage(reel.id, { text: "Не знаю", idempotencyKey: "v03-non-fact-a" }, async () => {
-        const update = await thoughtUpdateForUserText(prisma, reel.id, "Не знаю", ["gap_open"]);
-        return {
-          text: askQuestionJson("Где происходит сцена?", update),
-          usage: { promptTokens: 1, completionTokens: 1 },
-        };
-      }),
-    (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_EVIDENCE",
-  );
-  const state = await getThoughtState(reel.id);
-  assert.equal(state.facts.length, 0);
-  assert.equal(state.openGaps.find((gap) => gap.id === "gap_open")?.status, "open");
+  const before = await getThoughtState(reel.id);
+  const actionsBefore = (await committedAssistantActions(prisma, reel.id)).length;
+  const phrases = ["Я не знаю", "Не знаю ответа", "Можешь повторить?", "Я не понял вопрос"];
+  for (const [index, text] of phrases.entries()) {
+    await assert.rejects(
+      () =>
+        sendDialogueMessage(reel.id, { text, idempotencyKey: `v03-non-fact-a-${index}` }, async () => {
+          const update = await thoughtUpdateForUserText(prisma, reel.id, text, ["gap_open"]);
+          return {
+            text: askQuestionJson("Где происходит сцена?", update),
+            usage: { promptTokens: 1, completionTokens: 1 },
+          };
+        }),
+      (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_EVIDENCE",
+    );
+  }
+  await assertStateAndActionUnchanged(prisma, reel.id, before, actionsBefore);
 });
 
 test("off-topic answer does not close the current gap", async (t) => {
@@ -684,6 +721,7 @@ test("redirect_to_task with a fact is rejected and does not change state", async
     body: "Задача этой мысли.",
     idempotencyKey: "v03-redir-bad",
   });
+  const before = await getThoughtState(reel.id);
   await assert.rejects(
     () =>
       sendDialogueMessage(reel.id, { text: "как сварить кашу", idempotencyKey: "v03-redir-bad-1" }, async () => {
@@ -699,7 +737,7 @@ test("redirect_to_task with a fact is rejected and does not change state", async
       }),
     (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_REDIRECT_STATE",
   );
-  assert.equal((await getThoughtState(reel.id)).facts.length, 0);
+  await assertStateAndActionUnchanged(prisma, reel.id, before, 0);
 });
 
 test("closing a different gap than the current question is rejected", async (t) => {
@@ -729,6 +767,8 @@ test("closing a different gap than the current question is rejected", async (t) 
     }),
     usage: { promptTokens: 1, completionTokens: 1 },
   }));
+  const before = await getThoughtState(reel.id);
+  const actionsBefore = (await committedAssistantActions(prisma, reel.id)).length;
   await assert.rejects(
     () =>
       sendDialogueMessage(reel.id, { text: "Сцена на кухне.", idempotencyKey: "v03-wrong-gap-a" }, async () => {
@@ -740,14 +780,11 @@ test("closing a different gap than the current question is rejected", async (t) 
       }),
     (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_GAP",
   );
-  const state = await getThoughtState(reel.id);
-  assert.equal(state.openGaps.find((gap) => gap.id === "gap_A")?.status, "open");
-  assert.equal(state.openGaps.find((gap) => gap.id === "gap_B")?.status, "open");
-  assert.equal(state.facts.length, 0);
+  await assertStateAndActionUnchanged(prisma, reel.id, before, actionsBefore);
 });
 
 test("closing several unrelated gaps in one answer is rejected", async (t) => {
-  await withPostgresTestDb(t);
+  const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();
   const { reel } = await createThoughtFromText({
     title: "V03 many gaps",
@@ -764,6 +801,7 @@ test("closing several unrelated gaps in one answer is rejected", async (t) => {
       ],
     },
   });
+  const before = await getThoughtState(reel.id);
   await assert.rejects(
     () =>
       sendDialogueMessage(reel.id, { text: "Сцена на кухне вечером.", idempotencyKey: "v03-many-gaps-a" }, async () => ({
@@ -781,9 +819,7 @@ test("closing several unrelated gaps in one answer is rejected", async (t) => {
       })),
     (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_GAP",
   );
-  const state = await getThoughtState(reel.id);
-  assert.equal(state.facts.length, 0);
-  assert.equal(state.openGaps.filter((gap) => gap.status === "open").length, 2);
+  await assertStateAndActionUnchanged(prisma, reel.id, before, 0);
 });
 
 test("bind interrupt reuses one AiCall across two executors", async (t) => {
@@ -846,4 +882,198 @@ test("bind interrupt reuses one AiCall across two executors", async (t) => {
   assert.equal(completeCalls, 1);
   assert.ok(page.messages.some((item) => item.body.includes("Что ещё")));
   assert.equal(await prisma.aiCall.count({ where: { reelId: reel.id, kind: "dialogue" } }), 1);
+});
+
+test("answeredGapId that disagrees with closeGapIds is rejected", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "V03 answered mismatch",
+    body: "Два пробела.",
+    idempotencyKey: "v03-ans-mis",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: {
+      openGaps: [
+        { id: "gap_A", text: "сцена", status: "open" },
+        { id: "gap_B", text: "аудитория", status: "open" },
+      ],
+    },
+  });
+  await sendDialogueMessage(reel.id, { text: "уточни", idempotencyKey: "v03-ans-mis-q" }, async () => ({
+    text: JSON.stringify({
+      action: "ask_question",
+      question: "Где сцена?",
+      gapId: "gap_A",
+      whyUnknown: "места нет",
+    }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  const before = await getThoughtState(reel.id);
+  const actionsBefore = (await committedAssistantActions(prisma, reel.id)).length;
+  await assert.rejects(
+    () =>
+      sendDialogueMessage(reel.id, { text: "Сцена на кухне.", idempotencyKey: "v03-ans-mis-a" }, async () => {
+        const update = await thoughtUpdateForUserText(prisma, reel.id, "Сцена на кухне.", ["gap_A"]);
+        return {
+          text: askQuestionJson("ещё вопрос", {
+            fact: update.fact,
+            closeGapIds: ["gap_A"],
+            answeredGapId: "gap_B",
+          }),
+          usage: { promptTokens: 1, completionTokens: 1 },
+        };
+      }),
+    (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_GAP",
+  );
+  await assertStateAndActionUnchanged(prisma, reel.id, before, actionsBefore);
+});
+
+test("same idempotency key with different text is rejected", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "V03 idemp text",
+    body: "Материал.",
+    idempotencyKey: "v03-idemp-text",
+  });
+  await sendDialogueMessage(reel.id, { text: "Первый текст хода.", idempotencyKey: "v03-idemp-1" }, async () => ({
+    text: askQuestionJson("Что ещё?"),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  const before = await getThoughtState(reel.id);
+  const actionsBefore = (await committedAssistantActions(prisma, reel.id)).length;
+  await assert.rejects(
+    () =>
+      sendDialogueMessage(reel.id, { text: "Другой текст того же ключа.", idempotencyKey: "v03-idemp-1" }, async () => ({
+        text: askQuestionJson("не должен"),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      })),
+    (error: unknown) => error instanceof DialogueError && error.code === "IDEMPOTENCY_CONFLICT",
+  );
+  await assertStateAndActionUnchanged(prisma, reel.id, before, actionsBefore);
+});
+
+test("two executors of one turnKey call complete once", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "V03 lease race",
+    body: "Материал для lease.",
+    idempotencyKey: "v03-lease-race",
+  });
+  let completeCalls = 0;
+  const complete = async () => {
+    completeCalls += 1;
+    await delay(80);
+    const update = await thoughtUpdateForUserText(prisma, reel.id, "Главное — тихий вечер.");
+    return { text: askQuestionJson("Один ответ модели", update), usage: { promptTokens: 1, completionTokens: 1 } };
+  };
+  const input = { text: "Главное — тихий вечер.", idempotencyKey: "v03-lease-1" };
+  const [one, two] = await Promise.all([runDialogueTurn(reel.id, input, complete), runDialogueTurn(reel.id, input, complete)]);
+  assert.equal(completeCalls, 1);
+  assert.equal(await prisma.aiCall.count({ where: { reelId: reel.id, kind: "dialogue" } }), 1);
+  const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId: reel.id } });
+  assert.equal(await prisma.dialogueMessage.count({ where: { threadId: thread.id, claimKey: turnClaimKey(thread.id, "v03-lease-1") } }), 1);
+  assert.ok(one.messages.some((item) => item.body.includes("Один ответ модели")));
+  assert.ok(two.messages.some((item) => item.body.includes("Один ответ модели")));
+});
+
+test("saved responseText is reused without a second model call", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  t.after(() => {
+    v03TestSeams.afterClaimBeforeComplete = null;
+  });
+  const { reel } = await createThoughtFromText({
+    title: "V03 saved response",
+    body: "Материал.",
+    idempotencyKey: "v03-saved-resp",
+  });
+  v03TestSeams.afterClaimBeforeComplete = async ({ callId }) => {
+    await prisma.aiCall.update({
+      where: { id: callId },
+      data: { responseText: askQuestionJson("сохранённый ответ") },
+    });
+    throw new Error("stop before complete");
+  };
+  let completeCalls = 0;
+  const interrupted = await runDialogueTurn(
+    reel.id,
+    { text: "Главное — тихий вечер.", idempotencyKey: "v03-saved-1" },
+    async () => {
+      completeCalls += 1;
+      return { text: askQuestionJson("не должен"), usage: { promptTokens: 1, completionTokens: 1 } };
+    },
+  );
+  assert.equal(completeCalls, 0);
+  assert.ok(interrupted.messages.some((item) => item.kind === "error" || item.status === "error"));
+  v03TestSeams.afterClaimBeforeComplete = null;
+  const page = await runDialogueTurn(
+    reel.id,
+    { text: "Главное — тихий вечер.", idempotencyKey: "v03-saved-1" },
+    async () => {
+      completeCalls += 1;
+      return { text: askQuestionJson("не должен"), usage: { promptTokens: 1, completionTokens: 1 } };
+    },
+  );
+  assert.equal(completeCalls, 0);
+  assert.ok(page.messages.some((item) => item.body.includes("сохранённый ответ")));
+  assert.equal(await prisma.aiCall.count({ where: { reelId: reel.id, kind: "dialogue" } }), 1);
+});
+
+test("expired lease lets a second executor finish and fences the first write", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  t.after(() => {
+    v03TestSeams.afterClaimBeforeComplete = null;
+  });
+  const { reel } = await createThoughtFromText({
+    title: "V03 lease expire",
+    body: "Материал.",
+    idempotencyKey: "v03-lease-exp",
+  });
+  let releaseFirst: (() => void) | undefined;
+  const holdFirst = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let firstClaimed: (() => void) | undefined;
+  const sawFirstClaim = new Promise<void>((resolve) => {
+    firstClaimed = resolve;
+  });
+  let claims = 0;
+  v03TestSeams.afterClaimBeforeComplete = async ({ callId }) => {
+    claims += 1;
+    if (claims === 1) {
+      await prisma.aiCall.update({
+        where: { id: callId },
+        data: { execLeaseUntil: new Date(Date.now() - 5_000) },
+      });
+      firstClaimed?.();
+      await holdFirst;
+    }
+  };
+  let completeCalls = 0;
+  const complete = async () => {
+    completeCalls += 1;
+    const update = await thoughtUpdateForUserText(prisma, reel.id, "Главное — тихий вечер.");
+    return {
+      text: askQuestionJson(completeCalls === 1 ? "ответ второго" : "ответ просроченного", update),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    };
+  };
+  const input = { text: "Главное — тихий вечер.", idempotencyKey: "v03-lease-exp-1" };
+  const first = runDialogueTurn(reel.id, input, complete);
+  await sawFirstClaim;
+  const secondPage = await runDialogueTurn(reel.id, input, complete);
+  releaseFirst?.();
+  const firstPage = await first;
+  assert.equal(completeCalls, 2);
+  assert.equal(await prisma.aiCall.count({ where: { reelId: reel.id, kind: "dialogue" } }), 1);
+  const stored = await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id, kind: "dialogue" } });
+  assert.match(stored.responseText ?? "", /ответ второго/);
+  assert.ok(secondPage.messages.some((item) => item.body.includes("ответ второго")));
+  assert.ok(firstPage.messages.some((item) => item.body.includes("ответ второго")));
 });

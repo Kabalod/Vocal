@@ -254,19 +254,35 @@ export function candidateFactId(userMessageId: string) {
   return `fact_${userMessageId}`;
 }
 
-const NON_FACT_UTTERANCES = new Set([
-  "не знаю",
-  "не знаю.",
-  "повтори",
-  "повтори вопрос",
-  "повтори вопрос.",
-  "снимай",
-  "хватит",
-  "уточни",
-]);
+const NON_CONTENT_EXACT = new Set(["снимай", "хватит", "уточни", "не знаю", "повтори", "повтори вопрос"]);
+
+const NON_CONTENT_PATTERNS = [
+  /^(я\s+)?не\s+знаю(\s+ответа)?$/,
+  /^(я\s+)?не\s+понял(а)?(\s+вопрос)?$/,
+  /^(можешь\s+|можете\s+)?повторить(\s+(вопрос|пожалуйста))?$/,
+  /^повтори(\s+вопрос)?$/,
+];
+
+export function normalizeDialogueUtterance(text: string) {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/[?!.,…:;«»"'`]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+/** Short command / «не знаю» / «повтори» only. Does not classify arbitrary replies. */
+export function isNonContentUtterance(text: string) {
+  const normalized = normalizeDialogueUtterance(text);
+  if (!normalized) return false;
+  if (NON_CONTENT_EXACT.has(normalized)) return true;
+  if (normalized.split(" ").length > 6) return false;
+  return NON_CONTENT_PATTERNS.some((pattern) => pattern.test(normalized));
+}
 
 export function isNonFactUtterance(text: string) {
-  return NON_FACT_UTTERANCES.has(text.trim().toLowerCase().replace(/\s+/g, " "));
+  return isNonContentUtterance(text);
 }
 
 export function buildDialogueThoughtPatch(input: {
@@ -284,12 +300,16 @@ export function buildDialogueThoughtPatch(input: {
     }
     return null;
   }
+  if (
+    input.userText !== undefined &&
+    isNonContentUtterance(input.userText) &&
+    (input.thoughtUpdate.fact || input.thoughtUpdate.closeGapIds.length)
+  ) {
+    throw new AgentActionError("Команда или «не знаю» не становятся фактом.", "ACTION_EVIDENCE");
+  }
   const patch: ThoughtStatePatch = {};
   const accepted = input.thoughtUpdate.fact;
   if (accepted) {
-    if (input.userText !== undefined && isNonFactUtterance(input.userText)) {
-      throw new AgentActionError("Команда или «не знаю» не становятся фактом.", "ACTION_EVIDENCE");
-    }
     if (accepted.sourceId !== input.userMessageId) {
       throw new AgentActionError("Источник факта должен быть текущим сообщением автора.", "ACTION_EVIDENCE");
     }
@@ -311,9 +331,15 @@ export function buildDialogueThoughtPatch(input: {
       throw new AgentActionError("Одним ответом можно закрыть только один пробел.", "ACTION_GAP");
     }
     const [closeId] = input.thoughtUpdate.closeGapIds;
-    const answered = input.thoughtUpdate.answeredGapId ?? input.pendingGapId;
+    const answered = input.thoughtUpdate.answeredGapId;
+    if (answered && answered !== closeId) {
+      throw new AgentActionError("answeredGapId должен совпадать с закрываемым пробелом.", "ACTION_GAP");
+    }
     if (input.pendingGapId && closeId !== input.pendingGapId) {
       throw new AgentActionError("Закрыть можно только пробел текущего вопроса.", "ACTION_GAP");
+    }
+    if (input.pendingGapId && answered && answered !== input.pendingGapId) {
+      throw new AgentActionError("answeredGapId не совпадает с пробелом текущего вопроса.", "ACTION_GAP");
     }
     if (!input.pendingGapId && answered !== closeId) {
       throw new AgentActionError("Закрыть можно только явно указанный пробел ответа.", "ACTION_GAP");

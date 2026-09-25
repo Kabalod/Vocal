@@ -219,6 +219,9 @@ model AiCall {
   completionTokens   Int?
   ownerUserId        String
   turnKey            String?         @unique
+  execOwnerId        String?
+  execLeaseUntil     DateTime?       @db.Timestamptz
+  execGeneration     Int             @default(0)
   createdAt          DateTime        @default(now())
   reviews            Review[]
 
