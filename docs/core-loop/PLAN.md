@@ -5,7 +5,7 @@
 V00: **accepted**.
 BASE_SHA (старт V01): `34abcd78c70b2fa31bd717aeff56acc31577c0d1`.
 V01: **accepted**. V01_HEAD: `d34e8dee2243ae109f2e535a439784117cef3aff`. Документы этапа: [`V01_REPORT.md`](./V01_REPORT.md), [`V01_ADR.md`](./V01_ADR.md), [`V01_FILE_MAP.md`](./V01_FILE_MAP.md), [`V01_SCENARIOS.md`](./V01_SCENARIOS.md).
-V02: **not started**. V02_BASE_SHA: `4223599e6ddb9e6be0d1a09d9c6b433d84912779`.
+V02: **in progress** (not accepted). V02_BASE_SHA: `4223599e6ddb9e6be0d1a09d9c6b433d84912779`. Документы этапа: [`V02_REPORT.md`](./V02_REPORT.md), [`V02_ADR.md`](./V02_ADR.md), [`V02_FILE_MAP.md`](./V02_FILE_MAP.md), [`V02_SCENARIOS.md`](./V02_SCENARIOS.md).
 AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 
 | Этап | Содержание |
@@ -21,4 +21,4 @@ AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 
 Путь процесса — в [`CONTRACT.md`](./CONTRACT.md). Действия агента (`ask_question`, `suggest_take`, `content_sufficient`, `redirect_to_task`) не являются статусами мысли.
 
-V00 принят. V01 принят на `V01_HEAD`. V02 не начат; ветка `feat/v02-from-base` от `V02_BASE_SHA`. Baseline и `migrate resolve` на live Supabase не применять.
+V00 принят. V01 принят на `V01_HEAD`. V02 начат от `V02_BASE_SHA`, не принят. Baseline и `migrate resolve` на live Supabase не применять.

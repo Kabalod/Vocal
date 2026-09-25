@@ -39,6 +39,7 @@ model Reel {
   thoughtCreateKeys ThoughtCreateKey[]
   dialogueThreads   DialogueThread[]
   scriptDraft       ScriptDraft?
+  thoughtState      ThoughtState?
 }
 
 /// AI portrait for one author. Not the login row: that is public.profiles (auth.users.id).
@@ -74,6 +75,31 @@ model ReelContextSnapshot {
   createdAt          DateTime @default(now())
 }
 
+/// Per-thought working state. Not the global author portrait.
+/// Do not apply this migration to live Supabase from V02.
+model ThoughtState {
+  id            String   @id @default(cuid())
+  reelId        String   @unique
+  reel          Reel     @relation(fields: [reelId], references: [id], onDelete: Restrict)
+  ownerUserId   String
+  revision      Int      @default(0)
+  intent        String   @default("")
+  position      String   @default("")
+  takeTask      String   @default("")
+  audienceLocal String   @default("")
+  factsJson     String   @default("[]")
+  openGapsJson  String   @default("[]")
+  decisionsJson String   @default("[]")
+  workingTakeId String?
+  // SQL migration 6 adds (workingTakeId, reelId) → Take(id, reelId).
+  workingTake   Take?    @relation("ThoughtStateWorkingTake", fields: [workingTakeId], references: [id], onDelete: Restrict)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([ownerUserId])
+  @@index([workingTakeId])
+}
+
 model ThoughtCreateKey {
   key       String   @id
   reelId    String   @unique
@@ -102,6 +128,7 @@ model Take {
   transcripts           TranscriptRevision[]
   reviews               Review[]
   workingForReels       Reel[]                @relation("ReelWorkingTake")
+  workingForThoughtStates ThoughtState[]      @relation("ThoughtStateWorkingTake")
 
   @@unique([reelId, number])
   @@unique([reelId, idempotencyKey])

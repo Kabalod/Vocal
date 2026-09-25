@@ -39,6 +39,7 @@ import { thoughtCompletionGate } from "@/lib/thought-completion";
 import { enqueueByKey } from "@/lib/write-queue";
 import { ownerUserId } from "@/lib/auth/session";
 import { isHeadKind } from "@/types/script";
+import { ensureThoughtState, syncThoughtStateWorkingTake } from "@/lib/thought-state";
 
 const reelInclude = {
   takes: {
@@ -80,14 +81,17 @@ export async function createReel(input: CreateReelInput): Promise<ReelDto> {
   if (initialNote.length > REEL_NOTE_MAX) {
     throw new ReelError(`Заметка короче ${REEL_NOTE_MAX} символов.`, "NOTE_TOO_LONG");
   }
-  const row = await prisma.reel.create({
-    data: {
-      title,
-      initialNote,
-      status: "idea",
-      ownerUserId: ownerUserId(),
-    },
-    include: reelInclude,
+  const row = await prisma.$transaction(async (tx) => {
+    const reel = await tx.reel.create({
+      data: {
+        title,
+        initialNote,
+        status: "idea",
+        ownerUserId: ownerUserId(),
+      },
+    });
+    await ensureThoughtState(tx, { reelId: reel.id, ownerUserId: ownerUserId() });
+    return tx.reel.findUniqueOrThrow({ where: { id: reel.id }, include: reelInclude });
   });
   return asReelDto(row);
 }
@@ -532,7 +536,15 @@ async function applyReelUpdate(id: string, input: UpdateReelInput): Promise<Reel
         if (scriptId) await assertFinalScriptReady(id, scriptId);
       }
     }
-    return tx.reel.updateMany({ where, data });
+    const updated = await tx.reel.updateMany({ where, data });
+    if (updated.count === 1 && input.workingTakeId) {
+      await syncThoughtStateWorkingTake(tx, {
+        reelId: id,
+        ownerUserId: ownerUserId(),
+        workingTakeId: input.workingTakeId,
+      });
+    }
+    return updated;
   });
   if (updated.count !== 1) {
     const exists = await prisma.reel.findFirst({ where: { id, ownerUserId: ownerUserId() } });
@@ -647,6 +659,15 @@ export async function createTake(reelId: string, input: CreateTakeInput): Promis
           await tx.reel.update({
             where: { id: reelId },
             data: { workingTakeId: take.id },
+          });
+          const owner = await tx.reel.findUniqueOrThrow({
+            where: { id: reelId },
+            select: { ownerUserId: true },
+          });
+          await syncThoughtStateWorkingTake(tx, {
+            reelId,
+            ownerUserId: owner.ownerUserId,
+            workingTakeId: take.id,
           });
         }
         return take;

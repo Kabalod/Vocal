@@ -16,6 +16,7 @@ const MIGRATION_FILES = [
   "prisma/migrations/3_v01_working_take_fk/migration.sql",
   "prisma/migrations/4_v01_working_take_same_reel/migration.sql",
   "prisma/migrations/5_v01_dialogue_head_lock/migration.sql",
+  "prisma/migrations/6_v02_thought_state/migration.sql",
 ] as const;
 
 export type PostgresTestDb = {
