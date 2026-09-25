@@ -5,6 +5,7 @@ import { StateVersionError } from "@/lib/ai/usage-guard";
 import { v01TestSeams } from "@/lib/v01-test-seams";
 import type { Prisma } from "@prisma/client";
 import { actionMessage, assertAgentActionAllowed, type AgentAction } from "@/lib/agent-action";
+import { applyThoughtStateInTx, buildDialogueThoughtPatch, parseThoughtStateLists } from "@/lib/thought-state";
 
 export type DialogueMaterialSnapshot = {
   workingTakeId: string;
@@ -131,6 +132,7 @@ export async function commitDialogueReply(input: {
   snapshot: DialogueMaterialSnapshot;
   callId: string;
   processingId: string;
+  userMessageId: string;
   action: AgentAction;
   rawText: string;
   promptTokens: number | null;
@@ -158,6 +160,49 @@ export async function commitDialogueReply(input: {
     });
     if (!take) throw new ReelError("Рабочий дубль должен принадлежать этой карточке.", "TAKE_NOT_IN_REEL");
     await assertAgentActionAllowed(tx, input.reelId, input.action, take);
+
+    const userMessage = await tx.dialogueMessage.findUniqueOrThrow({
+      where: { id: input.userMessageId },
+      select: { id: true, body: true, createdAt: true },
+    });
+    const priorAsk = await tx.dialogueMessage.findFirst({
+      where: {
+        threadId: input.threadId,
+        role: "assistant",
+        status: "done",
+        kind: { in: ["question", "text"] },
+        createdAt: { lt: userMessage.createdAt },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { payloadJson: true },
+    });
+    let pendingGapId: string | null = null;
+    try {
+      const payload = JSON.parse(priorAsk?.payloadJson ?? "{}") as { action?: { gapId?: string } };
+      pendingGapId = payload.action?.gapId?.trim() || null;
+    } catch {
+      pendingGapId = null;
+    }
+    const state = await tx.thoughtState.findFirst({
+      where: { reelId: input.reelId, reel: { ownerUserId: ownerUserId() } },
+    });
+    if (!state) throw new ReelError("Состояние мысли не найдено.", "THOUGHT_STATE_NOT_FOUND", 404);
+    const lists = parseThoughtStateLists(state);
+    const patch = buildDialogueThoughtPatch({
+      action: input.action,
+      userText: userMessage.body,
+      userMessageId: userMessage.id,
+      facts: lists.facts,
+      openGaps: lists.openGaps,
+      pendingGapId,
+    });
+    if (patch) {
+      await applyThoughtStateInTx(tx, {
+        reelId: input.reelId,
+        expectedRevision: input.snapshot.thoughtStateRevision,
+        patch,
+      });
+    }
 
     const message = actionMessage(input.action);
     await tx.aiCall.update({

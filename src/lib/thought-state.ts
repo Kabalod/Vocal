@@ -2,6 +2,8 @@ import type { Prisma, ThoughtState } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
 import { StateVersionError } from "@/lib/ai/usage-guard";
+import type { AgentAction } from "@/lib/agent-action";
+import { v03TestSeams } from "@/lib/v03-test-seams";
 
 export class ThoughtStateError extends Error {
   constructor(
@@ -202,69 +204,103 @@ export async function getThoughtState(reelId: string) {
   return { ...row, ...parseThoughtStateLists(row) };
 }
 
+export async function applyThoughtStateInTx(
+  tx: Prisma.TransactionClient,
+  input: {
+    reelId: string;
+    expectedRevision: number;
+    patch: ThoughtStatePatch;
+    ownerUserId?: string;
+  },
+): Promise<ThoughtState> {
+  if (v03TestSeams.failThoughtStateApply) await v03TestSeams.failThoughtStateApply();
+  const owner = input.ownerUserId ?? ownerUserId();
+  await tx.$queryRaw`SELECT id FROM "ThoughtState" WHERE "reelId" = ${input.reelId} FOR UPDATE`;
+  const row = await ownedThoughtState(tx, input.reelId, owner);
+  if (!row) throw new ThoughtStateError("Состояние мысли не найдено.", "THOUGHT_STATE_NOT_FOUND", 404);
+  if (row.revision !== input.expectedRevision) throw new StateVersionError();
+
+  const data: Prisma.ThoughtStateUpdateInput = { revision: { increment: 1 } };
+  if (input.patch.intent !== undefined) data.intent = input.patch.intent;
+  if (input.patch.position !== undefined) data.position = input.patch.position;
+  if (input.patch.takeTask !== undefined) data.takeTask = input.patch.takeTask;
+  if (input.patch.audienceLocal !== undefined) data.audienceLocal = input.patch.audienceLocal;
+  if (input.patch.facts !== undefined) {
+    const facts = parseFacts(input.patch.facts);
+    await assertFactSources(tx, input.reelId, facts);
+    data.factsJson = JSON.stringify(facts);
+  }
+  if (input.patch.openGaps !== undefined) {
+    data.openGapsJson = JSON.stringify(parseGaps(input.patch.openGaps));
+  }
+  if (input.patch.decisions !== undefined) data.decisionsJson = asStringList(input.patch.decisions, "decisions");
+
+  return tx.thoughtState.update({ where: { id: row.id }, data });
+}
+
 export async function applyThoughtState(input: {
   reelId: string;
   expectedRevision: number;
   patch: ThoughtStatePatch;
 }): Promise<ThoughtState> {
-  const owner = ownerUserId();
-  return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "ThoughtState" WHERE "reelId" = ${input.reelId} FOR UPDATE`;
-    const row = await ownedThoughtState(tx, input.reelId, owner);
-    if (!row) throw new ThoughtStateError("Состояние мысли не найдено.", "THOUGHT_STATE_NOT_FOUND", 404);
-    if (row.revision !== input.expectedRevision) throw new StateVersionError();
-
-    const data: Prisma.ThoughtStateUpdateInput = { revision: { increment: 1 } };
-    if (input.patch.intent !== undefined) data.intent = input.patch.intent;
-    if (input.patch.position !== undefined) data.position = input.patch.position;
-    if (input.patch.takeTask !== undefined) data.takeTask = input.patch.takeTask;
-    if (input.patch.audienceLocal !== undefined) data.audienceLocal = input.patch.audienceLocal;
-    if (input.patch.facts !== undefined) {
-      const facts = parseFacts(input.patch.facts);
-      await assertFactSources(tx, input.reelId, facts);
-      data.factsJson = JSON.stringify(facts);
-    }
-    if (input.patch.openGaps !== undefined) {
-      data.openGapsJson = JSON.stringify(parseGaps(input.patch.openGaps));
-    }
-    if (input.patch.decisions !== undefined) data.decisionsJson = asStringList(input.patch.decisions, "decisions");
-
-    return tx.thoughtState.update({ where: { id: row.id }, data });
-  });
+  return prisma.$transaction((tx) => applyThoughtStateInTx(tx, input));
 }
 
-export async function recordAuthorFactFromDialogue(input: {
-  reelId: string;
-  messageId: string;
-  text: string;
-}): Promise<void> {
-  const text = input.text.trim();
-  if (!text) return;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const state = await getThoughtState(input.reelId);
-    if (state.facts.some((fact) => fact.sourceType === "dialogue_message" && fact.sourceId === input.messageId)) {
-      return;
-    }
-    try {
-      await applyThoughtState({
-        reelId: input.reelId,
-        expectedRevision: state.revision,
-        patch: {
-          facts: [
-            ...state.facts,
-            {
-              id: `fact_${input.messageId}`,
-              text,
-              sourceType: "dialogue_message",
-              sourceId: input.messageId,
-            },
-          ],
-        },
-      });
-      return;
-    } catch (error) {
-      if (error instanceof StateVersionError && attempt === 0) continue;
-      throw error;
+const COMMAND_UTTERANCES = new Set(["можно снимать", "проверь дубль", "привет"]);
+const COMMAND_HEADS = new Set(["уточни", "снимай", "хватит"]);
+
+export function isAuthorCommand(text: string): boolean {
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?…]+$/g, "")
+    .replace(/\s+/g, " ");
+  if (!normalized) return true;
+  if (COMMAND_UTTERANCES.has(normalized)) return true;
+  const words = normalized.split(" ");
+  return COMMAND_HEADS.has(words[0] ?? "") && words.length <= 3;
+}
+
+export function buildDialogueThoughtPatch(input: {
+  action: AgentAction;
+  userText: string;
+  userMessageId: string;
+  facts: ThoughtFact[];
+  openGaps: ThoughtGap[];
+  pendingGapId: string | null;
+}): ThoughtStatePatch | null {
+  const patch: ThoughtStatePatch = {};
+  const command = isAuthorCommand(input.userText);
+  const addFact =
+    input.action.action !== "redirect_to_task" &&
+    !command &&
+    !input.facts.some((fact) => fact.sourceType === "dialogue_message" && fact.sourceId === input.userMessageId);
+
+  if (addFact) {
+    patch.facts = [
+      ...input.facts,
+      {
+        id: `fact_${input.userMessageId}`,
+        text: input.userText.trim(),
+        sourceType: "dialogue_message",
+        sourceId: input.userMessageId,
+      },
+    ];
+  }
+
+  if (addFact && input.pendingGapId) {
+    const source = patch.facts ? input.openGaps : input.openGaps;
+    const gaps = source.map((gap) =>
+      gap.id === input.pendingGapId && gap.status === "open" ? { ...gap, status: "resolved" as const } : gap,
+    );
+    if (gaps.some((gap) => gap.id === input.pendingGapId && gap.status === "resolved")) {
+      patch.openGaps = gaps;
     }
   }
+
+  if (input.action.action === "suggest_take") {
+    patch.takeTask = input.action.takeTask;
+  }
+
+  return Object.keys(patch).length ? patch : null;
 }

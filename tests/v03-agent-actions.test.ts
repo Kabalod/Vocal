@@ -6,8 +6,9 @@ import { AgentActionError, parseAgentAction } from "../src/lib/agent-action";
 import { sendDialogueMessage } from "../src/lib/dialogue";
 import { createTake } from "../src/lib/reels";
 import { createThoughtFromText } from "../src/lib/thought-create";
-import { applyThoughtState, getThoughtState } from "../src/lib/thought-state";
+import { applyThoughtState, getThoughtState, ThoughtStateError } from "../src/lib/thought-state";
 import { StateVersionError } from "../src/lib/ai/usage-guard";
+import { v03TestSeams } from "../src/lib/v03-test-seams";
 import { ensureOriginalFromText } from "../src/lib/transcripts";
 import { askQuestionJson } from "./helpers/agent-action-json";
 
@@ -149,6 +150,136 @@ test("user reply becomes a fact and then suggest_take can cite it", async (t) =>
     usage: { promptTokens: 1, completionTokens: 1 },
   }));
   assert.ok(page.messages.some((item) => item.body.includes("сказать про вечер")));
+  const afterSuggest = await getThoughtState(reel.id);
+  assert.equal(afterSuggest.facts.length, 1);
+  assert.equal(afterSuggest.takeTask, "сказать про вечер спокойно");
+});
+
+test("redirect_to_task does not add a fact", async (t) => {
+  await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "V03 redirect fact",
+    body: "Задача этой мысли.",
+    idempotencyKey: "v03-redir-fact",
+  });
+  await sendDialogueMessage(reel.id, { text: "как сварить кашу", idempotencyKey: "v03-redir-fact-1" }, async () => ({
+    text: JSON.stringify({
+      action: "redirect_to_task",
+      currentTask: "вернуться к задаче этой мысли",
+    }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  const state = await getThoughtState(reel.id);
+  assert.equal(state.facts.length, 0);
+});
+
+test("command utterances do not become facts", async (t) => {
+  await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "V03 commands",
+    body: "Материал для команд.",
+    idempotencyKey: "v03-commands",
+  });
+  for (const [text, key] of [
+    ["снимай", "v03-cmd-s"],
+    ["хватит", "v03-cmd-h"],
+    ["уточни", "v03-cmd-u"],
+  ] as const) {
+    await sendDialogueMessage(reel.id, { text, idempotencyKey: key }, async () => ({
+      text: askQuestionJson("Что главное?"),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    }));
+  }
+  const state = await getThoughtState(reel.id);
+  assert.equal(state.facts.length, 0);
+});
+
+test("answering a gap closes that openGap", async (t) => {
+  await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "V03 close gap",
+    body: "Материал с пробелом.",
+    idempotencyKey: "v03-close-gap",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: {
+      openGaps: [{ id: "gap_open", text: "неясна сцена", status: "open" }],
+    },
+  });
+  await sendDialogueMessage(reel.id, { text: "уточни", idempotencyKey: "v03-close-gap-q" }, async () => ({
+    text: JSON.stringify({
+      action: "ask_question",
+      question: "Где происходит сцена?",
+      gapId: "gap_open",
+      whyUnknown: "в материале места нет",
+    }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  await sendDialogueMessage(reel.id, { text: "Сцена на кухне вечером.", idempotencyKey: "v03-close-gap-a" }, async () => ({
+    text: askQuestionJson("Что ещё важно?"),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  const state = await getThoughtState(reel.id);
+  assert.equal(state.openGaps.find((gap) => gap.id === "gap_open")?.status, "resolved");
+  assert.ok(state.facts.some((fact) => fact.text.includes("кухне вечером")));
+});
+
+test("retry after ThoughtState failure completes once without a second model call", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  t.after(() => {
+    v03TestSeams.afterUserMessageCreate = null;
+    v03TestSeams.failThoughtStateApply = null;
+  });
+  const { reel } = await createThoughtFromText({
+    title: "V03 recover",
+    body: "Материал для восстановления запроса.",
+    idempotencyKey: "v03-recover",
+  });
+  let afterCreate = 0;
+  let failState = true;
+  v03TestSeams.afterUserMessageCreate = async () => {
+    afterCreate += 1;
+  };
+  v03TestSeams.failThoughtStateApply = async () => {
+    if (failState) {
+      failState = false;
+      throw new ThoughtStateError("не удалось обновить состояние", "THOUGHT_STATE_INJECT");
+    }
+  };
+  let completeCalls = 0;
+  const complete = async () => {
+    completeCalls += 1;
+    return {
+      text: askQuestionJson("Что главное в этой мысли?"),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    };
+  };
+  await assert.rejects(
+    () => sendDialogueMessage(reel.id, { text: "Главное — тихий вечер.", idempotencyKey: "v03-recover-1" }, complete),
+    (error: unknown) => error instanceof ThoughtStateError,
+  );
+  assert.equal(completeCalls, 1);
+  const before = await getThoughtState(reel.id);
+  assert.equal(before.facts.length, 0);
+  const page = await sendDialogueMessage(
+    reel.id,
+    { text: "Главное — тихий вечер.", idempotencyKey: "v03-recover-1" },
+    complete,
+  );
+  assert.equal(completeCalls, 1);
+  assert.ok(page.messages.some((item) => item.body.includes("главное")));
+  const state = await getThoughtState(reel.id);
+  assert.equal(state.facts.length, 1);
+  assert.equal(state.facts[0]?.text, "Главное — тихий вечер.");
+  assert.equal(await prisma.aiCall.count({ where: { reelId: reel.id, kind: "dialogue" } }), 1);
+  assert.equal((await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id } })).status, "done");
+  assert.ok(afterCreate >= 1);
 });
 
 test("stale ThoughtState mid-flight is not saved", async (t) => {
@@ -293,4 +424,5 @@ test("redirect_to_task stays on the current thought without changing status", as
   assert.ok(page.messages.some((item) => item.body.includes("вернуться к задаче")));
   assert.equal((await prisma.reel.findUniqueOrThrow({ where: { id: reel.id } })).status, "idea");
   assert.equal((await prisma.reel.findUniqueOrThrow({ where: { id: reel.id } })).status !== "redirect_to_task", true);
+  assert.equal((await getThoughtState(reel.id)).facts.length, 0);
 });

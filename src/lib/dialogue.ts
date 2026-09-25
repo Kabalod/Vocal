@@ -20,7 +20,9 @@ import {
 } from "@/lib/working-take";
 import { v01TestSeams } from "@/lib/v01-test-seams";
 import { AgentActionError, parseAgentAction } from "@/lib/agent-action";
-import { getThoughtState, recordAuthorFactFromDialogue } from "@/lib/thought-state";
+import { getThoughtState, ThoughtStateError } from "@/lib/thought-state";
+import { v03TestSeams } from "@/lib/v03-test-seams";
+import type { DialogueMaterialSnapshot } from "@/lib/working-take";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
 
@@ -301,6 +303,36 @@ async function assertDialogueStateVersion(
   }
 }
 
+function snapshotFromCallJson(raw: string): DialogueMaterialSnapshot {
+  const parsed = JSON.parse(raw) as DialogueMaterialSnapshot;
+  return {
+    workingTakeId: parsed.workingTakeId,
+    transcriptRevisionId: parsed.transcriptRevisionId,
+    reelUpdatedAt: parsed.reelUpdatedAt,
+    thoughtStateRevision: parsed.thoughtStateRevision,
+    dialogueVersion: parsed.dialogueVersion,
+  };
+}
+
+async function isDialogueTurnComplete(reelId: string, threadId: string, userMessageId: string) {
+  const user = await prisma.dialogueMessage.findUnique({ where: { id: userMessageId } });
+  if (!user) return false;
+  const call = await prisma.aiCall.findFirst({
+    where: { reelId, kind: "dialogue", status: "done" },
+    orderBy: { createdAt: "desc" },
+  });
+  const assistant = await prisma.dialogueMessage.findFirst({
+    where: {
+      threadId,
+      role: "assistant",
+      status: "done",
+      kind: { in: ["question", "text"] },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  return Boolean(call && assistant && assistant.createdAt >= user.createdAt);
+}
+
 export async function sendDialogueMessage(
   reelId: string,
   input: {
@@ -321,7 +353,9 @@ export async function sendDialogueMessage(
   const existing = await prisma.dialogueMessage.findFirst({
     where: { threadId: thread.id, idempotencyKey: key },
   });
-  if (existing) return listDialoguePage(reelId);
+  if (existing && (await isDialogueTurnComplete(reelId, thread.id, existing.id))) {
+    return listDialoguePage(reelId);
+  }
 
   return withAiInflight(
     aiOperationKey({
@@ -332,61 +366,121 @@ export async function sendDialogueMessage(
       idempotencyKey: key,
     }),
     async () => {
-    const raced = await prisma.dialogueMessage.findFirst({
+    let userMessage = await prisma.dialogueMessage.findFirst({
       where: { threadId: thread.id, idempotencyKey: key },
     });
-    if (raced) return listDialoguePage(reelId);
-    await assertDailyTokenBudget();
+    if (userMessage && (await isDialogueTurnComplete(reelId, thread.id, userMessage.id))) {
+      return listDialoguePage(reelId);
+    }
+    if (!userMessage) await assertDailyTokenBudget();
+    if (!userMessage) {
+      userMessage = await prisma.dialogueMessage.create({
+        data: {
+          threadId: thread.id,
+          role: "user",
+          kind: "text",
+          body: text,
+          payloadJson: JSON.stringify(input.voiceDurationLabel ? { voiceDurationLabel: input.voiceDurationLabel } : {}),
+          status: "done",
+          idempotencyKey: key,
+        },
+      });
+    }
+    if (v03TestSeams.afterUserMessageCreate) await v03TestSeams.afterUserMessageCreate();
 
-    const userMessage = await prisma.dialogueMessage.create({
-      data: {
-        threadId: thread.id,
-        role: "user",
-        kind: "text",
-        body: text,
-        payloadJson: JSON.stringify(input.voiceDurationLabel ? { voiceDurationLabel: input.voiceDurationLabel } : {}),
-        status: "done",
-        idempotencyKey: key,
-      },
-    });
-    await recordAuthorFactFromDialogue({ reelId, messageId: userMessage.id, text });
-    const processing = await prisma.dialogueMessage.create({
-      data: {
+    let processing = await prisma.dialogueMessage.findFirst({
+      where: {
         threadId: thread.id,
         role: "assistant",
-        kind: "processing",
-        body: "Разбираю вашу мысль…",
-        status: "pending",
+        createdAt: { gte: userMessage.createdAt },
+        kind: { in: ["processing", "error"] },
       },
+      orderBy: { createdAt: "asc" },
     });
+    if (!processing) {
+      processing = await prisma.dialogueMessage.create({
+        data: {
+          threadId: thread.id,
+          role: "assistant",
+          kind: "processing",
+          body: "Разбираю вашу мысль…",
+          status: "pending",
+        },
+      });
+    }
 
-    const { prompt: userPrompt, material } = await freezeThoughtPrompt(reelId, thread.id, text);
-    const call = await prisma.aiCall.create({
-      data: {
-        kind: "dialogue",
+    const reusableCalls = await prisma.aiCall.findMany({
+      where: {
         reelId,
-        model: LLM_MODEL,
-        status: "running",
+        kind: "dialogue",
         ownerUserId: ownerUserId(),
-        promptText: userPrompt,
-        inputSnapshotJson: JSON.stringify({
-          text,
-          playbook: false,
-          workingTakeId: material.workingTakeId,
-          transcriptRevisionId: material.transcriptRevisionId,
-          reelUpdatedAt: material.reelUpdatedAt,
-          dialogueVersion: material.dialogueVersion,
-          thoughtStateRevision: material.thoughtStateRevision,
-        }),
+        status: { not: "done" },
       },
+      orderBy: { createdAt: "desc" },
+    });
+    const reusable = reusableCalls.find((row) => {
+      if (!row.responseText) return false;
+      try {
+        const snap = JSON.parse(row.inputSnapshotJson) as { idempotencyKey?: string };
+        return snap.idempotencyKey === key;
+      } catch {
+        return false;
+      }
     });
 
     try {
+      if (reusable?.responseText) {
+        const action = parseAgentAction(parseJsonObject(reusable.responseText));
+        await commitDialogueReply({
+          reelId,
+          threadId: thread.id,
+          snapshot: snapshotFromCallJson(reusable.inputSnapshotJson),
+          callId: reusable.id,
+          processingId: processing.id,
+          userMessageId: userMessage.id,
+          action,
+          rawText: reusable.responseText,
+          promptTokens: reusable.promptTokens,
+          completionTokens: reusable.completionTokens,
+        });
+        return listDialoguePage(reelId);
+      }
+
+      const { prompt: userPrompt, material } = await freezeThoughtPrompt(reelId, thread.id, text);
+      const call = await prisma.aiCall.create({
+        data: {
+          kind: "dialogue",
+          reelId,
+          model: LLM_MODEL,
+          status: "running",
+          ownerUserId: ownerUserId(),
+          promptText: userPrompt,
+          inputSnapshotJson: JSON.stringify({
+            text,
+            playbook: false,
+            idempotencyKey: key,
+            userMessageId: userMessage.id,
+            workingTakeId: material.workingTakeId,
+            transcriptRevisionId: material.transcriptRevisionId,
+            reelUpdatedAt: material.reelUpdatedAt,
+            dialogueVersion: material.dialogueVersion,
+            thoughtStateRevision: material.thoughtStateRevision,
+          }),
+        },
+      });
       const raw = await complete({
         model: LLM_MODEL,
         system: DIALOGUE_SYSTEM,
         user: userPrompt,
         label: "dialogue",
+      });
+      await prisma.aiCall.update({
+        where: { id: call.id },
+        data: {
+          responseText: raw.text,
+          promptTokens: raw.usage?.promptTokens ?? null,
+          completionTokens: raw.usage?.completionTokens ?? null,
+        },
       });
       const action = parseAgentAction(parseJsonObject(raw.text));
       await commitDialogueReply({
@@ -395,6 +489,7 @@ export async function sendDialogueMessage(
         snapshot: material,
         callId: call.id,
         processingId: processing.id,
+        userMessageId: userMessage.id,
         action,
         rawText: raw.text,
         promptTokens: raw.usage?.promptTokens ?? null,
@@ -409,10 +504,17 @@ export async function sendDialogueMessage(
         : error instanceof Error
           ? error.message
           : "Не удалось ответить.";
-      await prisma.aiCall.update({
-        where: { id: call.id },
-        data: { status: "error", errorMessage: stale ? "STATE_VERSION" : message },
+      const failedCall = await prisma.aiCall.findFirst({
+        where: { reelId, kind: "dialogue", ownerUserId: ownerUserId() },
+        orderBy: { createdAt: "desc" },
       });
+      if (failedCall && failedCall.status !== "done") {
+        await prisma.aiCall.update({
+          where: { id: failedCall.id },
+          data: { status: "error", errorMessage: stale ? "STATE_VERSION" : message },
+        });
+      }
+      if (error instanceof ThoughtStateError) throw error;
       await prisma.dialogueMessage.update({
         where: { id: processing.id },
         data: { kind: "error", body: message, status: "error" },
