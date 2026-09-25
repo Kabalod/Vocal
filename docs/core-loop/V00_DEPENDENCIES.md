@@ -5,7 +5,8 @@ V00 — аудит. Он **не** снимает блокеры ниже. Мат
 AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 BASE_SHA: `34abcd78c70b2fa31bd717aeff56acc31577c0d1`.
 V01: **accepted**. V01_HEAD: `d34e8dee2243ae109f2e535a439784117cef3aff`.
-V02: **in progress** (not accepted). V02_BASE_SHA: `4223599e6ddb9e6be0d1a09d9c6b433d84912779`.
+V02: **accepted**. V02_HEAD: `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`.
+V03: **not started**. BASE для V03 не назначен.
 V00: **accepted**.
 
 ## Условия перед V01
@@ -48,7 +49,7 @@ Next 15, Prisma 6, PostgreSQL для приложения и тестов, Groq,
 
 ## Документы после приёмки V00
 
-- `AGENTS.md` — V01 accepted (`V01_HEAD`), V02 not started, `V02_BASE_SHA` и AUDITED_APP_SHA записаны.
+- `AGENTS.md` — V01 и V02 accepted (`V01_HEAD`, `V02_HEAD`), V03 not started. BASE для V03 не назначается здесь.
 - Карта I00 (BASE для I01) — отдельный контур, этим назначением не закрывается.
 
 ## Расход

@@ -2,7 +2,8 @@
 
 Status: **accepted**.
 V01: **accepted**. V01_HEAD: `d34e8dee2243ae109f2e535a439784117cef3aff`.
-V02: **in progress** (not accepted). V02_BASE_SHA: `4223599e6ddb9e6be0d1a09d9c6b433d84912779`.
+V02: **accepted**. V02_HEAD: `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`.
+V03: **not started**. BASE для V03 не назначен.
 AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`
 BASE_SHA (старт V01): `34abcd78c70b2fa31bd717aeff56acc31577c0d1`
 
@@ -110,4 +111,4 @@ I00 принят на `9b6d2014cef681cbd61d5def51c987411e234e29`. Карта I00
 
 ## Merge
 
-V00 принят. V01 принят на `V01_HEAD`. V02 не начат. V02_BASE_SHA назначен отдельно: `4223599e6ddb9e6be0d1a09d9c6b433d84912779`.
+V00 принят. V01 принят на `V01_HEAD`. V02 принят на `V02_HEAD`. V03 не начат. Этот документ не назначает BASE для V03.

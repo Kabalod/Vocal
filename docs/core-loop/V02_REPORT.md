@@ -1,11 +1,12 @@
 # V02 — отчёт
 
-Status: **in progress** (not accepted).
+Status: **accepted**.
+V02_HEAD: `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`.
 V02_BASE_SHA: `4223599e6ddb9e6be0d1a09d9c6b433d84912779`.
 V01_HEAD: `d34e8dee2243ae109f2e535a439784117cef3aff`.
 Ветка: `feat/v02-from-base`.
 
-Live Supabase не менялся. V03 не начинать.
+Live Supabase не менялся. V03: **not started**. BASE для V03 этим коммитом не назначается.
 
 ## Что сделано
 
