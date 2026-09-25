@@ -16,7 +16,7 @@ V03: **in progress**. Live migrate на Supabase не применять.
 
 `suggest_take.evidenceRefs` — id фактов `ThoughtState` этой мысли.
 
-Состояние меняет только явное `thoughtUpdate` модели: факт (текст и sourceId текущего сообщения) и `closeGapIds`. Список команд не решает содержательность. `suggest_take` может сослаться на `fact_${userMessageId}` в том же ходе. Ход связан тройкой userMessageId + processing.claimKey + AiCall.id.
+`redirect_to_task` с фактом или `closeGapIds` отклоняется. Закрытие пробела только для `gapId` предыдущего вопроса или явного `answeredGapId`; несколько `closeGapIds` запрещены. Целые реплики «не знаю» / «повтори» / команды не принимаются как факт. `AiCall.turnKey` уникален; привязка к processing идёт отдельным шагом после создания вызова, повтор и конкуренты используют тот же ключ.
 
 Снимок `AiCall` и CAS перед записью включают `thoughtStateRevision`. Схемы действий — `.strict()`.
 

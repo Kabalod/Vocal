@@ -254,16 +254,42 @@ export function candidateFactId(userMessageId: string) {
   return `fact_${userMessageId}`;
 }
 
+const NON_FACT_UTTERANCES = new Set([
+  "не знаю",
+  "не знаю.",
+  "повтори",
+  "повтори вопрос",
+  "повтори вопрос.",
+  "снимай",
+  "хватит",
+  "уточни",
+]);
+
+export function isNonFactUtterance(text: string) {
+  return NON_FACT_UTTERANCES.has(text.trim().toLowerCase().replace(/\s+/g, " "));
+}
+
 export function buildDialogueThoughtPatch(input: {
   action: AgentAction;
   thoughtUpdate: ThoughtUpdate;
   userMessageId: string;
+  userText?: string;
   facts: ThoughtFact[];
   openGaps: ThoughtGap[];
+  pendingGapId: string | null;
 }): ThoughtStatePatch | null {
+  if (input.action.action === "redirect_to_task") {
+    if (input.thoughtUpdate.fact || input.thoughtUpdate.closeGapIds.length) {
+      throw new AgentActionError("redirect_to_task не меняет состояние мысли.", "ACTION_REDIRECT_STATE");
+    }
+    return null;
+  }
   const patch: ThoughtStatePatch = {};
   const accepted = input.thoughtUpdate.fact;
   if (accepted) {
+    if (input.userText !== undefined && isNonFactUtterance(input.userText)) {
+      throw new AgentActionError("Команда или «не знаю» не становятся фактом.", "ACTION_EVIDENCE");
+    }
     if (accepted.sourceId !== input.userMessageId) {
       throw new AgentActionError("Источник факта должен быть текущим сообщением автора.", "ACTION_EVIDENCE");
     }
@@ -281,16 +307,23 @@ export function buildDialogueThoughtPatch(input: {
   }
 
   if (input.thoughtUpdate.closeGapIds.length) {
-    const unknown = input.thoughtUpdate.closeGapIds.filter(
-      (id) => !input.openGaps.some((gap) => gap.id === id && gap.status === "open"),
-    );
-    if (unknown.length) {
+    if (input.thoughtUpdate.closeGapIds.length > 1) {
+      throw new AgentActionError("Одним ответом можно закрыть только один пробел.", "ACTION_GAP");
+    }
+    const [closeId] = input.thoughtUpdate.closeGapIds;
+    const answered = input.thoughtUpdate.answeredGapId ?? input.pendingGapId;
+    if (input.pendingGapId && closeId !== input.pendingGapId) {
+      throw new AgentActionError("Закрыть можно только пробел текущего вопроса.", "ACTION_GAP");
+    }
+    if (!input.pendingGapId && answered !== closeId) {
+      throw new AgentActionError("Закрыть можно только явно указанный пробел ответа.", "ACTION_GAP");
+    }
+    const open = input.openGaps.find((gap) => gap.id === closeId && gap.status === "open");
+    if (!open) {
       throw new AgentActionError("Закрыть можно только открытый пробел этой мысли.", "ACTION_GAP");
     }
     patch.openGaps = input.openGaps.map((gap) =>
-      input.thoughtUpdate.closeGapIds.includes(gap.id) && gap.status === "open"
-        ? { ...gap, status: "resolved" as const }
-        : gap,
+      gap.id === closeId ? { ...gap, status: "resolved" as const } : gap,
     );
   }
 

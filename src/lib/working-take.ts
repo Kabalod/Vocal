@@ -164,8 +164,26 @@ export async function commitDialogueReply(input: {
 
     const userMessage = await tx.dialogueMessage.findUniqueOrThrow({
       where: { id: input.userMessageId },
-      select: { id: true },
+      select: { id: true, createdAt: true, body: true },
     });
+    const priorAsk = await tx.dialogueMessage.findFirst({
+      where: {
+        threadId: input.threadId,
+        role: "assistant",
+        status: "done",
+        kind: "question",
+        createdAt: { lt: userMessage.createdAt },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { payloadJson: true },
+    });
+    let pendingGapId: string | null = null;
+    try {
+      const payload = JSON.parse(priorAsk?.payloadJson ?? "{}") as { action?: { gapId?: string } };
+      pendingGapId = payload.action?.gapId?.trim() || null;
+    } catch {
+      pendingGapId = null;
+    }
     const state = await tx.thoughtState.findFirst({
       where: { reelId: input.reelId, reel: { ownerUserId: ownerUserId() } },
     });
@@ -175,8 +193,10 @@ export async function commitDialogueReply(input: {
       action: input.action,
       thoughtUpdate: input.thoughtUpdate,
       userMessageId: userMessage.id,
+      userText: userMessage.body,
       facts: lists.facts,
       openGaps: lists.openGaps,
+      pendingGapId,
     });
     if (patch) {
       await applyThoughtStateInTx(tx, {

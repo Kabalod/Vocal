@@ -218,6 +218,7 @@ model AiCall {
   promptTokens       Int?
   completionTokens   Int?
   ownerUserId        String
+  turnKey            String?         @unique
   createdAt          DateTime        @default(now())
   reviews            Review[]
 

@@ -65,6 +65,7 @@ export const thoughtUpdateSchema = z
       .strict()
       .nullable(),
     closeGapIds: z.array(z.string().trim().min(1)),
+    answeredGapId: z.string().trim().min(1).optional(),
   })
   .strict();
 
@@ -94,6 +95,12 @@ export function parseAgentReply(raw: unknown): { action: AgentAction; thoughtUpd
   }
   if (update.data.closeGapIds.length && !update.data.fact) {
     throw new AgentActionError("Нельзя закрыть пробел без принятого факта.", "ACTION_GAP");
+  }
+  if (parsed.data.action === "redirect_to_task" && (update.data.fact || update.data.closeGapIds.length)) {
+    throw new AgentActionError("redirect_to_task не меняет состояние мысли.", "ACTION_REDIRECT_STATE");
+  }
+  if (update.data.closeGapIds.length > 1) {
+    throw new AgentActionError("Одним ответом можно закрыть только один пробел.", "ACTION_GAP");
   }
   return { action: parsed.data, thoughtUpdate: update.data };
 }

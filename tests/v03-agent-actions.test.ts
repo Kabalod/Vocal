@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { AgentActionError, parseAgentAction } from "../src/lib/agent-action";
-import { sendDialogueMessage } from "../src/lib/dialogue";
+import { ensureDialogueTurnBinding, sendDialogueMessage } from "../src/lib/dialogue";
 import { createTake } from "../src/lib/reels";
 import { createThoughtFromText } from "../src/lib/thought-create";
 import { applyThoughtState, getThoughtState, ThoughtStateError } from "../src/lib/thought-state";
@@ -325,6 +325,45 @@ test("unknown and repeat replies do not create facts or close gaps", async (t) =
   assert.equal(state.openGaps.find((gap) => gap.id === "gap_open")?.status, "open");
 });
 
+test("a mistaken fact on не знаю or повтори is rejected", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "V03 non-fact",
+    body: "Материал с пробелом.",
+    idempotencyKey: "v03-non-fact",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: { openGaps: [{ id: "gap_open", text: "неясна сцена", status: "open" }] },
+  });
+  await sendDialogueMessage(reel.id, { text: "уточни", idempotencyKey: "v03-non-fact-q" }, async () => ({
+    text: JSON.stringify({
+      action: "ask_question",
+      question: "Где происходит сцена?",
+      gapId: "gap_open",
+      whyUnknown: "в материале места нет",
+      thoughtUpdate: { fact: null, closeGapIds: [] },
+    }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  await assert.rejects(
+    () =>
+      sendDialogueMessage(reel.id, { text: "Не знаю", idempotencyKey: "v03-non-fact-a" }, async () => {
+        const update = await thoughtUpdateForUserText(prisma, reel.id, "Не знаю", ["gap_open"]);
+        return {
+          text: askQuestionJson("Где происходит сцена?", update),
+          usage: { promptTokens: 1, completionTokens: 1 },
+        };
+      }),
+    (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_EVIDENCE",
+  );
+  const state = await getThoughtState(reel.id);
+  assert.equal(state.facts.length, 0);
+  assert.equal(state.openGaps.find((gap) => gap.id === "gap_open")?.status, "open");
+});
+
 test("off-topic answer does not close the current gap", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();
@@ -399,7 +438,7 @@ test("same turn can suggest_take citing the current answer fact", async (t) => {
           mainIdea: "тихий вечер на кухне",
           takeTask: "сказать про кухню спокойно",
           evidenceRefs: [update.factId],
-          thoughtUpdate: { fact: update.fact, closeGapIds: update.closeGapIds },
+          thoughtUpdate: { fact: update.fact, closeGapIds: update.closeGapIds, answeredGapId: "gap_last" },
         }),
         usage: { promptTokens: 1, completionTokens: 1 },
       };
@@ -635,4 +674,176 @@ test("redirect_to_task stays on the current thought without changing status", as
   assert.equal((await prisma.reel.findUniqueOrThrow({ where: { id: reel.id } })).status, "idea");
   assert.equal((await prisma.reel.findUniqueOrThrow({ where: { id: reel.id } })).status !== "redirect_to_task", true);
   assert.equal((await getThoughtState(reel.id)).facts.length, 0);
+});
+
+test("redirect_to_task with a fact is rejected and does not change state", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "V03 redirect fact reject",
+    body: "Задача этой мысли.",
+    idempotencyKey: "v03-redir-bad",
+  });
+  await assert.rejects(
+    () =>
+      sendDialogueMessage(reel.id, { text: "как сварить кашу", idempotencyKey: "v03-redir-bad-1" }, async () => {
+        const update = await thoughtUpdateForUserText(prisma, reel.id, "как сварить кашу");
+        return {
+          text: JSON.stringify({
+            action: "redirect_to_task",
+            currentTask: "вернуться к задаче",
+            thoughtUpdate: { fact: update.fact, closeGapIds: [] },
+          }),
+          usage: { promptTokens: 1, completionTokens: 1 },
+        };
+      }),
+    (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_REDIRECT_STATE",
+  );
+  assert.equal((await getThoughtState(reel.id)).facts.length, 0);
+});
+
+test("closing a different gap than the current question is rejected", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "V03 wrong gap",
+    body: "Два пробела.",
+    idempotencyKey: "v03-wrong-gap",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: {
+      openGaps: [
+        { id: "gap_A", text: "сцена", status: "open" },
+        { id: "gap_B", text: "аудитория", status: "open" },
+      ],
+    },
+  });
+  await sendDialogueMessage(reel.id, { text: "уточни", idempotencyKey: "v03-wrong-gap-q" }, async () => ({
+    text: JSON.stringify({
+      action: "ask_question",
+      question: "Где сцена?",
+      gapId: "gap_A",
+      whyUnknown: "места нет",
+    }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  await assert.rejects(
+    () =>
+      sendDialogueMessage(reel.id, { text: "Сцена на кухне.", idempotencyKey: "v03-wrong-gap-a" }, async () => {
+        const update = await thoughtUpdateForUserText(prisma, reel.id, "Сцена на кухне.", ["gap_B"]);
+        return {
+          text: askQuestionJson("ещё вопрос", { fact: update.fact, closeGapIds: ["gap_B"] }),
+          usage: { promptTokens: 1, completionTokens: 1 },
+        };
+      }),
+    (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_GAP",
+  );
+  const state = await getThoughtState(reel.id);
+  assert.equal(state.openGaps.find((gap) => gap.id === "gap_A")?.status, "open");
+  assert.equal(state.openGaps.find((gap) => gap.id === "gap_B")?.status, "open");
+  assert.equal(state.facts.length, 0);
+});
+
+test("closing several unrelated gaps in one answer is rejected", async (t) => {
+  await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "V03 many gaps",
+    body: "Два пробела.",
+    idempotencyKey: "v03-many-gaps",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: {
+      openGaps: [
+        { id: "gap_A", text: "сцена", status: "open" },
+        { id: "gap_B", text: "аудитория", status: "open" },
+      ],
+    },
+  });
+  await assert.rejects(
+    () =>
+      sendDialogueMessage(reel.id, { text: "Сцена на кухне вечером.", idempotencyKey: "v03-many-gaps-a" }, async () => ({
+        text: JSON.stringify({
+          action: "ask_question",
+          question: "Что ещё?",
+          clarificationReason: "нужно уточнение",
+          whyUnknown: "мало данных",
+          thoughtUpdate: {
+            fact: { text: "Сцена на кухне вечером.", sourceType: "dialogue_message", sourceId: "x" },
+            closeGapIds: ["gap_A", "gap_B"],
+          },
+        }),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      })),
+    (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_GAP",
+  );
+  const state = await getThoughtState(reel.id);
+  assert.equal(state.facts.length, 0);
+  assert.equal(state.openGaps.filter((gap) => gap.status === "open").length, 2);
+});
+
+test("bind interrupt reuses one AiCall across two executors", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  t.after(() => {
+    v03TestSeams.afterAiCallBeforeBind = null;
+  });
+  const { reel } = await createThoughtFromText({
+    title: "V03 bind",
+    body: "Материал для привязки хода.",
+    idempotencyKey: "v03-bind",
+  });
+  v03TestSeams.afterAiCallBeforeBind = async () => {
+    throw new Error("bind interrupt");
+  };
+  let completeCalls = 0;
+  await assert.rejects(
+    () =>
+      sendDialogueMessage(reel.id, { text: "Главное — тихий вечер.", idempotencyKey: "v03-bind-1" }, async () => {
+        completeCalls += 1;
+        return { text: askQuestionJson("не должен"), usage: { promptTokens: 1, completionTokens: 1 } };
+      }),
+    /bind interrupt/,
+  );
+  assert.equal(completeCalls, 0);
+  assert.equal(await prisma.aiCall.count({ where: { reelId: reel.id, kind: "dialogue" } }), 1);
+  const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId: reel.id } });
+  const user = await prisma.dialogueMessage.findFirstOrThrow({
+    where: { threadId: thread.id, idempotencyKey: "v03-bind-1" },
+  });
+  v03TestSeams.afterAiCallBeforeBind = null;
+  const [one, two] = await Promise.all([
+    ensureDialogueTurnBinding({
+      reelId: reel.id,
+      threadId: thread.id,
+      userMessageId: user.id,
+      key: "v03-bind-1",
+      text: "Главное — тихий вечер.",
+    }),
+    ensureDialogueTurnBinding({
+      reelId: reel.id,
+      threadId: thread.id,
+      userMessageId: user.id,
+      key: "v03-bind-1",
+      text: "Главное — тихий вечер.",
+    }),
+  ]);
+  assert.equal(one.call.id, two.call.id);
+  assert.equal(await prisma.aiCall.count({ where: { reelId: reel.id, kind: "dialogue" } }), 1);
+  const page = await sendDialogueMessage(
+    reel.id,
+    { text: "Главное — тихий вечер.", idempotencyKey: "v03-bind-1" },
+    async () => {
+      completeCalls += 1;
+      const update = await thoughtUpdateForUserText(prisma, reel.id, "Главное — тихий вечер.");
+      return { text: askQuestionJson("Что ещё?", update), usage: { promptTokens: 1, completionTokens: 1 } };
+    },
+  );
+  assert.equal(completeCalls, 1);
+  assert.ok(page.messages.some((item) => item.body.includes("Что ещё")));
+  assert.equal(await prisma.aiCall.count({ where: { reelId: reel.id, kind: "dialogue" } }), 1);
 });

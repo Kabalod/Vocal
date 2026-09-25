@@ -2,4 +2,5 @@
 export const v03TestSeams = {
   afterUserMessageCreate: null as (() => Promise<void>) | null,
   failThoughtStateApply: null as ((ctx: { reelId: string; turnKey?: string }) => Promise<void>) | null,
+  afterAiCallBeforeBind: null as ((ctx: { turnKey: string; callId: string }) => Promise<void>) | null,
 };

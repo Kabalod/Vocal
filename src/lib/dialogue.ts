@@ -1,6 +1,7 @@
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
@@ -215,8 +216,94 @@ export async function listDialoguePage(
   };
 }
 
-function turnClaimKey(threadId: string, key: string) {
+export function turnClaimKey(threadId: string, key: string) {
   return `dialogue-turn:${threadId}:${key}`;
+}
+
+export function dialogueTurnKey(threadId: string, key: string) {
+  return `dialogue:${threadId}:${key}`;
+}
+
+export async function ensureDialogueTurnBinding(input: {
+  reelId: string;
+  threadId: string;
+  userMessageId: string;
+  key: string;
+  text: string;
+}) {
+  const claimKey = turnClaimKey(input.threadId, input.key);
+  const turnKey = dialogueTurnKey(input.threadId, input.key);
+  const created = await prisma.$transaction(async (tx) => {
+    let processing = await tx.dialogueMessage.findFirst({ where: { claimKey } });
+    if (!processing) {
+      processing = await tx.dialogueMessage.create({
+        data: {
+          threadId: input.threadId,
+          role: "assistant",
+          kind: "processing",
+          body: "Разбираю вашу мысль…",
+          status: "pending",
+          claimKey,
+          idempotencyKey: `assistant:${input.key}`,
+          payloadJson: JSON.stringify({ userMessageId: input.userMessageId, idempotencyKey: input.key }),
+        },
+      });
+    }
+    await tx.$queryRaw`SELECT id FROM "DialogueMessage" WHERE id = ${processing.id} FOR UPDATE`;
+    let call = await tx.aiCall.findUnique({ where: { turnKey } });
+    if (!call) {
+      try {
+        call = await tx.aiCall.create({
+          data: {
+            kind: "dialogue",
+            reelId: input.reelId,
+            model: LLM_MODEL,
+            status: "running",
+            ownerUserId: ownerUserId(),
+            turnKey,
+            promptText: "",
+            inputSnapshotJson: JSON.stringify({
+              text: input.text,
+              playbook: false,
+              idempotencyKey: input.key,
+              userMessageId: input.userMessageId,
+              processingId: processing.id,
+            }),
+          },
+        });
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+        call = await tx.aiCall.findUniqueOrThrow({ where: { turnKey } });
+      }
+    }
+    return { processing, call };
+  });
+  if (v03TestSeams.afterAiCallBeforeBind) {
+    await v03TestSeams.afterAiCallBeforeBind({ turnKey, callId: created.call.id });
+  }
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "DialogueMessage" WHERE id = ${created.processing.id} FOR UPDATE`;
+    const processing = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: created.processing.id } });
+    const payload = parseTurnPayload(processing.payloadJson);
+    const call = await tx.aiCall.findUniqueOrThrow({ where: { turnKey } });
+    if (payload.aiCallId !== call.id) {
+      await tx.dialogueMessage.update({
+        where: { id: processing.id },
+        data: {
+          payloadJson: JSON.stringify({
+            ...payload,
+            userMessageId: input.userMessageId,
+            idempotencyKey: input.key,
+            aiCallId: call.id,
+          }),
+        },
+      });
+    }
+    return {
+      processing: await tx.dialogueMessage.findUniqueOrThrow({ where: { id: processing.id } }),
+      call,
+    };
+  });
 }
 
 function parseTurnPayload(raw: string): { userMessageId?: string; aiCallId?: string; idempotencyKey?: string } {
@@ -415,57 +502,13 @@ export async function sendDialogueMessage(
     }
     if (v03TestSeams.afterUserMessageCreate) await v03TestSeams.afterUserMessageCreate();
 
-    const claimKey = turnClaimKey(thread.id, key);
-    let processing = await prisma.dialogueMessage.findFirst({
-      where: { threadId: thread.id, claimKey },
+    const { processing, call: reusable } = await ensureDialogueTurnBinding({
+      reelId,
+      threadId: thread.id,
+      userMessageId: userMessage.id,
+      key,
+      text,
     });
-    if (!processing) {
-      processing = await prisma.dialogueMessage.create({
-        data: {
-          threadId: thread.id,
-          role: "assistant",
-          kind: "processing",
-          body: "Разбираю вашу мысль…",
-          status: "pending",
-          claimKey,
-          idempotencyKey: `assistant:${key}`,
-          payloadJson: JSON.stringify({ userMessageId: userMessage.id, idempotencyKey: key }),
-        },
-      });
-    }
-
-    let boundCallId = parseTurnPayload(processing.payloadJson).aiCallId;
-    if (!boundCallId) {
-      const placeholder = await prisma.aiCall.create({
-        data: {
-          kind: "dialogue",
-          reelId,
-          model: LLM_MODEL,
-          status: "running",
-          ownerUserId: ownerUserId(),
-          promptText: "",
-          inputSnapshotJson: JSON.stringify({
-            text,
-            playbook: false,
-            idempotencyKey: key,
-            userMessageId: userMessage.id,
-            processingId: processing.id,
-          }),
-        },
-      });
-      processing = await prisma.dialogueMessage.update({
-        where: { id: processing.id },
-        data: {
-          payloadJson: JSON.stringify({
-            userMessageId: userMessage.id,
-            idempotencyKey: key,
-            aiCallId: placeholder.id,
-          }),
-        },
-      });
-      boundCallId = placeholder.id;
-    }
-    const reusable = await prisma.aiCall.findUnique({ where: { id: boundCallId } });
 
     try {
       if (reusable?.responseText && reusable.status !== "done") {
@@ -490,7 +533,7 @@ export async function sendDialogueMessage(
       const { prompt: userPrompt, material } = await freezeThoughtPrompt(reelId, thread.id, text, {
         userMessageId: userMessage.id,
       });
-      const call = reusable ?? (await prisma.aiCall.findUniqueOrThrow({ where: { id: boundCallId } }));
+      const call = reusable;
       await prisma.aiCall.update({
         where: { id: call.id },
         data: {
