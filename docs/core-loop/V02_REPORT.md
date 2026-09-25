@@ -6,7 +6,7 @@ V02_BASE_SHA: `4223599e6ddb9e6be0d1a09d9c6b433d84912779`.
 V01_HEAD: `d34e8dee2243ae109f2e535a439784117cef3aff`.
 Ветка: `feat/v02-from-base`.
 
-Live Supabase не менялся. V03: **not started**. BASE для V03 этим коммитом не назначается.
+Live Supabase не менялся. V03: **accepted** (`V03_HEAD` `b5278f468666330bc30bb6cd9378f2f02f858264`). V04: **not started**. BASE для V04 не назначен.
 
 ## Что сделано
 

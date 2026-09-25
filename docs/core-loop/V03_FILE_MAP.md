@@ -1,6 +1,8 @@
 # V03 — карта файлов
 
+V03: **accepted**. V03_HEAD: `b5278f468666330bc30bb6cd9378f2f02f858264`.
 V03_BASE_SHA: `66cbcc0c3fc68a5b0786a4e9036a13d523ac3083`.
+V04: **not started**. BASE для V04: **not assigned**.
 
 | Зона | Файлы |
 |---|---|

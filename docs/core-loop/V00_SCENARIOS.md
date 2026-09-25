@@ -4,7 +4,7 @@
 Файлов `thought-opening` / `dialogue-reply` на этом SHA нет.
 Целевой путь: [`CONTRACT.md`](./CONTRACT.md). Матрица: [`PLAN.md`](./PLAN.md).
 
-Auth принят. Landing принят. DB00-fix принят. V00 принят. V01 принят (`V01_HEAD` `d34e8dee2243ae109f2e535a439784117cef3aff`). V02 принят (`V02_HEAD` `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`). V03 не начат. BASE для V03 не назначен.
+Auth принят. Landing принят. DB00-fix принят. V00 принят. V01 принят (`V01_HEAD` `d34e8dee2243ae109f2e535a439784117cef3aff`). V02 принят (`V02_HEAD` `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`). V03 принят (`V03_HEAD` `b5278f468666330bc30bb6cd9378f2f02f858264`). V04 не начат. BASE для V04 не назначен.
 
 ## 1. Исходный материал без дубля
 

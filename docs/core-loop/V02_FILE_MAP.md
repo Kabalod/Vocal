@@ -2,7 +2,7 @@
 
 V02: **accepted**. V02_HEAD: `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`.
 V02_BASE_SHA: `4223599e6ddb9e6be0d1a09d9c6b433d84912779`.
-V03: **not started**. BASE для V03 не назначен.
+V03: **accepted** (`V03_HEAD` `b5278f468666330bc30bb6cd9378f2f02f858264`). V04: **not started**. BASE для V04 не назначен.
 
 | Зона | Файлы |
 |---|---|

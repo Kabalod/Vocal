@@ -6,7 +6,8 @@ AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 BASE_SHA: `34abcd78c70b2fa31bd717aeff56acc31577c0d1`.
 V01: **accepted**. V01_HEAD: `d34e8dee2243ae109f2e535a439784117cef3aff`.
 V02: **accepted**. V02_HEAD: `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`.
-V03: **not started**. BASE для V03 не назначен.
+V03: **accepted**. V03_HEAD: `b5278f468666330bc30bb6cd9378f2f02f858264`.
+V04: **not started**. BASE для V04 не назначен.
 V00: **accepted**.
 
 ## Условия перед V01
@@ -49,7 +50,7 @@ Next 15, Prisma 6, PostgreSQL для приложения и тестов, Groq,
 
 ## Документы после приёмки V00
 
-- `AGENTS.md` — V01 и V02 accepted (`V01_HEAD`, `V02_HEAD`), V03 not started. BASE для V03 не назначается здесь.
+- `AGENTS.md` — V01, V02 и V03 accepted (`V01_HEAD`, `V02_HEAD`, `V03_HEAD`). V04 not started. BASE для V04 не назначается здесь.
 - Карта I00 (BASE для I01) — отдельный контур, этим назначением не закрывается.
 
 ## Расход

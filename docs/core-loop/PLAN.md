@@ -6,7 +6,8 @@ V00: **accepted**.
 BASE_SHA (старт V01): `34abcd78c70b2fa31bd717aeff56acc31577c0d1`.
 V01: **accepted**. V01_HEAD: `d34e8dee2243ae109f2e535a439784117cef3aff`. Документы этапа: [`V01_REPORT.md`](./V01_REPORT.md), [`V01_ADR.md`](./V01_ADR.md), [`V01_FILE_MAP.md`](./V01_FILE_MAP.md), [`V01_SCENARIOS.md`](./V01_SCENARIOS.md).
 V02: **accepted**. V02_HEAD: `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`. V02_BASE_SHA: `4223599e6ddb9e6be0d1a09d9c6b433d84912779`. Документы этапа: [`V02_REPORT.md`](./V02_REPORT.md), [`V02_ADR.md`](./V02_ADR.md), [`V02_FILE_MAP.md`](./V02_FILE_MAP.md), [`V02_SCENARIOS.md`](./V02_SCENARIOS.md).
-V03: **in progress** (not accepted). V03_BASE_SHA: `66cbcc0c3fc68a5b0786a4e9036a13d523ac3083`. Документы этапа: [`V03_REPORT.md`](./V03_REPORT.md), [`V03_ADR.md`](./V03_ADR.md), [`V03_FILE_MAP.md`](./V03_FILE_MAP.md), [`V03_SCENARIOS.md`](./V03_SCENARIOS.md).
+V03: **accepted**. V03_HEAD: `b5278f468666330bc30bb6cd9378f2f02f858264`. V03_BASE_SHA: `66cbcc0c3fc68a5b0786a4e9036a13d523ac3083`. Документы этапа: [`V03_REPORT.md`](./V03_REPORT.md), [`V03_ADR.md`](./V03_ADR.md), [`V03_FILE_MAP.md`](./V03_FILE_MAP.md), [`V03_SCENARIOS.md`](./V03_SCENARIOS.md).
+V04: **not started**. BASE для V04: **not assigned**.
 AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 
 | Этап | Содержание |
@@ -22,6 +23,6 @@ AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 
 Путь процесса — в [`CONTRACT.md`](./CONTRACT.md). Действия агента (`ask_question`, `suggest_take`, `content_sufficient`, `redirect_to_task`) не являются статусами мысли. Сценарий не является пятым действием V03 и не генерируется в диалоге.
 
-V04 и V05 не начаты. Документ [`V05_SCENARIO_TAB_SPEC.md`](./V05_SCENARIO_TAB_SPEC.md) — контракт будущего этапа, не реализация.
+V04 и V05 не начаты. BASE для V04 не назначен. Документ [`V05_SCENARIO_TAB_SPEC.md`](./V05_SCENARIO_TAB_SPEC.md) — контракт будущего этапа, не реализация.
 
-V00 принят. V01 принят на `V01_HEAD`. V02 принят на `V02_HEAD`. V03 начат от `V03_BASE_SHA`, не принят. Baseline и `migrate resolve` на live Supabase не применять.
+V00 принят. V01 принят на `V01_HEAD`. V02 принят на `V02_HEAD`. V03 принят на `V03_HEAD`. Baseline, миграции 8–9 и `migrate resolve` на live Supabase не применять.

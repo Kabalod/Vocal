@@ -3,7 +3,7 @@
 V01: **accepted**. V01_HEAD: `d34e8dee2243ae109f2e535a439784117cef3aff`.
 BASE (старт V01): `34abcd78c70b2fa31bd717aeff56acc31577c0d1`. Код аудита: `f971a7f`.
 V02: **accepted**. V02_HEAD: `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`.
-V03: **not started**. BASE для V03 не назначен.
+V03: **accepted** (`V03_HEAD` `b5278f468666330bc30bb6cd9378f2f02f858264`). V04: **not started**. BASE для V04 не назначен.
 
 | Зона | Файлы |
 |---|---|

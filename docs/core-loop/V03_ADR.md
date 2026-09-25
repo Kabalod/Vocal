@@ -1,8 +1,9 @@
 # V03 — решения
 
 V03_BASE_SHA: `66cbcc0c3fc68a5b0786a4e9036a13d523ac3083`.
+V03_HEAD: `b5278f468666330bc30bb6cd9378f2f02f858264`.
 V02_HEAD остаётся `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`.
-V03: **in progress**. Live migrate на Supabase не применять.
+V03: **accepted**. V04: **not started**. BASE для V04: **not assigned**. Live migrate на Supabase не применять.
 
 ## Действия не статусы
 

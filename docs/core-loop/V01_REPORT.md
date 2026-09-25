@@ -6,7 +6,7 @@ BASE_SHA (старт V01): `34abcd78c70b2fa31bd717aeff56acc31577c0d1`.
 AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 Первый коммит этапа: `d8e12c18be3f1b37b49d2d9edf38b0d1b37ce9bb`.
 
-Live Supabase не менялся. V02: **accepted** (`V02_HEAD` `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`). V03: **not started**.
+Live Supabase не менялся. V02: **accepted** (`V02_HEAD` `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`). V03: **accepted** (`V03_HEAD` `b5278f468666330bc30bb6cd9378f2f02f858264`). V04: **not started**. BASE для V04 не назначен.
 
 ## Закрытые блокеры ревью `d8e12c1`
 
