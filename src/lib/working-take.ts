@@ -4,6 +4,7 @@ import { ReelError } from "@/lib/reels";
 import { StateVersionError } from "@/lib/ai/usage-guard";
 import { v01TestSeams } from "@/lib/v01-test-seams";
 import type { Prisma } from "@prisma/client";
+import { actionMessage, assertAgentActionAllowed, type AgentAction } from "@/lib/agent-action";
 
 export type DialogueMaterialSnapshot = {
   workingTakeId: string;
@@ -119,8 +120,7 @@ export async function commitDialogueReply(input: {
   snapshot: DialogueMaterialSnapshot;
   callId: string;
   processingId: string;
-  reply: string;
-  proposal: string | null;
+  action: AgentAction;
   rawText: string;
   promptTokens: number | null;
   completionTokens: number | null;
@@ -140,31 +140,32 @@ export async function commitDialogueReply(input: {
     if (!(await matches())) throw new StateVersionError();
     if (v01TestSeams.afterLastMaterialCheck) await v01TestSeams.afterLastMaterialCheck();
 
+    const take = await tx.take.findFirst({
+      where: { id: input.snapshot.workingTakeId, reelId: input.reelId },
+      select: { inputType: true, selectedTranscriptId: true },
+    });
+    if (!take) throw new ReelError("Рабочий дубль должен принадлежать этой карточке.", "TAKE_NOT_IN_REEL");
+    await assertAgentActionAllowed(tx, input.reelId, input.action, take);
+
+    const message = actionMessage(input.action);
     await tx.aiCall.update({
       where: { id: input.callId },
       data: {
         status: "done",
         responseText: input.rawText,
-        resultJson: JSON.stringify({ reply: input.reply, scriptProposal: input.proposal }),
+        resultJson: JSON.stringify(input.action),
         promptTokens: input.promptTokens,
         completionTokens: input.completionTokens,
       },
     });
     await tx.dialogueMessage.update({
       where: { id: input.processingId },
-      data: { kind: "text", body: input.reply, status: "done" },
+      data: {
+        kind: message.kind,
+        body: message.body,
+        payloadJson: JSON.stringify({ action: input.action }),
+        status: "done",
+      },
     });
-    if (input.proposal) {
-      await tx.dialogueMessage.create({
-        data: {
-          threadId: input.threadId,
-          role: "assistant",
-          kind: "script_proposal",
-          body: input.proposal,
-          payloadJson: JSON.stringify({ script: input.proposal, transferred: false }),
-          status: "done",
-        },
-      });
-    }
   });
 }

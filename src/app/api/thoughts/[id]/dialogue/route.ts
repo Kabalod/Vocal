@@ -2,6 +2,7 @@ import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
 import { withApiUser } from "@/lib/auth/request";
 import { AiBudgetError, AiInflightError, StateVersionError } from "@/lib/ai/usage-guard";
+import { AgentActionError } from "@/lib/agent-action";
 import { DialogueError, listDialoguePage, sendDialogueMessage, sendDialogueVoice } from "@/lib/dialogue";
 import { ReelError } from "@/lib/reels";
 
@@ -12,6 +13,7 @@ function errorResponse(error: unknown) {
   if (
     error instanceof ReelError ||
     error instanceof DialogueError ||
+    error instanceof AgentActionError ||
     error instanceof AiBudgetError ||
     error instanceof AiInflightError ||
     error instanceof StateVersionError

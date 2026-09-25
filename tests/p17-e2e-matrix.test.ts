@@ -68,6 +68,7 @@ test("P17 matrix: thought without profile through finals, upload, compare, expor
   const { createThoughtFromText } = await import("../src/lib/thought-create");
   const { listDialoguePage, sendDialogueMessage, sendDialogueVoice, transferDialogueProposal } =
     await import("../src/lib/dialogue");
+  const { askQuestionJson, insertTestScriptProposal } = await import("./helpers/agent-action-json");
   const { patchScriptDraft, finalizeScriptDraft, setFinalScript, listScriptWorkspace } =
     await import("../src/lib/scripts");
   const { saveOriginalIfAbsent } = await import("../src/lib/transcripts");
@@ -101,14 +102,11 @@ test("P17 matrix: thought without profile through finals, upload, compare, expor
     reel.id,
     { text: "Сделать короче и яснее.", idempotencyKey: "p17-dlg-1" },
     async () => ({
-      text: JSON.stringify({
-        reply: "Какой момент главный?",
-        scriptProposal: "Говорю коротко: мысль без профиля.",
-      }),
+      text: askQuestionJson("Какой момент главный?"),
       usage: { promptTokens: 6, completionTokens: 4 },
     }),
   );
-  const proposal = dialogue.messages.find((item) => item.kind === "script_proposal");
+  const proposal = await insertTestScriptProposal(prisma, dialogue.threadId, "Говорю коротко: мысль без профиля.");
   assert.ok(proposal);
 
   const takesBeforeVoice = await prisma.take.count({ where: { reelId: reel.id } });
@@ -116,7 +114,7 @@ test("P17 matrix: thought without profile through finals, upload, compare, expor
     reel.id,
     { file: new File(["x"], "reply.webm", { type: "audio/webm" }), idempotencyKey: "p17-voice-1" },
     async () => ({
-      text: JSON.stringify({ reply: "Понял голосовой ответ.", scriptProposal: null }),
+      text: askQuestionJson("Понял голосовой ответ."),
       usage: { promptTokens: 2, completionTokens: 2 },
     }),
     async () => ({ text: "Главное — ясность", segments: [], model: "mock" }),

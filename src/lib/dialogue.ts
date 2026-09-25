@@ -1,7 +1,6 @@
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
@@ -20,6 +19,8 @@ import {
   snapshotFromLoaded,
 } from "@/lib/working-take";
 import { v01TestSeams } from "@/lib/v01-test-seams";
+import { AgentActionError, parseAgentAction } from "@/lib/agent-action";
+import { getThoughtState } from "@/lib/thought-state";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
 
@@ -36,12 +37,7 @@ export class DialogueError extends Error {
   }
 }
 
-const replySchema = z.object({
-  reply: z.string().min(1),
-  scriptProposal: z.string().nullable().optional(),
-});
-
-const DIALOGUE_SYSTEM = `Ты Vocal. Помогаешь автору раскрыть свою мысль в разговоре. Опирайся только на материал и переписку. Не выдумывай личный опыт, факты и мотивы. Не ставь баллы. Не создавай параллельную редакторскую рубрику. Playbook не копируй списком. Верни только JSON.`;
+const DIALOGUE_SYSTEM = `Ты Vocal. Помогаешь автору раскрыть свою мысль. Опирайся только на материал и переписку. Не выдумывай факты и мотивы. Не ставь баллы. Действия не являются статусом мысли. Верни только JSON одного действия: ask_question, suggest_take, content_sufficient или redirect_to_task.`;
 
 type Payload = {
   voiceDurationLabel?: string;
@@ -249,11 +245,26 @@ async function freezeThoughtPrompt(reelId: string, threadId: string, authorText:
     `Подтверждённый профиль (только понимание): ${JSON.stringify(live.live.understandingOnly)}`,
     `Недавняя переписка:\n${recent}`,
     `Ответ автора: ${authorText}`,
-    `JSON: {"reply":"","scriptProposal":null}`,
+    `Состояние мысли: ${JSON.stringify(await thoughtStatePrompt(reelId))}`,
+    `JSON одного действия: {"action":"ask_question","question":"","gapId":"","clarificationReason":"","whyUnknown":""} или {"action":"suggest_take","mainIdea":"","takeTask":"","evidenceRefs":[]} или {"action":"content_sufficient","checkedInTranscript":"","whyNoGaps":""} или {"action":"redirect_to_task","currentTask":""}`,
   ]
     .filter(Boolean)
     .join("\n\n");
   return { prompt, material };
+}
+
+async function thoughtStatePrompt(reelId: string) {
+  try {
+    const state = await getThoughtState(reelId);
+    return {
+      intent: state.intent,
+      takeTask: state.takeTask,
+      facts: state.facts,
+      openGaps: state.openGaps,
+    };
+  } catch {
+    return { intent: "", takeTask: "", facts: [], openGaps: [] };
+  }
 }
 
 export async function buildThoughtMaterialContext(reelId: string): Promise<string> {
@@ -377,15 +388,14 @@ export async function sendDialogueMessage(
         user: userPrompt,
         label: "dialogue",
       });
-      const parsed = replySchema.parse(parseJsonObject(raw.text));
+      const action = parseAgentAction(parseJsonObject(raw.text));
       await commitDialogueReply({
         reelId,
         threadId: thread.id,
         snapshot: material,
         callId: call.id,
         processingId: processing.id,
-        reply: parsed.reply.trim(),
-        proposal: parsed.scriptProposal?.trim() || null,
+        action,
         rawText: raw.text,
         promptTokens: raw.usage?.promptTokens ?? null,
         completionTokens: raw.usage?.completionTokens ?? null,
@@ -409,6 +419,7 @@ export async function sendDialogueMessage(
       });
       if (error instanceof StateVersionError) throw error;
       if (error instanceof ReelError) throw new StateVersionError();
+      if (error instanceof AgentActionError) throw error;
     }
     return listDialoguePage(reelId);
   });

@@ -21,6 +21,7 @@ import {
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { finishVoiceRecording } from "../src/lib/media-session";
 import { createThoughtFromText } from "../src/lib/thought-create";
+import { askQuestionJson, insertTestScriptProposal } from "./helpers/agent-action-json";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -93,7 +94,7 @@ test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", asy
   const complete = async () => {
     completeCalls += 1;
     return {
-      text: JSON.stringify({ reply: "Давайте уточним сцену.", scriptProposal: "Говорю коротко и по делу." }),
+      text: askQuestionJson("Давайте уточним сцену."),
       usage: { promptTokens: 10, completionTokens: 8 },
     };
   };
@@ -114,7 +115,7 @@ test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", asy
     1,
   );
   assert.equal(first.messages.at(-1)?.id, second.messages.at(-1)?.id);
-  const proposal = first.messages.find((item) => item.kind === "script_proposal");
+  const proposal = await insertTestScriptProposal(prisma, first.threadId, "Говорю коротко и по делу.");
   assert.ok(proposal);
 
   const [transferred, parallel] = await Promise.all([

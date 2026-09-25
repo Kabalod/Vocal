@@ -9,6 +9,7 @@ import { createThoughtFromText } from "../src/lib/thought-create";
 import { createEditedRevision, ensureOriginalFromText, listTranscriptBundle } from "../src/lib/transcripts";
 import { v01TestSeams } from "../src/lib/v01-test-seams";
 import { PrismaClient } from "@prisma/client";
+import { askQuestionJson } from "./helpers/agent-action-json";
 
 test("working take is the third take by id, not the first two", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
@@ -105,7 +106,7 @@ test("dialogue 409 on stale expectedUpdatedAt; same send is one model call", asy
   const complete = async () => {
     completeCalls += 1;
     return {
-      text: JSON.stringify({ reply: "ок", scriptProposal: null }),
+      text: askQuestionJson("ок"),
       usage: { promptTokens: 2, completionTokens: 2 },
     };
   };
@@ -171,7 +172,7 @@ test("daily budget is counted per owner", async (t) => {
     reel.id,
     { text: "свой запрос", idempotencyKey: "v01-budget-ok" },
     async () => ({
-      text: JSON.stringify({ reply: "свой ответ", scriptProposal: null }),
+      text: askQuestionJson("свой ответ"),
       usage: { promptTokens: 1, completionTokens: 1 },
     }),
   );
@@ -214,7 +215,7 @@ test("stale working take, revision, or dialogue during AI is not saved", async (
             data: { workingTakeId: take2.id },
           });
           return {
-            text: JSON.stringify({ reply: staleReply, scriptProposal: null }),
+            text: askQuestionJson(staleReply),
             usage: { promptTokens: 1, completionTokens: 1 },
           };
         },
@@ -236,7 +237,7 @@ test("stale working take, revision, or dialogue during AI is not saved", async (
         async () => {
           await createEditedRevision(takeId, "новая выбранная ревизия UNIQUE_REV");
           return {
-            text: JSON.stringify({ reply: staleReply, scriptProposal: null }),
+            text: askQuestionJson(staleReply),
             usage: { promptTokens: 1, completionTokens: 1 },
           };
         },
@@ -263,7 +264,7 @@ test("stale working take, revision, or dialogue during AI is not saved", async (
             },
           });
           return {
-            text: JSON.stringify({ reply: staleReply, scriptProposal: null }),
+            text: askQuestionJson(staleReply),
             usage: { promptTokens: 1, completionTokens: 1 },
           };
         },
@@ -296,7 +297,7 @@ test("same idempotency key on two thoughts does not share a model call", async (
   const complete = async () => {
     completeCalls += 1;
     return {
-      text: JSON.stringify({ reply: `ответ ${completeCalls}`, scriptProposal: null }),
+      text: askQuestionJson(`ответ ${completeCalls}`),
       usage: { promptTokens: 1, completionTokens: 1 },
     };
   };
@@ -407,7 +408,7 @@ test("AiCall snapshot stores working take, revision, reel and dialogue versions"
     reel.id,
     { text: "зафиксируй материал", idempotencyKey: "v01-snapshot-send" },
     async () => ({
-      text: JSON.stringify({ reply: "зафиксировано", scriptProposal: null }),
+      text: askQuestionJson("зафиксировано"),
       usage: { promptTokens: 1, completionTokens: 1 },
     }),
   );
@@ -460,7 +461,7 @@ test("snapshot stays on the take used in the prompt if the pointer moves after t
         reel.id,
         { text: "после чтения", idempotencyKey: "v01-read-race-send" },
         async () => ({
-          text: JSON.stringify({ reply: "STALE_AFTER_READ", scriptProposal: null }),
+          text: askQuestionJson("STALE_AFTER_READ"),
           usage: { promptTokens: 1, completionTokens: 1 },
         }),
       ),
@@ -524,7 +525,7 @@ test("insert after last CAS check waits on the dialogue thread lock", async (t) 
     reel.id,
     { text: "после последней проверки", idempotencyKey: "v01-last-check-send" },
     async () => ({
-      text: JSON.stringify({ reply: "REPLY_UNDER_THREAD_LOCK", scriptProposal: null }),
+      text: askQuestionJson("REPLY_UNDER_THREAD_LOCK"),
       usage: { promptTokens: 1, completionTokens: 1 },
     }),
   );

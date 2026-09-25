@@ -1,0 +1,109 @@
+import { z } from "zod";
+import type { Prisma } from "@prisma/client";
+import { parseThoughtStateLists } from "@/lib/thought-state";
+
+export class AgentActionError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+    readonly status = 400,
+  ) {
+    super(message);
+    this.name = "AgentActionError";
+  }
+}
+
+const askQuestionSchema = z.object({
+  action: z.literal("ask_question"),
+  question: z.string().trim().min(1),
+  gapId: z.string().trim().min(1).optional(),
+  clarificationReason: z.string().trim().min(1).optional(),
+  whyUnknown: z.string().trim().min(1),
+});
+
+const suggestTakeSchema = z.object({
+  action: z.literal("suggest_take"),
+  mainIdea: z.string().trim().min(1),
+  takeTask: z.string().trim().min(1),
+  evidenceRefs: z.array(z.string().trim().min(1)).min(1),
+});
+
+const contentSufficientSchema = z.object({
+  action: z.literal("content_sufficient"),
+  checkedInTranscript: z.string().trim().min(1),
+  whyNoGaps: z.string().trim().min(1),
+});
+
+const redirectSchema = z.object({
+  action: z.literal("redirect_to_task"),
+  currentTask: z.string().trim().min(1),
+});
+
+export const agentActionSchema = z.discriminatedUnion("action", [
+  askQuestionSchema,
+  suggestTakeSchema,
+  contentSufficientSchema,
+  redirectSchema,
+]);
+
+export type AgentAction = z.infer<typeof agentActionSchema>;
+
+export function parseAgentAction(raw: unknown): AgentAction {
+  const parsed = agentActionSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new AgentActionError("Модель вернула недопустимое действие.", "AGENT_ACTION_INVALID");
+  }
+  if (
+    parsed.data.action === "ask_question" &&
+    !parsed.data.gapId &&
+    !parsed.data.clarificationReason
+  ) {
+    throw new AgentActionError("Нужен id пробела или причина уточнения.", "AGENT_ACTION_INVALID");
+  }
+  return parsed.data;
+}
+
+export function hasProcessedWorkingTake(take: { inputType: string; selectedTranscriptId: string | null }) {
+  return (take.inputType === "audio" || take.inputType === "video") && Boolean(take.selectedTranscriptId);
+}
+
+export async function assertAgentActionAllowed(
+  tx: Prisma.TransactionClient,
+  reelId: string,
+  action: AgentAction,
+  take: { inputType: string; selectedTranscriptId: string | null },
+) {
+  if (action.action === "content_sufficient" && !hasProcessedWorkingTake(take)) {
+    throw new AgentActionError(
+      "Достаточность можно объявить только после обработанного дубля.",
+      "ACTION_NOT_ALLOWED",
+    );
+  }
+
+  const state = await tx.thoughtState.findUnique({ where: { reelId } });
+  const lists = state
+    ? parseThoughtStateLists(state)
+    : { facts: [] as { id: string }[], openGaps: [] as { id: string; status: string }[], decisions: [] as string[] };
+
+  if (action.action === "ask_question" && action.gapId) {
+    const gap = lists.openGaps.find((item) => item.id === action.gapId);
+    if (!gap || gap.status !== "open") {
+      throw new AgentActionError("Вопрос должен ссылаться на открытый пробел.", "ACTION_GAP");
+    }
+  }
+
+  if (action.action === "suggest_take") {
+    const factIds = new Set(lists.facts.map((fact) => fact.id));
+    const missing = action.evidenceRefs.filter((id) => !factIds.has(id));
+    if (missing.length) {
+      throw new AgentActionError("Основания suggest_take должны быть фактами этой мысли.", "ACTION_EVIDENCE");
+    }
+  }
+}
+
+export function actionMessage(action: AgentAction): { kind: "question" | "text"; body: string } {
+  if (action.action === "ask_question") return { kind: "question", body: action.question };
+  if (action.action === "suggest_take") return { kind: "text", body: action.takeTask };
+  if (action.action === "content_sufficient") return { kind: "text", body: action.whyNoGaps };
+  return { kind: "text", body: action.currentTask };
+}

@@ -51,6 +51,7 @@ test("release routes: thought, dialogue, draft, finals, profile context, usage, 
   const { createThoughtFromText } = await import("../src/lib/thought-create");
   const { listDialoguePage, sendDialogueMessage, sendDialogueVoice, transferDialogueProposal } =
     await import("../src/lib/dialogue");
+  const { askQuestionJson, insertTestScriptProposal } = await import("./helpers/agent-action-json");
   const { patchScriptDraft, finalizeScriptDraft, setFinalScript, listScriptWorkspace } =
     await import("../src/lib/scripts");
   const { skipProfileDialogue, startProfileDialogue, sendProfileMessage, confirmProfilePortrait } =
@@ -76,11 +77,11 @@ test("release routes: thought, dialogue, draft, finals, profile context, usage, 
     reel.id,
     { text: "Сделать короче.", idempotencyKey: "rel-dlg-1" },
     async () => ({
-      text: JSON.stringify({ reply: "Какой момент главный?", scriptProposal: "Говорю коротко про тихий вечер." }),
+      text: askQuestionJson("Какой момент главный?"),
       usage: { promptTokens: 6, completionTokens: 4 },
     }),
   );
-  const proposal = dialogue.messages.find((item) => item.kind === "script_proposal");
+  const proposal = await insertTestScriptProposal(prisma, dialogue.threadId, "Говорю коротко про тихий вечер.");
   assert.ok(proposal);
   const transferred = await transferDialogueProposal(reel.id, proposal.id);
   assert.equal(transferred.messages.find((item) => item.id === proposal.id)?.proposal?.transferred, true);
@@ -95,7 +96,7 @@ test("release routes: thought, dialogue, draft, finals, profile context, usage, 
     reel.id,
     { file: new File(["x"], "reply.webm", { type: "audio/webm" }), idempotencyKey: "rel-voice-1" },
     async () => ({
-      text: JSON.stringify({ reply: "Понял голосовой ответ.", scriptProposal: null }),
+      text: askQuestionJson("Понял голосовой ответ."),
       usage: { promptTokens: 2, completionTokens: 2 },
     }),
     async () => ({ text: "Главное — тишина", segments: [], model: "mock" }),
@@ -170,7 +171,7 @@ test("release routes: thought, dialogue, draft, finals, profile context, usage, 
   await assert.rejects(
     () =>
       sendDialogueMessage(reel.id, { text: kept, idempotencyKey: "rel-budget" }, async () => ({
-        text: JSON.stringify({ reply: "нет", scriptProposal: null }),
+        text: askQuestionJson("нет"),
         usage: { promptTokens: 1, completionTokens: 1 },
       })),
     /лимит/i,

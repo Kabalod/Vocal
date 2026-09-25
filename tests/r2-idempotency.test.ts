@@ -11,6 +11,7 @@ import {
   unfinishedAmendPublishesPortrait,
 } from "../src/lib/product-contracts";
 import { emptyProfileFields } from "../src/types/profile";
+import { askQuestionJson } from "./helpers/agent-action-json";
 
 test("R2 keeps R1 mapping and product invariants", () => {
   assert.deepEqual(P13_P16_TO_R_PHASE, {
@@ -64,7 +65,7 @@ test("R2 retries do not duplicate thought, take, message, finals or export rows"
   const complete = async () => {
     completeCalls += 1;
     return {
-      text: JSON.stringify({ reply: "Уточним сцену.", scriptProposal: null }),
+      text: askQuestionJson("Уточним сцену."),
       usage: { promptTokens: 4, completionTokens: 4 },
     };
   };
