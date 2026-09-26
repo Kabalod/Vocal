@@ -2,14 +2,18 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
-import { DialogueError, runDialogueTurn, sendDialogueMessage } from "../src/lib/dialogue";
+import { emptyThoughtUpdate } from "../src/lib/agent-action";
+import { ownerUserId } from "../src/lib/auth/session";
+import { DialogueError, ensureReelThread, runDialogueTurn, sendDialogueMessage } from "../src/lib/dialogue";
 import { createThoughtFromText } from "../src/lib/thought-create";
 import { getThoughtState } from "../src/lib/thought-state";
 import { StateVersionError } from "../src/lib/ai/usage-guard";
 import { v03TestSeams } from "../src/lib/v03-test-seams";
+import { commitDialogueReply, readMaterialSnapshot } from "../src/lib/working-take";
 import { askQuestionJson, thoughtUpdateForUserText } from "./helpers/agent-action-json";
 import {
   C00_ENVELOPE_SCHEMA,
+  C00EnvelopeError,
   isC00Envelope,
   listC00Envelopes,
   parseC00Envelope,
@@ -163,4 +167,132 @@ test("failed commit does not leave a done envelope or done processing", async (t
     where: { threadId: thread.id, role: "assistant" },
   });
   assert.equal(processing.some((row) => row.status === "done" && (row.kind === "question" || row.kind === "text")), false);
+});
+
+test("saved response is restored without an active lease", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  t.after(() => {
+    v03TestSeams.afterClaimBeforeComplete = null;
+  });
+  const { reel } = await createThoughtFromText({
+    title: "C00 restore lease",
+    body: "Материал для восстановления ответа.",
+    idempotencyKey: "c00-restore-create",
+  });
+  const saved = askQuestionJson("сохранённый ответ без lease");
+  v03TestSeams.afterClaimBeforeComplete = async ({ callId }) => {
+    await prisma.aiCall.update({
+      where: { id: callId },
+      data: { responseText: saved },
+    });
+    throw new Error("stop before complete");
+  };
+  await runDialogueTurn(reel.id, { text: "уточни мысль", idempotencyKey: "c00-restore-1" }, async () => ({
+    text: askQuestionJson("не должен"),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  v03TestSeams.afterClaimBeforeComplete = null;
+  const interrupted = await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id, kind: "dialogue" } });
+  await prisma.aiCall.update({
+    where: { id: interrupted.id },
+    data: { execOwnerId: null, execLeaseUntil: null },
+  });
+  let completeCalls = 0;
+  await runDialogueTurn(reel.id, { text: "уточни мысль", idempotencyKey: "c00-restore-1" }, async () => {
+    completeCalls += 1;
+    return { text: askQuestionJson("не должен"), usage: { promptTokens: 1, completionTokens: 1 } };
+  });
+  assert.equal(completeCalls, 0);
+  const restored = await prisma.aiCall.findUniqueOrThrow({ where: { id: interrupted.id } });
+  assert.equal(restored.responseText, saved);
+  assert.equal(restored.status, "done");
+  assert.equal(restored.execOwnerId, null);
+  const envelope = parseC00Envelope(restored.resultJson);
+  assert.ok(envelope);
+  assert.equal(envelope.action.action, "ask_question");
+  if (envelope.action.action === "ask_question") {
+    assert.equal(envelope.action.question, "сохранённый ответ без lease");
+  }
+});
+
+test("legacy resultJson action wins over a mismatched resume action", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "C00 legacy mismatch",
+    body: "Материал для старого resultJson.",
+    idempotencyKey: "c00-legacy-mis-create",
+  });
+  const thread = await ensureReelThread(reel.id);
+  const storedAction = {
+    action: "ask_question" as const,
+    question: "Что главное?",
+    clarificationReason: "нужно уточнение задачи",
+    whyUnknown: "ещё не сказано",
+  };
+  const responseText = askQuestionJson("Что главное?");
+  const user = await prisma.dialogueMessage.create({
+    data: {
+      threadId: thread.id,
+      role: "user",
+      kind: "text",
+      body: "уточни мысль",
+      payloadJson: "{}",
+      status: "done",
+      idempotencyKey: "c00-legacy-mis-1",
+    },
+  });
+  const processing = await prisma.dialogueMessage.create({
+    data: {
+      threadId: thread.id,
+      role: "assistant",
+      kind: "processing",
+      body: "Разбираю вашу мысль…",
+      status: "pending",
+      claimKey: `dialogue-turn:${thread.id}:c00-legacy-mis-1`,
+      idempotencyKey: "assistant:c00-legacy-mis-1",
+      payloadJson: JSON.stringify({ userMessageId: user.id, idempotencyKey: "c00-legacy-mis-1" }),
+    },
+  });
+  const call = await prisma.aiCall.create({
+    data: {
+      kind: "dialogue",
+      reelId: reel.id,
+      model: "test",
+      status: "done",
+      ownerUserId: ownerUserId(),
+      turnKey: thoughtDialogueTurnKey(thread.id, "c00-legacy-mis-1"),
+      promptText: "",
+      inputSnapshotJson: JSON.stringify({ userMessageId: user.id, processingId: processing.id }),
+      responseText,
+      resultJson: JSON.stringify(storedAction),
+    },
+  });
+  const snapshot = await readMaterialSnapshot(reel.id, thread.id);
+  await assert.rejects(
+    () =>
+      commitDialogueReply({
+        reelId: reel.id,
+        threadId: thread.id,
+        snapshot,
+        callId: call.id,
+        processingId: processing.id,
+        userMessageId: user.id,
+        turnKey: "c00-legacy-mis-1",
+        action: { action: "redirect_to_task", currentTask: "вернитесь к мысли" },
+        thoughtUpdate: emptyThoughtUpdate(),
+        rawText: responseText,
+        promptTokens: 1,
+        completionTokens: 1,
+      }),
+    (error: unknown) => error instanceof C00EnvelopeError && error.code === "C00_ACTION_MISMATCH",
+  );
+  const afterCall = await prisma.aiCall.findUniqueOrThrow({ where: { id: call.id } });
+  assert.equal(afterCall.resultJson, JSON.stringify(storedAction));
+  assert.equal(isC00Envelope(afterCall.resultJson), false);
+  assert.equal(readThoughtAction(afterCall.resultJson)?.action, "ask_question");
+  const afterProcessing = await prisma.dialogueMessage.findUniqueOrThrow({ where: { id: processing.id } });
+  assert.equal(afterProcessing.status, "pending");
+  assert.equal(afterProcessing.kind, "processing");
 });

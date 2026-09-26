@@ -1,6 +1,6 @@
 # C00 — проект слоя исправлений и сигналов
 
-Status: документы C00 **приняты** (`8cb7351`). C00-01 пишет конверт `c00-envelope-1` в `AiCall.resultJson` хода мысли (`decision`/`correction` = `null`). Продукт C00 **не принят**. V04 **not started**, **не принят**. Prisma и live Supabase не менялись.
+Status: документы C00 **приняты** (`8cb7351`). C00-01 пишет конверт `c00-envelope-1` в `AiCall.resultJson` хода мысли (`decision`/`correction` = `null`). Продукт C00 **не принят**. V04 **not started**, **не принят**. Prisma и live Supabase не менялись. Запись хода: владелец lease или точное восстановление `responseText`; legacy `resultJson` читается через `readThoughtAction`.
 
 ## Сверка предыдущего этапа (факт HEAD)
 

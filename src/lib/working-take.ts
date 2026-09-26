@@ -11,6 +11,8 @@ import {
   buildC00Envelope,
   C00EnvelopeError,
   parseC00Envelope,
+  readThoughtAction,
+  sameThoughtAction,
   thoughtDialogueTurnKey,
 } from "@/lib/c00-envelope";
 import { DialogueTurnExecError } from "@/lib/dialogue-exec";
@@ -171,18 +173,26 @@ export async function commitDialogueReply(input: {
     if (call.turnKey !== expectedTurnKey || call.reelId !== input.reelId || call.ownerUserId !== ownerUserId()) {
       throw new C00EnvelopeError("Конверт не совпадает с вызовом хода.", "C00_ENVELOPE_MISMATCH");
     }
-    if (input.execOwnerId != null && input.execGeneration != null) {
+    const hasLeaseClaim = input.execOwnerId != null && input.execGeneration != null;
+    const restoringSavedResponse = call.responseText != null && input.rawText === call.responseText;
+    if (hasLeaseClaim) {
       if (call.execOwnerId !== input.execOwnerId || call.execGeneration !== input.execGeneration) {
         throw new DialogueTurnExecError("Результат хода уже записан другим исполнителем.", "TURN_FENCE");
       }
+    } else if (!restoringSavedResponse) {
+      throw new C00EnvelopeError(
+        "Нельзя записать ход без владельца lease или точного сохранённого ответа.",
+        "C00_LEASE_OR_RESTORE",
+      );
+    }
+    if (call.responseText != null && !restoringSavedResponse) {
+      throw new C00EnvelopeError("Текст ответа не совпадает с сохранённым.", "C00_RESPONSE_MISMATCH");
     }
     const existingEnvelope = parseC00Envelope(call.resultJson);
     if (existingEnvelope) assertEnvelopeMatchesCall(existingEnvelope, call);
-    const reuseCompleted =
-      call.status === "done" && (existingEnvelope !== null || Boolean(call.resultJson?.trim()));
-    if (reuseCompleted) {
-      const reusedAction = existingEnvelope?.action ?? input.action;
-      const message = actionMessage(reusedAction);
+
+    const finishProcessing = async (action: AgentAction) => {
+      const message = actionMessage(action);
       const priorRow = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: input.processingId } });
       let priorPayload: Record<string, unknown> = {};
       try {
@@ -197,7 +207,7 @@ export async function commitDialogueReply(input: {
           body: message.body,
           payloadJson: JSON.stringify({
             ...priorPayload,
-            action: reusedAction,
+            action,
             thoughtUpdate: input.thoughtUpdate,
             userMessageId: input.userMessageId,
             aiCallId: input.callId,
@@ -206,6 +216,20 @@ export async function commitDialogueReply(input: {
           status: "done",
         },
       });
+    };
+
+    if (call.status === "done") {
+      if (!restoringSavedResponse) {
+        throw new C00EnvelopeError("Текст ответа не совпадает с сохранённым.", "C00_RESPONSE_MISMATCH");
+      }
+      const storedAction = readThoughtAction(call.resultJson);
+      if (!storedAction) {
+        throw new C00EnvelopeError("Сохранённый результат хода повреждён.", "C00_RESULT_CORRUPT");
+      }
+      if (!sameThoughtAction(storedAction, input.action)) {
+        throw new C00EnvelopeError("Действие не совпадает с сохранённым результатом хода.", "C00_ACTION_MISMATCH");
+      }
+      await finishProcessing(storedAction);
       return;
     }
 
@@ -289,12 +313,11 @@ export async function commitDialogueReply(input: {
       });
     assertEnvelopeMatchesCall(envelope, call);
 
-    const message = actionMessage(input.action);
     const written = await tx.aiCall.updateMany({
       where: { id: call.id, turnKey: call.turnKey, status: { not: "done" } },
       data: {
         status: "done",
-        responseText: input.rawText,
+        responseText: restoringSavedResponse ? call.responseText : input.rawText,
         resultJson: JSON.stringify(envelope),
         promptTokens: input.promptTokens,
         completionTokens: input.completionTokens,
@@ -306,28 +329,6 @@ export async function commitDialogueReply(input: {
         throw new C00EnvelopeError("Не удалось записать конверт хода.", "C00_ENVELOPE_WRITE");
       }
     }
-    const priorRow = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: input.processingId } });
-    let priorPayload: Record<string, unknown> = {};
-    try {
-      priorPayload = JSON.parse(priorRow.payloadJson) as Record<string, unknown>;
-    } catch {
-      priorPayload = {};
-    }
-    await tx.dialogueMessage.update({
-      where: { id: input.processingId },
-      data: {
-        kind: message.kind,
-        body: message.body,
-        payloadJson: JSON.stringify({
-          ...priorPayload,
-          action: input.action,
-          thoughtUpdate: input.thoughtUpdate,
-          userMessageId: input.userMessageId,
-          aiCallId: input.callId,
-          idempotencyKey: input.turnKey,
-        }),
-        status: "done",
-      },
-    });
+    await finishProcessing(input.action);
   });
 }

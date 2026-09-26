@@ -569,8 +569,6 @@ export async function runDialogueTurn(
         rawText: reusable.responseText,
         promptTokens: reusable.promptTokens,
         completionTokens: reusable.completionTokens,
-        execOwnerId: reusable.execOwnerId,
-        execGeneration: reusable.execGeneration,
       });
       return listDialoguePage(reelId);
     }
@@ -670,8 +668,8 @@ export async function runDialogueTurn(
       rawText: call.responseText,
       promptTokens: call.promptTokens,
       completionTokens: call.completionTokens,
-      execOwnerId: execClaim?.ownerId ?? call.execOwnerId,
-      execGeneration: execClaim?.generation ?? call.execGeneration,
+      execOwnerId: execClaim?.ownerId ?? null,
+      execGeneration: execClaim?.generation ?? null,
     });
   } catch (error) {
     if (await isDialogueTurnComplete(thread.id, userMessage.id, key)) {

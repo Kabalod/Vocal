@@ -93,6 +93,10 @@ export function thoughtDialogueTurnKey(threadId: string, idempotencyKey: string)
   return `dialogue:${threadId}:${idempotencyKey}`;
 }
 
+export function sameThoughtAction(left: AgentAction, right: AgentAction) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export function assertEnvelopeMatchesCall(
   envelope: C00Envelope,
   call: { id: string; turnKey: string | null; ownerUserId: string; reelId: string | null },
