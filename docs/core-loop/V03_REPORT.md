@@ -6,7 +6,7 @@ V03_BASE_SHA: `66cbcc0c3fc68a5b0786a4e9036a13d523ac3083`.
 V02_HEAD: `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`.
 Ветка: `feat/v03-from-base`.
 
-Live Supabase не менялся. Миграции 8 и 9 на live не применялись. V04: **not started**. BASE для V04: **not assigned**.
+Live Supabase не менялся. Миграции 8 и 9 на live не применялись. Продукт V04: **not started**. V04_BASE_SHA: `564c9cf8534392501e125dda7ecc747c235a5c0d`.
 
 ## Финальная проверка
 
