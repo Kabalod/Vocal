@@ -1,6 +1,6 @@
 # C00 — сценарии проверки
 
-После продуктовых коммитов C00. Сейчас код этих путей не реализует. V04 не принят.
+Документы C00 **приняты**. Ожидаемое поведение **после** продуктовых коммитов. Код сейчас этих путей не реализует. Продукт C00 и V04 не приняты.
 
 ## Обязательные
 
@@ -10,7 +10,7 @@
 
 3. **Цитата против позиции.** Автор приводит чужую фразу. Она не становится `position` / фактом позиции. `quote_not_position`. Сценарий/портрет не получают цитату как мнение автора.
 
-4. **Одна локальная правка.** Один слот `ThoughtState` меняется. Привязанный черновик со `thoughtStateRevision` в снимке — stale при несовпадении revision (или дубля/расшифровки в снимке). Без revision в снимке — резерв: `correction.acceptedAt` > `ScriptDraft.updatedAt` и/или расхождение take в снимке. `Question` open: пока в `questions.ts` нет revision в снимке — stale по `Review.transcriptRevisionId` или `acceptedAt` > `Question.createdAt`. Status вопроса в БД не менять. `finalTakeId` не сбрасывается.
+4. **Одна локальная правка.** Один слот `ThoughtState` меняется. Привязанный черновик со `thoughtStateRevision` — stale при несовпадении revision или дубля/транскрипта в снимке. Без revision: stale, если изменился сохранённый дубль/транскрипт **или** `correction.acceptedAt` > `ScriptDraft.updatedAt`. Мысль исправлена, дубль тот же — черновик всё равно stale. `Question` open без revision в `questions.ts`: stale по `Review.transcriptRevisionId` или `acceptedAt` > `Question.createdAt`. Status вопроса не менять. `finalTakeId` не сбрасывается.
 
 4a. **Черновик между create и accept.** `AiCall` хода уже создан. Автор сохраняет `ScriptDraft` (`updatedAt` позже `AiCall.createdAt`). Затем транзакция принимает correction (`acceptedAt` позже `updatedAt`). Черновик stale. Сравнение с `AiCall.createdAt` запрещено: оно ложно оставило бы черновик свежим.
 

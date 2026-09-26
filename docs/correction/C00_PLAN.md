@@ -1,6 +1,6 @@
 # C00 — проверка, этапы, приёмка
 
-C00 документы only. Продукт не начинать. V04-01 / V05 / I01 не начинать.
+Документы C00 **приняты**. Продукт C00 не начинать. V04-01 / V05 / I01 не начинать.
 
 ## Проверочный набор
 
@@ -34,7 +34,7 @@ C00 документы only. Продукт не начинать. V04-01 / V05 
 
 2. Маршрутизатор только `correct_thought` / `keep_local` / `discard`. Injection и чужой user. Сценарии 1–4, 8, 11–12.
 
-3. `correct_thought` атомарно; в конверт писать `correction.acceptedAt` в той же транзакции. Stale — предикат: revision в снимке, иначе `acceptedAt` vs `ScriptDraft.updatedAt` / `Question.createdAt`. Не `AiCall.createdAt`. Задача этапа: добавить `thoughtStateRevision` в `questions.ts` `inputSnapshotJson` (сейчас его нет). Тест: черновик сохранён между create AiCall и accept correction.
+3. `correct_thought` атомарно; в конверт писать `correction.acceptedAt` в той же транзакции. Привязанный черновик без revision: stale при смене дубля/транскрипта **или** `acceptedAt` > `updatedAt` (мысль исправлена, дубль тот же — тоже stale). Не `AiCall.createdAt`. Задача этапа: `thoughtStateRevision` в `questions.ts` `inputSnapshotJson`. Тест: черновик между create и accept.
 
 4. `keep_local` / `discard` без смены среза. Молчание ≠ согласие.
 

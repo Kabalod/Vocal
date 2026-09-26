@@ -1,6 +1,6 @@
 # C00 — контракт решений и исправлений
 
-C00 **not started**, **не принят**. V04 продукт **not started**, **не принят**.
+Документы C00 **приняты**. Продукт C00 **not started**, **не принят**. V04 продукт **not started**, **не принят**.
 V03 **accepted**. Исходники и снимки не переписывать.
 
 ## Граница с V04
@@ -106,7 +106,9 @@ C00 **не** переносит такие исправления в автор�
 **Привязан и в снимке есть `thoughtStateRevision`:**  
 `stale` ⇔ текущий `ThoughtState.revision` ≠ снимку **или** (если в снимке есть) `workingTakeId` / `selectedTranscriptId` не совпадают с текущими.
 
-**Привязан, но `thoughtStateRevision` в снимке нет:** не выдумывать revision. Если в снимке есть `workingTakeId` / `selectedTranscriptId` — stale при их расхождении с текущими. Иначе то же резервное правило, что у непривязанного: есть correction этой мысли с `acceptedAt` **строго больше** `ScriptDraft.updatedAt`.
+**Привязан, но `thoughtStateRevision` в снимке нет:** не выдумывать revision.  
+`stale` ⇔ (в снимке есть `workingTakeId` / `selectedTranscriptId` и они не совпадают с текущими) **или** (есть correction этой мысли с `acceptedAt` строго больше `ScriptDraft.updatedAt`).  
+Исправление мысли при том же дубле/транскрипте всё равно даёт stale через `acceptedAt`. Нельзя ограничиваться только расхождением дубля.
 
 **Непривязанный** (нет версии/снимка): stale ⇔ есть correction с `acceptedAt` строго больше `ScriptDraft.updatedAt`.
 
