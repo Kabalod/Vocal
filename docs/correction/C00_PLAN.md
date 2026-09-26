@@ -34,7 +34,7 @@ C00 документы only. Продукт не начинать. V04-01 / V05 
 
 2. Маршрутизатор только `correct_thought` / `keep_local` / `discard`. Injection и чужой user. Сценарии 1–4, 8, 11–12.
 
-3. `correct_thought` атомарно. Stale ScriptDraft/вопросов — предикат чтения по снимку `inputSnapshotJson` / времени correction, без новых колонок.
+3. `correct_thought` атомарно; в конверт писать `correction.acceptedAt` в той же транзакции. Stale — предикат: revision в снимке, иначе `acceptedAt` vs `ScriptDraft.updatedAt` / `Question.createdAt`. Не `AiCall.createdAt`. Задача этапа: добавить `thoughtStateRevision` в `questions.ts` `inputSnapshotJson` (сейчас его нет). Тест: черновик сохранён между create AiCall и accept correction.
 
 4. `keep_local` / `discard` без смены среза. Молчание ≠ согласие.
 

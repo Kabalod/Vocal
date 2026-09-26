@@ -73,9 +73,11 @@ C00 **не** переносит такие исправления в автор�
 
 `decision` (минимум): `decisionId`, `action`, `signalType`, `scope` (`thought` \| `none`), `evidenceUserMessageIds`, `thoughtStateRevisionSeen`, `reasonCode`, `supersedesDecisionId?`, `contradictsDecisionId?`, `applyResult` (`applied` \| `not_applied`).
 
-`correction` (минимум): `correctionId`, `decisionId`, `targetKind`, `targetId`, `operation` (`supersede` \| `reopen` \| `clear_slot`), `beforeThoughtRevision`, `afterThoughtRevision`, `replacedBecause`.
+`correction` (минимум): `correctionId`, `decisionId`, `targetKind`, `targetId`, `operation` (`supersede` \| `reopen` \| `clear_slot`), `beforeThoughtRevision`, `afterThoughtRevision`, `replacedBecause`, `acceptedAt`.
 
-Журнал мысли = `AiCall` этой карточки со `status=done` и конвертом `c00-envelope-1`, порядок `createdAt` ASC, `id` ASC.
+`acceptedAt` — момент принятия correction, записывается в конверт **в той же транзакции**, что `AiCall.status=done`, increment `ThoughtState.revision` и финал processing. Это не `AiCall.createdAt` (создание строки / старт вызова модели) и не время HTTP до commit.
+
+Журнал принятых correction: конверты `c00-envelope-1` с `correction != null`, порядок `correction.acceptedAt` ASC, при равенстве `AiCall.id` ASC. Строка без `acceptedAt` в `correction` не участвует в stale.
 
 ## Идемпотентность и конкурентные ходы
 
@@ -93,28 +95,35 @@ C00 **не** переносит такие исправления в автор�
 
 В схеме нет `stale` у `ScriptDraft` и нет статуса `stale` у `Question` (`open` \| `answered` \| `skipped` \| `not_relevant`). C00 **не** добавляет колонки и **не** пишет вымышленный status. Stale — **предикат чтения**.
 
+`AiCall.createdAt` **не** сравнивать с `ScriptDraft.updatedAt` и не считать временем correction.
+
 ### ScriptDraft
 
-Не UPDATE `body` / `sourcesJson` ради пометки. Исторические `ScriptVersion` не затирать.
+Не UPDATE `body` / `sourcesJson` ради пометки. `ScriptVersion` не затирать. `saveToken` — конфликт редакторов, не актуальность к мысли.
 
-**Привязанный** черновик: есть `baseVersionId` → `ScriptVersion`, и у версии или породившего `AiCall` той же мысли (`reelId`, generate/script) в `inputSnapshotJson` есть `thoughtStateRevision` (и при наличии `workingTakeId`, `selectedTranscriptId`).  
-`stale` ⇔ текущий `ThoughtState.revision` ≠ снимку **или** рабочий дубль / выбранная ревизия расшифровки не совпадают со снимком.
+Черновик **привязан**, если есть `baseVersionId` → `ScriptVersion` и находится породивший script `AiCall` той же мысли (`reelId` + id версии в `resultJson` или тот же снимок).
 
-Связь version→AiCall проверяема: `AiCall.reelId` + `resultJson` с id версии (как сейчас `{ proposalId }`) или тот же `inputSnapshotJson`.
+**Привязан и в снимке есть `thoughtStateRevision`:**  
+`stale` ⇔ текущий `ThoughtState.revision` ≠ снимку **или** (если в снимке есть) `workingTakeId` / `selectedTranscriptId` не совпадают с текущими.
 
-**Непривязанный** (ручной, снимка revision нет): `stale` ⇔ существует конверт C00 этой мысли с `correction` и `AiCall.createdAt` **строго позже** `ScriptDraft.updatedAt`. Одна правка мысли после последнего сохранения черновика делает его stale. Правка черновика пользователем (`saveToken` / `updatedAt`) не сбрасывает мысль.
+**Привязан, но `thoughtStateRevision` в снимке нет:** не выдумывать revision. Если в снимке есть `workingTakeId` / `selectedTranscriptId` — stale при их расхождении с текущими. Иначе то же резервное правило, что у непривязанного: есть correction этой мысли с `acceptedAt` **строго больше** `ScriptDraft.updatedAt`.
 
-`saveToken` — конфликт редакторов, не признак актуальности к `ThoughtState`.
+**Непривязанный** (нет версии/снимка): stale ⇔ есть correction с `acceptedAt` строго больше `ScriptDraft.updatedAt`.
+
+**Черновик сохранён после создания `AiCall`, но до принятия correction.** Ход мысли создал `AiCall` (`status=running`, есть `createdAt`). Автор сохранил `ScriptDraft` (`updatedAt` позже `AiCall.createdAt`). Транзакция затем записала конверт с `correction.acceptedAt`. Сравнивать `createdAt` с `updatedAt` дало бы ложную свежесть. Предикат смотрит `acceptedAt`: оно позже сохранения → черновик **stale**. Если автор сохранит черновик уже после `acceptedAt`, резервное сравнение времени не помечает stale (для привязанного со revision по-прежнему решает несовпадение revision).
 
 ### Вопросы
 
-`Question.roundId` = `AiCall.id` раунда (`questions.ts`). `Review.transcriptRevisionId` задаёт расшифровку разбора.
+Сейчас `src/lib/ai/questions.ts` кладёт в `inputSnapshotJson` список вопросов и `transcriptRevisionHint` (id дубля), **без** `thoughtStateRevision`. Добавить `thoughtStateRevision` (и при необходимости рабочий дубль/ревизию расшифровки) в этот снимок — **явная задача продуктового этапа C00**, не подразумевается сделанной.
 
-`Question` со `status=open` **stale для UI/генерации** ⇔ у `AiCall` раунда в `inputSnapshotJson` есть `thoughtStateRevision` и она ≠ текущей **или** (если есть `reviewId`) `Review.transcriptRevisionId` ≠ `selectedTranscriptId` текущего рабочего дубля **или** после `Question.createdAt` есть C00 `correction` этой мысли.
+**Пока поля нет** (резерв): `Question` со `status=open` stale ⇔  
+(если есть `reviewId`) `Review.transcriptRevisionId` ≠ `selectedTranscriptId` текущего рабочего дубля  
+**или** есть correction этой мысли с `acceptedAt` строго больше `Question.createdAt`.  
+Не использовать `AiCall.createdAt` раунда вопросов.
 
-Строку `Question` не UPDATE в `not_relevant` только из-за stale. Исходный текст вопроса остаётся историей.
+**После продуктовой записи `thoughtStateRevision` в снимок раунда:** stale также ⇔ текущий `ThoughtState.revision` ≠ снимку раунда (`roundId` = `AiCall.id`). Резерв по `acceptedAt` остаётся, если снимка revision нет.
 
-`ReelContextSnapshot` не UPDATE; новый вызов собирает новый снимок.
+Строку `Question` не UPDATE в `not_relevant` из-за stale. `ReelContextSnapshot` не UPDATE.
 
 ## Немедленное исправление мысли
 

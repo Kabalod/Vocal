@@ -10,7 +10,9 @@
 
 3. **Цитата против позиции.** Автор приводит чужую фразу. Она не становится `position` / фактом позиции. `quote_not_position`. Сценарий/портрет не получают цитату как мнение автора.
 
-4. **Одна локальная правка.** Один слот `ThoughtState` меняется. Привязанный `ScriptDraft` stale по снимку revision в `inputSnapshotJson`; иначе — по `correction.createdAt` > `draft.updatedAt`. Строка draft не UPDATE ради флага. `Question` open stale по раунду/`Review.transcriptRevisionId`, status в БД не менять на вымышленный `stale`. `finalTakeId` не сбрасывается.
+4. **Одна локальная правка.** Один слот `ThoughtState` меняется. Привязанный черновик со `thoughtStateRevision` в снимке — stale при несовпадении revision (или дубля/расшифровки в снимке). Без revision в снимке — резерв: `correction.acceptedAt` > `ScriptDraft.updatedAt` и/или расхождение take в снимке. `Question` open: пока в `questions.ts` нет revision в снимке — stale по `Review.transcriptRevisionId` или `acceptedAt` > `Question.createdAt`. Status вопроса в БД не менять. `finalTakeId` не сбрасывается.
+
+4a. **Черновик между create и accept.** `AiCall` хода уже создан. Автор сохраняет `ScriptDraft` (`updatedAt` позже `AiCall.createdAt`). Затем транзакция принимает correction (`acceptedAt` позже `updatedAt`). Черновик stale. Сравнение с `AiCall.createdAt` запрещено: оно ложно оставило бы черновик свежим.
 
 5. **Повторяющиеся правки.** Несколько `correct_thought` только этой мысли. Портрет не меняется. Отдельного «накопить в V04» нет.
 

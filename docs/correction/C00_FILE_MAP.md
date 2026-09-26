@@ -26,7 +26,7 @@ C00 **not started**. Не менять эти файлы в C00-документ
 1. Единый конверт `c00-envelope-1` в `AiCall.resultJson` хода мысли (сейчас там только action: `working-take.ts`). Не класть C00 в `profile_dialogue` и не в payload `ProfileRevision`.
 2. Политика: логический модуль вроде `correction-policy.ts`.
 3. Вызов из `commitDialogueReply` — `correct_thought` / `keep_local` / `discard`. Портрет не вызывать.
-4. Stale: чтение `ScriptDraft`/`Question` + `AiCall.inputSnapshotJson` / `ScriptVersion.inputSnapshotJson` / `Review.transcriptRevisionId`; без новой колонки `stale`.
+4. Stale: `correction.acceptedAt` в конверте; revision в снимке, если есть. В `questions.ts` сейчас нет `thoughtStateRevision` — добавить отдельной задачей этапа. Без колонки `stale`.
 
 Не создавать в C00: векторную БД, scoring-v1, таблицы I00.
 
