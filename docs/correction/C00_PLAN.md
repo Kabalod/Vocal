@@ -16,10 +16,10 @@ C00 документы only. Продукт не начинать. V04-01 / V05 
 
 ### Метрики (после продукта, не в C00)
 
-- Доля `discard` / `keep_local` / `correct_thought` / `accumulate_preference` (счётчики id, не тексты).
-- Число ложных глобализаций (исправление мысли, попавшее в портрет) = 0 в приёмке.
+- Доля `discard` / `keep_local` / `correct_thought` (счётчики id, не тексты).
+- Число записей портрета из thought dialogue = 0.
 - Число UPDATE исходников = 0.
-- Дубликаты `idempotencyKey` = 0 новых decision.
+- Дубликаты `turnKey` = 0 новых decision.
 - Откат: выключить policy flag; ходы V03 остаются как на `V03_HEAD`.
 
 Условие отката продукта: падение `test:v01`/`v02`/`v03` или запись портрета из thought-диалога.
@@ -28,26 +28,24 @@ C00 документы only. Продукт не начинать. V04-01 / V05 
 
 Совместимость: Prisma PostgreSQL в репо, тесты на localhost Postgres, Auth `ownerUserId`. Не предполагать, что **live** равен схеме репо.
 
-0. Пользователь принимает C00 и назначает этап. Если нужен портрет — сначала продукт V04. C00 мысль может идти после V03 без V04, **без** `accumulate_preference`.
+0. Пользователь принимает C00 и назначает этап. C00 после V03, без продукта V04. Перенос в портрет не входит.
 
-1. Схема decision/correction в `resultJson` (без новой таблицы). Тесты структуры и idempotency. Нет UI confirm.
+1. Конверт `c00-envelope-1` в `resultJson` того же thought `AiCall` (`action` + `decision` + `correction`). Идемпотентность = `turnKey` + lease + CAS revision. Тесты дубля и гонки. Нет UI confirm.
 
-2. Маршрутизатор: модель предлагает `signalType`+кандидат; сервер выбирает action по таблице. Injection и чужой user — отказ/discard. Тесты сценариев 1–4, 8, 11–12 из `C00_SCENARIOS.md`.
+2. Маршрутизатор только `correct_thought` / `keep_local` / `discard`. Injection и чужой user. Сценарии 1–4, 8, 11–12.
 
-3. `correct_thought`: атомарно со срезом мысли; инвалидация draft/вопросов как stale. Регрессия V03.
+3. `correct_thought` атомарно. Stale ScriptDraft/вопросов — предикат чтения по снимку `inputSnapshotJson` / времени correction, без новых колонок.
 
-4. `keep_local` / `discard` без смены среза. Молчание ≠ decision согласия.
+4. `keep_local` / `discard` без смены среза. Молчание ≠ согласие.
 
-5. `accumulate_preference` — только после принятого V04, через V04 events. Не из thought fact.
-
-6. Eval-набор + flag отката. Не live migrate.
+5. Eval + flag отката. Не live migrate. Не менять контракт V04 из C00.
 
 Каждый продуктовый коммит: `test:v03` если задет диалог; typecheck. Полный `test:postgres` перед внешней приёмкой продукта, не в C00.
 
 ## Критерии приёмки продукта (будущее)
 
 - Нет ручного «принять наблюдение».
-- Локальная правка не глобальное правило.
+- Локальная правка не глобальное правило и не пишет портрет.
 - Исходники иммутабельны.
 - События с scope, источниками, версией, причиной замены.
 - Сценарии `C00_SCENARIOS.md` зелёные.

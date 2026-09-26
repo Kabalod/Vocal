@@ -15,7 +15,7 @@ C00 **not started**. Не менять эти файлы в C00-документ
 | `src/lib/thought-completion.ts` | `finalTakeId` (V06) |
 | `src/lib/auth/session.ts`, `auth/request.ts` | `ownerUserId` |
 | `src/lib/db-target.ts`, `src/lib/db.ts` | Postgres URL; тесты ≠ live |
-| `prisma/schema.prisma` | `ThoughtState`, `AiCall`, `DialogueMessage`, `ProfileRevision`, `ScriptDraft` |
+| `prisma/schema.prisma` | `AiCall.resultJson` / `inputSnapshotJson` / `turnKey`; `ScriptDraft.saveToken`; `Question.roundId`; `Review.transcriptRevisionId` — без колонки stale |
 | `tests/v03-agent-actions.test.ts` | эталон «уже правильно» |
 | `tests/profile-dialogue.test.ts` | confirm; не ослаблять до V04 |
 
@@ -23,10 +23,10 @@ C00 **not started**. Не менять эти файлы в C00-документ
 
 Предпочтительно без live migrate:
 
-1. `decision` / `correction` в `AiCall.resultJson` с `schemaVersion` (как V04 event), либо отдельный append-only JSON у мысли, **если** появится колонка на test Postgres.
-2. Политика: новый модуль `src/lib/correction-policy.ts` (имя логическое).
-3. Вызов из `commitDialogueReply` / `buildDialogueThoughtPatch` — только `correct_thought` / `discard` / `keep_local`.
-4. `accumulate_preference` — только стык `profile-dialogue` после принятого V04.
+1. Единый конверт `c00-envelope-1` в `AiCall.resultJson` хода мысли (сейчас там только action: `working-take.ts`). Не класть C00 в `profile_dialogue` и не в payload `ProfileRevision`.
+2. Политика: логический модуль вроде `correction-policy.ts`.
+3. Вызов из `commitDialogueReply` — `correct_thought` / `keep_local` / `discard`. Портрет не вызывать.
+4. Stale: чтение `ScriptDraft`/`Question` + `AiCall.inputSnapshotJson` / `ScriptVersion.inputSnapshotJson` / `Review.transcriptRevisionId`; без новой колонки `stale`.
 
 Не создавать в C00: векторную БД, scoring-v1, таблицы I00.
 

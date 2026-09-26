@@ -3,114 +3,127 @@
 C00 **not started**, **не принят**. V04 продукт **not started**, **не принят**.
 V03 **accepted**. Исходники и снимки не переписывать.
 
+## Граница с V04
+
+Исправления и сигналы из **thought dialogue** остаются в области **этой мысли** (`scope=thought` или отброс).
+
+C00 **не** переносит такие исправления в авторский портрет: нет `accumulate_preference`, нет `apply_update`, нет записи в `CreatorProfile` / `ProfileRevision` / V04 events из хода мысли.
+
+Перенос «локальная правка → глобальный портрет» потребует **отдельного** изменения контракта V04 (источники только из profile dialogue, проверки id, enum, пороги) и отдельной приёмки. Это не этап C00 и не скрытый V04-01.
+
+Явные общие сведения автор по-прежнему может сказать в **profile dialogue** — это контракт V04-00, не C00.
+
 ## Кто решает
 
-Пользователь **не** подтверждает и **не** исключает каждое наблюдение. Сервер по закрытым правилам выбирает одно:
+Пользователь не подтверждает и не исключает каждое наблюдение. Для хода мысли сервер выбирает одно:
 
 | Решение | Смысл |
 |---|---|
-| `correct_thought` | Исправить текущую мысль (факт, пробел, задача дубля) |
-| `keep_local` | Сигнал только этой мысли, не в авторскую память |
-| `accumulate_preference` | Осторожное предпочтение автора (контур V04, не факт мысли) |
+| `correct_thought` | Исправить текущую мысль |
+| `keep_local` | Сигнал только этой мысли; срез можно не менять |
 | `discard` | Отбросить |
 
-Молчание и отсутствие правки ≠ согласие. Ответ модели ≠ подтверждение её вывода. Текст пользователя, включая «запомни» / «игнорируй правила», **не** меняет серверные enum, пороги и владельца.
+Молчание ≠ согласие. Ответ модели ≠ подтверждение её вывода. Текст пользователя не меняет серверные правила.
 
-## Таксономия сигналов
+## Таксономия сигналов (мысль)
 
-| Код | Где живёт | Немедленно правит мысль | В глобальную память |
-|---|---|---|---|
-| `wrong_speaker` | мысль | да, если факт приписан не автору | нет |
-| `author_negation` | мысль | да, снимает/заменяет факт этой мысли | нет как правило |
-| `quote_not_position` | мысль | да, цитата не становится позицией | нет |
-| `local_correction` | мысль | да, один слот | нет |
-| `repeated_correction` | мысль + осторожный паттерн | да локально; preference только после порога V04 | не как факт |
-| `contradictory_correction` | мысль | weaken/оставить оба слота открытыми | не затирает глобальное |
-| `mood_or_once` | discard или keep_local | нет как устойчивое | нет (V04: нет категории mood) |
-| `praise_diagnosis_label` | discard | нет | нет |
-| `thought_episode` | keep_local или V04 `thought_specific` | нет в портрет | нет |
-| `explicit_global` | только profile dialogue + V04 `apply_update` | нет | да, по порогам V04 |
-| `prompt_injection` | discard | нет | нет |
-| `stale_model` | discard / 409 | нет записи | нет |
-| `foreign_user` | отказ 401/403 | нет | нет |
+| Код | Действие C00 | Портрет |
+|---|---|---|
+| `wrong_speaker` | `correct_thought` при факте не-автора | нет |
+| `author_negation` | `correct_thought` слота этой мысли | нет |
+| `quote_not_position` | не писать цитату как позицию | нет |
+| `local_correction` | `correct_thought` одного слота | нет |
+| `repeated_correction` | снова только эта мысль | нет, даже при повторах |
+| `contradictory_correction` | новое decision + `contradictsDecisionId` | нет |
+| `mood_or_once` | `discard` или `keep_local` | нет |
+| `praise_diagnosis_label` | `discard` | нет |
+| `thought_episode` | `keep_local` | нет |
+| `prompt_injection` | `discard` | нет |
+| `stale_model` | не применять / 409 | нет |
+| `foreign_user` | 401/403 | нет |
 
-Ограничения: один сигнал не создаёт два решения с разным `scope`. Исправление факта мысли **никогда** не есть `accumulate_preference` само по себе.
+Один сигнал — одно `decision`. `correct_thought` никогда не публикует портрет.
 
-## Событие решения
+## Конверт в `AiCall.resultJson`
 
-`schemaVersion = "c00-decision-1"`. Пишется только если решение принято. Не UPDATE.
+Один JSON-объект на **тот же** `AiCall`, что завершил ход мысли (V03 уже пишет в эту строку действие).
 
-| Поле | Правило |
-|---|---|
-| `decisionId` | новый id |
-| `ownerUserId` | = сессия; чужой id — отказ |
-| `scope` | `thought` \| `author_preference` \| `none` |
-| `reelId` | обязателен при `scope=thought` |
-| `action` | четыре значения выше |
-| `signalType` | enum таксономии |
-| `evidenceUserMessageIds` | существующие user-сообщения нужного thread |
-| `thoughtStateRevisionSeen` | снимок на входе; устарело → не применять вслепую |
-| `supersedesDecisionId` | если заменяет прежнее решение |
-| `contradictsDecisionId` | если ослабляет, не затирая |
-| `reasonCode` | закрытый код, не свободный текст политики |
-| `idempotencyKey` | `owner + object + operation + clientKey` |
-| `aiCallId` | вызов, породивший кандидата, или null если только серверное правило |
-| `applyResult` | применено / отложено / отказ |
+```json
+{
+  "schemaVersion": "c00-envelope-1",
+  "aiCallId": "<AiCall.id>",
+  "turnKey": "<AiCall.turnKey>",
+  "ownerUserId": "<AiCall.ownerUserId>",
+  "reelId": "<AiCall.reelId>",
+  "action": { },
+  "decision": null,
+  "correction": null
+}
+```
 
-Кандидат модели — отдельный JSON (как V03 `thoughtUpdate` / V04 union). Сервер **классификацию смысла не дублирует**: проверяет структуру, владельца, источники, revision, уникальность ключа.
+Связь с `AiCall`:
 
-Повтор того же `idempotencyKey` не создаёт второе решение.
+- `aiCallId` / `turnKey` / `ownerUserId` / `reelId` совпадают с колонками строки. Расхождение — отказ записи.
+- `responseText` — сырой ответ модели. Конверт **не** заменяет его и **не** дублирует полный промпт (`promptText` не копировать в конверт).
+- `action` — то же действие V03, которое сейчас лежит в `resultJson` целиком (`working-take.ts`). Пока продукта C00 нет, формат не менять.
+- `kind` вызова — диалог мысли, не `profile_dialogue`. Конверт C00 и event V04 (`v04-event-1`) **не смешивать** в одной строке.
+- `decision` есть, если сервер принял одно из трёх решений. У `discard`/`keep_local` без правки среза `correction` = `null`.
+- `correction` только вместе с `decision.action = correct_thought`.
+- Строка без `schemaVersion = c00-envelope-1` — не журнал C00 (как старые AiCall не replay V04).
 
-## Событие исправления
+`decision` (минимум): `decisionId`, `action`, `signalType`, `scope` (`thought` \| `none`), `evidenceUserMessageIds`, `thoughtStateRevisionSeen`, `reasonCode`, `supersedesDecisionId?`, `contradictsDecisionId?`, `applyResult` (`applied` \| `not_applied`).
 
-`schemaVersion = "c00-correction-1"`. Только при `correct_thought`.
+`correction` (минимум): `correctionId`, `decisionId`, `targetKind`, `targetId`, `operation` (`supersede` \| `reopen` \| `clear_slot`), `beforeThoughtRevision`, `afterThoughtRevision`, `replacedBecause`.
 
-| Поле | Правило |
-|---|---|
-| `correctionId` | новый id |
-| `decisionId` | родитель |
-| `reelId` / `ownerUserId` | мысль и автор |
-| `targetKind` | `fact` \| `gap` \| `intent` \| `takeTask` \| `position` |
-| `targetId` | id факта/пробела |
-| `operation` | `supersede` \| `reopen` \| `clear_slot` |
-| `beforeThoughtRevision` / `afterThoughtRevision` | `ThoughtState.revision` |
-| `replacedBecause` | `reasonCode` |
-| `dependents` | список инвалидаций (id черновика/вопросов), без удаления исходников |
+Журнал мысли = `AiCall` этой карточки со `status=done` и конвертом `c00-envelope-1`, порядок `createdAt` ASC, `id` ASC.
 
-Факт не вычищается из истории сообщений. Новый срез `factsJson` может пометить слот заменённым (`supersededBy` в производном состоянии продукта C00) или заменить текст только в текущем снимке мысли, сохранив старый id в событии. Сообщения, дубли, `TranscriptRevision`, старые `ProfileRevision` и `ReelContextSnapshot` не UPDATE.
+## Идемпотентность и конкурентные ходы
+
+Ключ хода — существующий `AiCall.turnKey` (уникален). Один ход → не больше одного конверта и одного `decision`.
+
+Повтор того же `turnKey`: вернуть уже записанный конверт. Второго `decisionId` нет.
+
+Запись конверта — только владелец текущего exec-lease (`execOwnerId` + `execGeneration`), в одной транзакции с `status=done`, финалом processing и (если нужно) CAS `ThoughtState.revision`, как V03 `commitDialogueReply`.
+
+Два разных ключа на одну мысль: сериализация через CAS `expectedRevision`. Проигравший не пишет конверт «поверх» и не применяет correction; 409 / повторная проверка после ожидания: заново читать `ThoughtState`, конверты `c00-envelope-1` и источники, затем применить или отказать.
+
+Частичной записи нет: нет `done` без согласованного конверта; нет increment revision без `correction`; нет `correction` без `decision`.
+
+## Stale без новых колонок
+
+В схеме нет `stale` у `ScriptDraft` и нет статуса `stale` у `Question` (`open` \| `answered` \| `skipped` \| `not_relevant`). C00 **не** добавляет колонки и **не** пишет вымышленный status. Stale — **предикат чтения**.
+
+### ScriptDraft
+
+Не UPDATE `body` / `sourcesJson` ради пометки. Исторические `ScriptVersion` не затирать.
+
+**Привязанный** черновик: есть `baseVersionId` → `ScriptVersion`, и у версии или породившего `AiCall` той же мысли (`reelId`, generate/script) в `inputSnapshotJson` есть `thoughtStateRevision` (и при наличии `workingTakeId`, `selectedTranscriptId`).  
+`stale` ⇔ текущий `ThoughtState.revision` ≠ снимку **или** рабочий дубль / выбранная ревизия расшифровки не совпадают со снимком.
+
+Связь version→AiCall проверяема: `AiCall.reelId` + `resultJson` с id версии (как сейчас `{ proposalId }`) или тот же `inputSnapshotJson`.
+
+**Непривязанный** (ручной, снимка revision нет): `stale` ⇔ существует конверт C00 этой мысли с `correction` и `AiCall.createdAt` **строго позже** `ScriptDraft.updatedAt`. Одна правка мысли после последнего сохранения черновика делает его stale. Правка черновика пользователем (`saveToken` / `updatedAt`) не сбрасывает мысль.
+
+`saveToken` — конфликт редакторов, не признак актуальности к `ThoughtState`.
+
+### Вопросы
+
+`Question.roundId` = `AiCall.id` раунда (`questions.ts`). `Review.transcriptRevisionId` задаёт расшифровку разбора.
+
+`Question` со `status=open` **stale для UI/генерации** ⇔ у `AiCall` раунда в `inputSnapshotJson` есть `thoughtStateRevision` и она ≠ текущей **или** (если есть `reviewId`) `Review.transcriptRevisionId` ≠ `selectedTranscriptId` текущего рабочего дубля **или** после `Question.createdAt` есть C00 `correction` этой мысли.
+
+Строку `Question` не UPDATE в `not_relevant` только из-за stale. Исходный текст вопроса остаётся историей.
+
+`ReelContextSnapshot` не UPDATE; новый вызов собирает новый снимок.
 
 ## Немедленное исправление мысли
 
-Условия `correct_thought`:
+Evidence — user-сообщения thread `scope=reel` этой карточки. После lock revision перепроверяется.
 
-- сигнал о **этой** мысли;
-- evidence — user-сообщения thread `scope=reel` этой карточки;
-- `thoughtStateRevisionSeen` совпадает или ход сериализован как V03 (повторная проверка после lock);
-- цель существует в текущем снимке.
-
-Действия:
-
-1. Применить патч `ThoughtState` (increment `revision`).
-2. Записать `decision` + `correction` атомарно с финализацией хода (тот же принцип, что V03 commit / V04 event).
-3. Инвалидировать зависимые **производные** этой мысли: пометить `ScriptDraft` / будущий V05 stale; не использовать старый review/question round как актуальный; новый `ReelContextSnapshot` собирать заново, старый не править.
-4. Не менять `finalTakeId`, файлы дублей, `Reel.status` именем действия.
-
-Исправление не копируется в портрет и не становится V04 `replace_explicit`.
-
-## Накопление памяти автора
-
-Только `accumulate_preference` и только через контракт V04 (`apply_update` в profile dialogue или эквивалентный вызов с теми же enum/порогами). Мысль не пишет слоты портрета.
-
-Противоречие глобального: `weaken` V04, не автозатирание. Устаревание: слот снят при `system_weight <= 1`. Удаление производного — снятие с отображаемого среза + event, не DELETE исходников.
-
-Пока продукт V04 не принят, `accumulate_preference` в коде **не реализовывать**. Документ фиксирует стык.
-
-`keep_local` хранится как decision с `scope=thought` без коррекции среза и без V04 event.
-
-`discard` — decision с `scope=none` или только метрика; минимум полей, без полного текста разговора.
+1. Патч `ThoughtState` (+1 revision).
+2. Конверт + `done` + processing в той же транзакции.
+3. Зависимые производные **считаются** stale по предикатам выше. Не менять `finalTakeId`, медиа дублей, `Reel.status`.
 
 ## Инъекция и секреты
 
-Серверные правила живут в коде. User body не парсится как override политики. Совпадение с командой — `discard` или `keep_local` (`prompt_injection` / non-content).
-
-В логи C00: `decisionId`, `reasonCode`, `reelId`, `ownerUserId` (не секрет). Не писать `promptText`, токены, полный transcript.
+Политика только в коде. В логи: id и `reasonCode`, не `promptText` и не полный разговор.
