@@ -4,7 +4,9 @@ import { ReelError } from "@/lib/reels";
 import { StateVersionError } from "@/lib/ai/usage-guard";
 import { v01TestSeams } from "@/lib/v01-test-seams";
 import type { Prisma } from "@prisma/client";
-import { actionMessage, assertAgentActionAllowed, type AgentAction, type ThoughtUpdate } from "@/lib/agent-action";
+import { actionMessage, assertAgentActionAllowed, emptyThoughtUpdate, type AgentAction, type ThoughtUpdate } from "@/lib/agent-action";
+import { routeC00Decision } from "@/lib/c00-router";
+import type { C00SignalCandidate } from "@/lib/c00-signal";
 import { applyThoughtStateInTx, buildDialogueThoughtPatch, parseThoughtStateLists } from "@/lib/thought-state";
 import {
   assertEnvelopeMatchesCall,
@@ -156,6 +158,7 @@ export async function commitDialogueReply(input: {
   completionTokens: number | null;
   execOwnerId?: string | null;
   execGeneration?: number | null;
+  c00Signal?: C00SignalCandidate | null;
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "DialogueThread" WHERE id = ${input.threadId} FOR UPDATE`;
@@ -241,6 +244,10 @@ export async function commitDialogueReply(input: {
     if (!(await matches())) {
       const latest = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: input.processingId } });
       if (isCommittedAssistantTurn(latest)) return;
+      const latestCall = await tx.aiCall.findUniqueOrThrow({ where: { id: input.callId } });
+      if (latestCall.status === "done" && (parseC00Envelope(latestCall.resultJson) || readThoughtAction(latestCall.resultJson))) {
+        return;
+      }
       throw new StateVersionError();
     }
     if (v01TestSeams.afterMaterialCheck) await v01TestSeams.afterMaterialCheck();
@@ -279,10 +286,22 @@ export async function commitDialogueReply(input: {
       where: { reelId: input.reelId, reel: { ownerUserId: ownerUserId() } },
     });
     if (!state) throw new ReelError("Состояние мысли не найдено.", "THOUGHT_STATE_NOT_FOUND", 404);
+    if (state.revision !== input.snapshot.thoughtStateRevision) throw new StateVersionError();
+    const routed = existingEnvelope
+      ? { decision: existingEnvelope.decision, applyThoughtUpdate: true }
+      : routeC00Decision({
+          candidate: input.c00Signal ?? null,
+          ownerUserId: ownerUserId(),
+          callOwnerUserId: call.ownerUserId,
+          currentUserMessageId: input.userMessageId,
+          thoughtStateRevision: input.snapshot.thoughtStateRevision,
+          callId: call.id,
+        });
+    const thoughtUpdate = routed.applyThoughtUpdate ? input.thoughtUpdate : emptyThoughtUpdate();
     const lists = parseThoughtStateLists(state);
     const patch = buildDialogueThoughtPatch({
       action: input.action,
-      thoughtUpdate: input.thoughtUpdate,
+      thoughtUpdate,
       userMessageId: userMessage.id,
       userText: userMessage.body,
       facts: lists.facts,
@@ -310,6 +329,7 @@ export async function commitDialogueReply(input: {
         ownerUserId: call.ownerUserId,
         reelId: call.reelId ?? input.reelId,
         action: input.action,
+        decision: routed.decision,
       });
     assertEnvelopeMatchesCall(envelope, call);
 

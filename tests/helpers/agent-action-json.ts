@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import type { C00SignalCandidate } from "../../src/lib/c00-signal";
 
 export async function insertTestScriptProposal(prisma: PrismaClient, threadId: string, body: string) {
   return prisma.dialogueMessage.create({
@@ -20,6 +21,7 @@ export function askQuestionJson(
     closeGapIds: string[];
     answeredGapId?: string;
   },
+  c00Signal?: C00SignalCandidate,
 ) {
   return JSON.stringify({
     action: "ask_question",
@@ -35,7 +37,23 @@ export function askQuestionJson(
           },
         }
       : {}),
+    ...(c00Signal ? { c00Signal } : {}),
   });
+}
+
+export function c00SignalFor(
+  signalType: C00SignalCandidate["signalType"],
+  proposedAction: C00SignalCandidate["proposedAction"],
+  evidenceUserMessageId: string,
+  thoughtStateRevisionSeen: number,
+): C00SignalCandidate {
+  return {
+    signalType,
+    proposedAction,
+    evidenceUserMessageIds: [evidenceUserMessageId],
+    thoughtStateRevisionSeen,
+    reasonCode: signalType,
+  };
 }
 
 export async function thoughtUpdateForUserText(

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
+import { parseC00SignalCandidate, type C00SignalCandidate } from "@/lib/c00-signal";
 import { parseThoughtStateLists } from "@/lib/thought-state";
 
 export class AgentActionError extends Error {
@@ -74,11 +75,16 @@ export type ThoughtUpdate = z.infer<typeof thoughtUpdateSchema>;
 
 export const emptyThoughtUpdate = (): ThoughtUpdate => ({ fact: null, closeGapIds: [] });
 
-export function parseAgentReply(raw: unknown): { action: AgentAction; thoughtUpdate: ThoughtUpdate } {
+export function parseAgentReply(raw: unknown): {
+  action: AgentAction;
+  thoughtUpdate: ThoughtUpdate;
+  c00Signal: C00SignalCandidate | null;
+} {
   if (!raw || typeof raw !== "object") {
     throw new AgentActionError("Модель вернула недопустимое действие.", "AGENT_ACTION_INVALID");
   }
-  const { thoughtUpdate, ...actionRaw } = raw as Record<string, unknown>;
+  const { thoughtUpdate, c00Signal: signalRaw, ...actionRaw } = raw as Record<string, unknown>;
+  const c00Signal = parseC00SignalCandidate(signalRaw);
   const parsed = agentActionSchema.safeParse(actionRaw);
   if (!parsed.success) {
     throw new AgentActionError("Модель вернула недопустимое действие.", "AGENT_ACTION_INVALID");
@@ -87,7 +93,7 @@ export function parseAgentReply(raw: unknown): { action: AgentAction; thoughtUpd
     throw new AgentActionError("Нужен id пробела или причина уточнения.", "AGENT_ACTION_INVALID");
   }
   if (thoughtUpdate === undefined) {
-    return { action: parsed.data, thoughtUpdate: emptyThoughtUpdate() };
+    return { action: parsed.data, thoughtUpdate: emptyThoughtUpdate(), c00Signal };
   }
   const update = thoughtUpdateSchema.safeParse(thoughtUpdate);
   if (!update.success) {
@@ -108,7 +114,7 @@ export function parseAgentReply(raw: unknown): { action: AgentAction; thoughtUpd
   if (update.data.answeredGapId && !update.data.closeGapIds.length) {
     throw new AgentActionError("answeredGapId без закрытия пробела недопустим.", "ACTION_GAP");
   }
-  return { action: parsed.data, thoughtUpdate: update.data };
+  return { action: parsed.data, thoughtUpdate: update.data, c00Signal };
 }
 
 export function parseAgentAction(raw: unknown): AgentAction {

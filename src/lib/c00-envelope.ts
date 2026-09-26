@@ -1,18 +1,23 @@
 import { z } from "zod";
 import { agentActionSchema, type AgentAction } from "@/lib/agent-action";
+import { C00_DECISION_ACTIONS, C00_SIGNAL_TYPES, C00EnvelopeError } from "@/lib/c00-signal";
+
+export { C00EnvelopeError };
 
 export const C00_ENVELOPE_SCHEMA = "c00-envelope-1" as const;
 
-export class C00EnvelopeError extends Error {
-  constructor(
-    message: string,
-    readonly code: string,
-    readonly status = 409,
-  ) {
-    super(message);
-    this.name = "C00EnvelopeError";
-  }
-}
+export type C00Decision = {
+  decisionId: string;
+  action: (typeof C00_DECISION_ACTIONS)[number];
+  signalType: (typeof C00_SIGNAL_TYPES)[number];
+  scope: "thought" | "none";
+  evidenceUserMessageIds: string[];
+  thoughtStateRevisionSeen: number;
+  reasonCode: string;
+  supersedesDecisionId?: string;
+  contradictsDecisionId?: string;
+  applyResult: "applied" | "not_applied";
+};
 
 export type C00Envelope = {
   schemaVersion: typeof C00_ENVELOPE_SCHEMA;
@@ -21,9 +26,24 @@ export type C00Envelope = {
   ownerUserId: string;
   reelId: string;
   action: AgentAction;
-  decision: null;
+  decision: C00Decision | null;
   correction: null;
 };
+
+const decisionSchema = z
+  .object({
+    decisionId: z.string().trim().min(1),
+    action: z.enum(C00_DECISION_ACTIONS),
+    signalType: z.enum(C00_SIGNAL_TYPES),
+    scope: z.enum(["thought", "none"]),
+    evidenceUserMessageIds: z.array(z.string().trim().min(1)).min(1),
+    thoughtStateRevisionSeen: z.number().int().nonnegative(),
+    reasonCode: z.string().trim().min(1),
+    supersedesDecisionId: z.string().trim().min(1).optional(),
+    contradictsDecisionId: z.string().trim().min(1).optional(),
+    applyResult: z.enum(["applied", "not_applied"]),
+  })
+  .strict();
 
 const envelopeSchema = z
   .object({
@@ -33,7 +53,7 @@ const envelopeSchema = z
     ownerUserId: z.string().trim().min(1),
     reelId: z.string().trim().min(1),
     action: agentActionSchema,
-    decision: z.null(),
+    decision: z.union([z.null(), decisionSchema]),
     correction: z.null(),
   })
   .strict();
@@ -70,12 +90,19 @@ export function listC00Envelopes(rows: Array<{ resultJson: string | null }>): C0
   return rows.map((row) => parseC00Envelope(row.resultJson)).filter((row): row is C00Envelope => row !== null);
 }
 
+export function listC00Decisions(rows: Array<{ resultJson: string | null }>): C00Decision[] {
+  return listC00Envelopes(rows)
+    .map((row) => row.decision)
+    .filter((row): row is C00Decision => row !== null);
+}
+
 export function buildC00Envelope(input: {
   aiCallId: string;
   turnKey: string;
   ownerUserId: string;
   reelId: string;
   action: AgentAction;
+  decision?: C00Decision | null;
 }): C00Envelope {
   return {
     schemaVersion: C00_ENVELOPE_SCHEMA,
@@ -84,7 +111,7 @@ export function buildC00Envelope(input: {
     ownerUserId: input.ownerUserId,
     reelId: input.reelId,
     action: input.action,
-    decision: null,
+    decision: input.decision ?? null,
     correction: null,
   };
 }

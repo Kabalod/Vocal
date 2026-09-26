@@ -21,6 +21,49 @@ import {
   thoughtDialogueTurnKey,
 } from "../src/lib/c00-envelope";
 
+test("C00-01 envelope with decision null still parses", () => {
+  const raw = JSON.stringify({
+    schemaVersion: C00_ENVELOPE_SCHEMA,
+    aiCallId: "call_1",
+    turnKey: "dialogue:thread:key",
+    ownerUserId: "local",
+    reelId: "reel_1",
+    action: { action: "redirect_to_task", currentTask: "вернитесь к мысли" },
+    decision: null,
+    correction: null,
+  });
+  const envelope = parseC00Envelope(raw);
+  assert.ok(envelope);
+  assert.equal(envelope.decision, null);
+  assert.equal(readThoughtAction(raw)?.action, "redirect_to_task");
+});
+
+test("envelope with a routed decision still has schemaVersion c00-envelope-1", () => {
+  const raw = JSON.stringify({
+    schemaVersion: C00_ENVELOPE_SCHEMA,
+    aiCallId: "call_2",
+    turnKey: "dialogue:thread:key2",
+    ownerUserId: "local",
+    reelId: "reel_1",
+    action: { action: "redirect_to_task", currentTask: "вернитесь к мысли" },
+    decision: {
+      decisionId: "dec:call_2",
+      action: "discard",
+      signalType: "prompt_injection",
+      scope: "none",
+      evidenceUserMessageIds: ["msg_1"],
+      thoughtStateRevisionSeen: 0,
+      reasonCode: "prompt_injection",
+      applyResult: "not_applied",
+    },
+    correction: null,
+  });
+  const envelope = parseC00Envelope(raw);
+  assert.ok(envelope?.decision);
+  assert.equal(envelope.decision.action, "discard");
+  assert.equal(envelope.correction, null);
+});
+
 test("old V03 resultJson is an action, not a C00 event", () => {
   const legacy = JSON.stringify({
     action: "ask_question",

@@ -30,9 +30,9 @@
 
 0. Документы C00 приняты (`8cb7351`). C00-01 — только конверт. Продукт C00 не принят.
 
-1. C00-01 (этот этап): конверт `c00-envelope-1` в `resultJson` хода мысли. `decision`/`correction` пока `null`. Старый V03 action читается, не replay как C00.
+1. C00-01 **принят** (`2391217`): конверт `c00-envelope-1` в `resultJson` хода мысли. Старый V03 action читается, не replay как C00.
 
-2. Маршрутизатор только `correct_thought` / `keep_local` / `discard`. Injection и чужой user. Сценарии 1–4, 8, 11–12.
+2. C00-02 (этот этап): кандидат сигнала + маршрутизатор `correct_thought` / `keep_local` / `discard`. `correct_thought` пишет `applyResult=not_applied`, `correction=null`. Apply и stale — C00-03.
 
 3. `correct_thought` атомарно; в конверт писать `correction.acceptedAt` в той же транзакции. Привязанный черновик без revision: stale при смене дубля/транскрипта **или** `acceptedAt` > `updatedAt` (мысль исправлена, дубль тот же — тоже stale). Не `AiCall.createdAt`. Задача этапа: `thoughtStateRevision` в `questions.ts` `inputSnapshotJson`. Тест: черновик между create и accept.
 
