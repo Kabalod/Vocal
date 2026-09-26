@@ -25,6 +25,7 @@ import {
 } from "@/lib/working-take";
 import { v01TestSeams } from "@/lib/v01-test-seams";
 import { AgentActionError, parseAgentReply } from "@/lib/agent-action";
+import { C00EnvelopeError } from "@/lib/c00-envelope";
 import { candidateFactId, getThoughtState, ThoughtStateError } from "@/lib/thought-state";
 import { v03TestSeams } from "@/lib/v03-test-seams";
 import {
@@ -568,6 +569,8 @@ export async function runDialogueTurn(
         rawText: reusable.responseText,
         promptTokens: reusable.promptTokens,
         completionTokens: reusable.completionTokens,
+        execOwnerId: reusable.execOwnerId,
+        execGeneration: reusable.execGeneration,
       });
       return listDialoguePage(reelId);
     }
@@ -594,11 +597,13 @@ export async function runDialogueTurn(
       },
     });
     let call = await prisma.aiCall.findUniqueOrThrow({ where: { id: reusable.id } });
+    let execClaim: { ownerId: string; generation: number } | null = null;
     if (!call.responseText) {
       const ownerId = randomUUID();
       while (!call.responseText) {
         const claim = await claimDialogueModelExecution(call.id, ownerId);
         if (claim.claimed) {
+          execClaim = { ownerId, generation: claim.generation };
           try {
             if (v03TestSeams.afterClaimBeforeComplete) {
               await v03TestSeams.afterClaimBeforeComplete({
@@ -665,6 +670,8 @@ export async function runDialogueTurn(
       rawText: call.responseText,
       promptTokens: call.promptTokens,
       completionTokens: call.completionTokens,
+      execOwnerId: execClaim?.ownerId ?? call.execOwnerId,
+      execGeneration: execClaim?.generation ?? call.execGeneration,
     });
   } catch (error) {
     if (await isDialogueTurnComplete(thread.id, userMessage.id, key)) {
@@ -708,7 +715,7 @@ export async function runDialogueTurn(
     if (error instanceof StateVersionError) throw error;
     if (error instanceof ReelError) throw new StateVersionError();
     if (error instanceof AgentActionError) throw error;
-    if (error instanceof DialogueTurnExecError) {
+    if (error instanceof DialogueTurnExecError || error instanceof C00EnvelopeError) {
       throw new DialogueError(error.message, error.code, error.status);
     }
   }

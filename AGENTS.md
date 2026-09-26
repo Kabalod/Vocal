@@ -21,7 +21,7 @@ V03 test policy (accepted stage):
 
 V04-00 is docs only. Do not change product code, Prisma, or migrations until an explicit V04 product stage. Do not declare V04 accepted.
 
-C00 correction-layer docs: `docs/correction/C00_*.md` are **accepted**. C00 product is not started and not accepted. Thought-dialogue corrections do not write the portrait. Do not start C00 product, V04-01, V05, or I01 from those docs alone.
+C00 correction-layer docs: `docs/correction/C00_*.md` are **accepted** (`8cb7351`). C00-01 implements the thought-turn envelope only. C00 product is not accepted. V04 product is not started and not accepted. Do not start V04-01, V05, or I01.
 
 Do **not** apply Prisma baseline, migrations 8–9, or `migrate resolve` to live Supabase from this cycle.
 

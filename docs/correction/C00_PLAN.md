@@ -28,9 +28,9 @@
 
 Совместимость: Prisma PostgreSQL в репо, тесты на localhost Postgres, Auth `ownerUserId`. Не предполагать, что **live** равен схеме репо.
 
-0. Пользователь принимает C00 и назначает этап. C00 после V03, без продукта V04. Перенос в портрет не входит.
+0. Документы C00 приняты (`8cb7351`). C00-01 — только конверт. Продукт C00 не принят.
 
-1. Конверт `c00-envelope-1` в `resultJson` того же thought `AiCall` (`action` + `decision` + `correction`). Идемпотентность = `turnKey` + lease + CAS revision. Тесты дубля и гонки. Нет UI confirm.
+1. C00-01 (этот этап): конверт `c00-envelope-1` в `resultJson` хода мысли. `decision`/`correction` пока `null`. Старый V03 action читается, не replay как C00.
 
 2. Маршрутизатор только `correct_thought` / `keep_local` / `discard`. Injection и чужой user. Сценарии 1–4, 8, 11–12.
 

@@ -6,6 +6,15 @@ import { v01TestSeams } from "@/lib/v01-test-seams";
 import type { Prisma } from "@prisma/client";
 import { actionMessage, assertAgentActionAllowed, type AgentAction, type ThoughtUpdate } from "@/lib/agent-action";
 import { applyThoughtStateInTx, buildDialogueThoughtPatch, parseThoughtStateLists } from "@/lib/thought-state";
+import {
+  assertEnvelopeMatchesCall,
+  buildC00Envelope,
+  C00EnvelopeError,
+  parseC00Envelope,
+  thoughtDialogueTurnKey,
+} from "@/lib/c00-envelope";
+import { DialogueTurnExecError } from "@/lib/dialogue-exec";
+import { v03TestSeams } from "@/lib/v03-test-seams";
 
 export type DialogueMaterialSnapshot = {
   workingTakeId: string;
@@ -143,6 +152,8 @@ export async function commitDialogueReply(input: {
   rawText: string;
   promptTokens: number | null;
   completionTokens: number | null;
+  execOwnerId?: string | null;
+  execGeneration?: number | null;
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "DialogueThread" WHERE id = ${input.threadId} FOR UPDATE`;
@@ -150,8 +161,51 @@ export async function commitDialogueReply(input: {
     await tx.$queryRaw`SELECT id FROM "Take" WHERE id = ${input.snapshot.workingTakeId} FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM "ThoughtState" WHERE "reelId" = ${input.reelId} FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM "DialogueMessage" WHERE id = ${input.processingId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "AiCall" WHERE id = ${input.callId} FOR UPDATE`;
     const processingRow = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: input.processingId } });
     if (isCommittedAssistantTurn(processingRow)) {
+      return;
+    }
+    const call = await tx.aiCall.findUniqueOrThrow({ where: { id: input.callId } });
+    const expectedTurnKey = thoughtDialogueTurnKey(input.threadId, input.turnKey);
+    if (call.turnKey !== expectedTurnKey || call.reelId !== input.reelId || call.ownerUserId !== ownerUserId()) {
+      throw new C00EnvelopeError("Конверт не совпадает с вызовом хода.", "C00_ENVELOPE_MISMATCH");
+    }
+    if (input.execOwnerId != null && input.execGeneration != null) {
+      if (call.execOwnerId !== input.execOwnerId || call.execGeneration !== input.execGeneration) {
+        throw new DialogueTurnExecError("Результат хода уже записан другим исполнителем.", "TURN_FENCE");
+      }
+    }
+    const existingEnvelope = parseC00Envelope(call.resultJson);
+    if (existingEnvelope) assertEnvelopeMatchesCall(existingEnvelope, call);
+    const reuseCompleted =
+      call.status === "done" && (existingEnvelope !== null || Boolean(call.resultJson?.trim()));
+    if (reuseCompleted) {
+      const reusedAction = existingEnvelope?.action ?? input.action;
+      const message = actionMessage(reusedAction);
+      const priorRow = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: input.processingId } });
+      let priorPayload: Record<string, unknown> = {};
+      try {
+        priorPayload = JSON.parse(priorRow.payloadJson) as Record<string, unknown>;
+      } catch {
+        priorPayload = {};
+      }
+      await tx.dialogueMessage.update({
+        where: { id: input.processingId },
+        data: {
+          kind: message.kind,
+          body: message.body,
+          payloadJson: JSON.stringify({
+            ...priorPayload,
+            action: reusedAction,
+            thoughtUpdate: input.thoughtUpdate,
+            userMessageId: input.userMessageId,
+            aiCallId: input.callId,
+            idempotencyKey: input.turnKey,
+          }),
+          status: "done",
+        },
+      });
       return;
     }
 
@@ -220,18 +274,38 @@ export async function commitDialogueReply(input: {
       });
     }
     await assertAgentActionAllowed(tx, input.reelId, input.action, take);
+    if (v03TestSeams.afterThoughtBeforeEnvelope) {
+      await v03TestSeams.afterThoughtBeforeEnvelope({ callId: input.callId, turnKey: input.turnKey });
+    }
+
+    const envelope =
+      existingEnvelope ??
+      buildC00Envelope({
+        aiCallId: call.id,
+        turnKey: expectedTurnKey,
+        ownerUserId: call.ownerUserId,
+        reelId: call.reelId ?? input.reelId,
+        action: input.action,
+      });
+    assertEnvelopeMatchesCall(envelope, call);
 
     const message = actionMessage(input.action);
-    await tx.aiCall.update({
-      where: { id: input.callId },
+    const written = await tx.aiCall.updateMany({
+      where: { id: call.id, turnKey: call.turnKey, status: { not: "done" } },
       data: {
         status: "done",
         responseText: input.rawText,
-        resultJson: JSON.stringify(input.action),
+        resultJson: JSON.stringify(envelope),
         promptTokens: input.promptTokens,
         completionTokens: input.completionTokens,
       },
     });
+    if (written.count !== 1) {
+      const raced = await tx.aiCall.findUniqueOrThrow({ where: { id: call.id } });
+      if (!parseC00Envelope(raced.resultJson)) {
+        throw new C00EnvelopeError("Не удалось записать конверт хода.", "C00_ENVELOPE_WRITE");
+      }
+    }
     const priorRow = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: input.processingId } });
     let priorPayload: Record<string, unknown> = {};
     try {
