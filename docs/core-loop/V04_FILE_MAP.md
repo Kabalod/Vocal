@@ -2,50 +2,42 @@
 
 V04_BASE_SHA: `564c9cf8534392501e125dda7ecc747c235a5c0d`.
 V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
-Продукт V04: **not started**. Документы V04-00: этот набор.
+Продукт V04: **not started**. Документы V04-00: этот набор. V04-01 не начат.
 
-## Ядро портрета (менять в V04)
+## Ядро портрета (менять в продукте V04)
 
-| Зона | Файлы | Зависимость |
+| Зона | Файлы | Сейчас / цель |
 |---|---|---|
-| Типы | `src/types/profile.ts` | поля, `pending.readyToConfirm`; сюда же кандидат обновления |
-| Ревизии и persist | `src/lib/profile.ts` | `CreatorProfile` / `ProfileRevision`; `saveProfile` |
-| Сборка и complete | `src/lib/profile-portrait.ts` | плоский patch; целевые enum, вес `support_n - oppose_n`, пороги 3 / 1 |
-| Диалог и confirm | `src/lib/profile-dialogue.ts` | `confirmProfilePortrait`, `applyPortraitReply` |
-| Промпт модели | `src/lib/ai/profile.ts` | сейчас `complete` = черновик; цель — кандидат, не confirm |
-| Runtime для цикла | `src/lib/ai-runtime-context.ts` | пусто, пока нет `portrait.completed` |
-| Контекст ролика | `src/lib/reel-context.ts` | `publicForScript` / `understandingOnly` |
-| API | `src/app/api/profile/dialogue/route.ts`, `src/app/api/profile/route.ts` | `action=confirm`, PUT полей |
-| UI | `src/components/ProfileConversation.tsx`, `src/components/Portrait.tsx` | кнопка confirm, черновик |
+| Типы | `src/types/profile.ts` | pending/confirm; цель — union + event |
+| Ревизии | `src/lib/profile.ts` | пишет ревизию на persist; цель — create только при смене среза, без UPDATE payload |
+| Сборка | `src/lib/profile-portrait.ts` | плоский patch; цель — вес из events, пороги 3/1, выбор слота |
+| Диалог | `src/lib/profile-dialogue.ts` | `confirmProfilePortrait`, `healStoredPortrait`, `applyPortraitReply`; цель — атом event+AiCall+processing[+revision] |
+| Промпт | `src/lib/ai/profile.ts` | `complete` = черновик; цель — discriminated union |
+| Runtime | `src/lib/ai-runtime-context.ts` | пусто без `completed` |
+| Контекст ролика | `src/lib/reel-context.ts` | `publicForScript` |
+| API / UI | `app/api/profile/**`, `ProfileConversation.tsx` | `action=confirm` |
 
-## Стык с принятым циклом (узко, без переписывания V01–V03)
+## Данные (без новых таблиц, без live migrate)
 
-| Зона | Файлы | Правило V04 |
-|---|---|---|
-| Диалог мысли | `src/lib/dialogue.ts` | портрет только как предположение для вопроса/помощи |
-| ThoughtState | `src/lib/thought-state.ts` | факты мысли не из портрета |
-| Действия агента | `src/lib/agent-action.ts` | не менять схему действий |
-| Сценарий / разбор | `src/lib/ai/script.ts`, `src/lib/ai/review.ts`, `src/lib/ai/compare.ts` | не источник событий; V05 не начинать |
-| Контракт продукта | `src/lib/product-contracts.ts` | `unfinishedAmendPublishesPortrait` завязан на confirm-логику |
-
-## Данные (не мигрировать в V04-00)
-
-| Модель | Назначение |
+| Модель | Роль в V04 |
 |---|---|
-| `CreatorProfile` | якорь автора, `currentRevisionId` |
-| `ProfileRevision` | JSON payload: fields, pending, portrait.completed, skipped |
-| `DialogueThread` scope `profile` | лента анкеты |
-| `AiCall` kind `profile_dialogue` | ответы модели профиля |
-| `ReelContextSnapshot` | снимок цели ролика + выбранных ключей профиля |
+| `ProfileRevision` | неизменяемый снимок отображаемого среза |
+| `CreatorProfile.currentRevisionId` | указатель на этот снимок |
+| `AiCall` kind `profile_dialogue` | сырой ответ + принятый `event` в `resultJson` |
+| `DialogueMessage` | лента; processing финализируется в той же транзакции, что event |
 
-Новых таблиц в V04-00 нет. Кандидат, журнал слотов и веса — в `payloadJson`, без live migrate. Новая `ProfileRevision` — только при смене отображаемого среза. Серверные проверки — схема и пороги, не NLP. Live migrate запрещён.
+Журнал **не** хранить в `ProfileRevision.payloadJson`. Вес = replay только `schemaVersion = "v04-event-1"` в порядке `createdAt`, `id`.
+
+## Стык V01–V03 (узко)
+
+`dialogue.ts` — портрет как предположение. `thought-state.ts` / `agent-action.ts` — не менять контракт. `ai/script.ts` — не источник событий; V05 не начинать.
 
 ## Тесты, которые ждут confirm
 
 `tests/profile-dialogue.test.ts`, `tests/p10-p12-profile.test.ts`, `tests/r2-idempotency.test.ts`, `tests/mvp-release.test.ts`, `tests/p17-e2e-matrix.test.ts`.
 
-Новый набор сценариев: [`V04_SCENARIOS.md`](./V04_SCENARIOS.md).
+Сценарии: [`V04_SCENARIOS.md`](./V04_SCENARIOS.md).
 
 ## Не входят
 
-Prisma baseline, миграции 8–9, `migrate resolve`, UI вкладки «Сценарий», completion gate, playbook, champagne/STAGE/Desktop.
+Prisma baseline, миграции 8–9, `migrate resolve`, вкладка «Сценарий», champagne/STAGE/Desktop.
