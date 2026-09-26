@@ -10,7 +10,7 @@ V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
 |---|---|---|
 | Типы | `src/types/profile.ts` | поля, `pending.readyToConfirm`; сюда же кандидат обновления |
 | Ревизии и persist | `src/lib/profile.ts` | `CreatorProfile` / `ProfileRevision`; `saveProfile` |
-| Сборка и complete | `src/lib/profile-portrait.ts` | плоский patch; целевые пороги прямого vs производного здесь или рядом |
+| Сборка и complete | `src/lib/profile-portrait.ts` | плоский patch; целевые enum, вес `support_n - oppose_n`, пороги 3 / 1 |
 | Диалог и confirm | `src/lib/profile-dialogue.ts` | `confirmProfilePortrait`, `applyPortraitReply` |
 | Промпт модели | `src/lib/ai/profile.ts` | сейчас `complete` = черновик; цель — кандидат, не confirm |
 | Runtime для цикла | `src/lib/ai-runtime-context.ts` | пусто, пока нет `portrait.completed` |
@@ -38,7 +38,7 @@ V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
 | `AiCall` kind `profile_dialogue` | ответы модели профиля |
 | `ReelContextSnapshot` | снимок цели ролика + выбранных ключей профиля |
 
-Новых таблиц в V04-00 нет. Кандидат, наблюдения и веса в продукте V04 допустимо держать в `payloadJson` ревизии, без live migrate. Новая `ProfileRevision` — только при значимом изменении действующего среза; журнал оснований может жить внутри payload без новой ревизии на каждое наблюдение. Live migrate запрещён.
+Новых таблиц в V04-00 нет. Кандидат, журнал слотов и веса — в `payloadJson`, без live migrate. Новая `ProfileRevision` — только при смене отображаемого среза. Серверные проверки — схема и пороги, не NLP. Live migrate запрещён.
 
 ## Тесты, которые ждут confirm
 
