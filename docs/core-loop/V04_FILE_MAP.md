@@ -8,11 +8,11 @@ V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
 
 | Зона | Файлы | Зависимость |
 |---|---|---|
-| Типы | `src/types/profile.ts` | поля, `pending.readyToConfirm`, `awaitingConfirm`, usage |
+| Типы | `src/types/profile.ts` | поля, `pending.readyToConfirm`; сюда же кандидат обновления |
 | Ревизии и persist | `src/lib/profile.ts` | `CreatorProfile` / `ProfileRevision`; `saveProfile` |
-| Сборка и complete | `src/lib/profile-portrait.ts` | `decidePortraitComplete`, `applyFieldOperations` |
+| Сборка и complete | `src/lib/profile-portrait.ts` | плоский patch; целевые пороги прямого vs производного здесь или рядом |
 | Диалог и confirm | `src/lib/profile-dialogue.ts` | `confirmProfilePortrait`, `applyPortraitReply` |
-| Промпт модели | `src/lib/ai/profile.ts` | `PROFILE_DIALOGUE_SYSTEM`, `complete` = черновик |
+| Промпт модели | `src/lib/ai/profile.ts` | сейчас `complete` = черновик; цель — кандидат, не confirm |
 | Runtime для цикла | `src/lib/ai-runtime-context.ts` | пусто, пока нет `portrait.completed` |
 | Контекст ролика | `src/lib/reel-context.ts` | `publicForScript` / `understandingOnly` |
 | API | `src/app/api/profile/dialogue/route.ts`, `src/app/api/profile/route.ts` | `action=confirm`, PUT полей |
@@ -38,7 +38,7 @@ V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
 | `AiCall` kind `profile_dialogue` | ответы модели профиля |
 | `ReelContextSnapshot` | снимок цели ролика + выбранных ключей профиля |
 
-Новых таблиц и колонок V04 не требует, если ревизия остаётся в `payloadJson`. Live migrate запрещён.
+Новых таблиц в V04-00 нет. Кандидат, наблюдения и веса в продукте V04 допустимо держать в `payloadJson` ревизии, без live migrate. Новая `ProfileRevision` — только при значимом изменении действующего среза; журнал оснований может жить внутри payload без новой ревизии на каждое наблюдение. Live migrate запрещён.
 
 ## Тесты, которые ждут confirm
 
