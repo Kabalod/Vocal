@@ -1,7 +1,7 @@
 # Instructions for coding agents (Vocal)
 
 Start here:
-1. `docs/ROADMAP.md` — общая дорожная карта на 27.09.2026 (не принята до ревью)
+1. `docs/ROADMAP.md` — общая дорожная карта на 27.09.2026 (**не принята**; сверки `2702cc6` / `7701201` её не приняли). Accepting the map does not accept C00-02 or start C00-03.
 2. `docs/design/README.md`
 3. `docs/design/SOURCE_OF_TRUTH_2026-09-15.md`
 4. Visual source of truth: `docs/design/references-new/` (approved screens 01–09; `/reels` uses screen 09)
@@ -22,7 +22,7 @@ V03 test policy (accepted stage):
 
 V04-00 is docs only. Do not change product code, Prisma, or migrations until an explicit V04 product stage. Do not declare V04 accepted.
 
-C00 docs **accepted** (`8cb7351`). C00-01 **accepted** (`2391217`). First C00-02 review of `2087859` **returned** the stage: `correct_thought` + `not_applied` must not apply any ThoughtState patch (including non-empty `thoughtUpdate` and `suggest_take`). C00-02 and C00 product are **not accepted**. Accepting `docs/ROADMAP.md` does **not** accept C00-02. Next product step: fix that defect in a separate commit and **re-review** C00-02 (not a first review). V04 product is not started and not accepted. Auth code exists; Auth is **not accepted**. Do not start V04-01, V05, or I01. See `docs/ROADMAP.md`.
+C00 docs **accepted** (`8cb7351`). C00-01 **accepted** (`2391217`). C00-02: `2087859` first review **returned**; `548b813` is the **published fix candidate**, formally **not accepted**. Do **not** redo that fix. Next action: formal re-review of `548b813`, then a **separate** accept/reject of C00-02. Accepting `docs/ROADMAP.md` does **not** accept C00-02 and does **not** allow C00-03. C00 product **not accepted**. V04 product is not started and not accepted. Auth code exists; Auth is **not accepted**. Do not start V04-01, V05, or I01. See `docs/ROADMAP.md`.
 
 Do **not** apply Prisma baseline, migrations 8–9, or `migrate resolve` to live Supabase from this cycle.
 
