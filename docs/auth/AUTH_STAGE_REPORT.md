@@ -2,9 +2,9 @@
 
 > Historical snapshot from the Auth stage. SQLite generate/transfer commands described below are no longer part of the app. Current provider is PostgreSQL only (`docs/auth/POSTGRES.md`).
 >
-> 27.09.2026: Auth remains **implemented, not accepted**. Do not treat leftover “Prisma generates against SQLite” lines in “What shipped” as current. Product route: `docs/ROADMAP.md`. Legacy owner transfer is not required if user content is empty (owner statement).
+> 28.09.2026: Auth **accepted** (`51d6033`, in `f971a7f`). Do not treat leftover “Prisma generates against SQLite” lines in “What shipped” as current. Product route: `docs/ROADMAP.md`. Legacy owner transfer is not required if user content is empty (owner statement). Live schema remains **not accepted**.
 
-Status: **implemented, not accepted**. This is not I01. Automatic memory is not started. P01.6-2 is not declared accepted.
+Status: **accepted** `51d6033` (28.09.2026). This is not I01 and not live-schema acceptance. Automatic memory is not started. P01.6-2 is not declared accepted.
 
 ## Entities
 
@@ -27,4 +27,4 @@ Legacy SQLite rows with owner `local` move only when `VOCAL_LEGACY_OWNER_USER_ID
 
 Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and later `POSTGRES_DATABASE_URL` + `VOCAL_LEGACY_OWNER_USER_ID`. Do not commit secrets.
 
-Auth is **not** product-accepted until you review this report.
+Auth is product-accepted at `51d6033`. This report does not accept live Supabase migrate or V04.
