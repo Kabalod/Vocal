@@ -340,3 +340,50 @@ test("open question becomes stale when working take loses selected transcript", 
   assert.equal(stale[0]?.status, "open");
   assert.equal(stale[0]?.stale, true);
 });
+
+test("draft save started after acceptedAt waits for correction commit", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  t.after(() => {
+    v03TestSeams.afterAcceptedAtBeforeCommit = null;
+  });
+  const { reel } = await createThoughtFromText({
+    title: "C00-03 4a race",
+    body: "Мысль для гонки acceptedAt.",
+    idempotencyKey: "c00-03-4a-race-create",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: {
+      facts: [{ id: "fact_seed", text: "Слот для правки.", sourceType: "initial_note", sourceId: reel.id }],
+    },
+  });
+  let draftFinishedBeforeCommit = false;
+  let draftSave: Promise<unknown> | undefined;
+  v03TestSeams.afterAcceptedAtBeforeCommit = async () => {
+    draftSave = replaceScriptDraft(reel.id, {
+      body: "Сохранение между acceptedAt и commit.",
+      sourceKind: "manual",
+    }).then((row) => {
+      draftFinishedBeforeCommit = true;
+      return row;
+    });
+    await delay(80);
+    assert.equal(draftFinishedBeforeCommit, false);
+  };
+  await sendDialogueMessage(
+    reel.id,
+    { text: "Это сказал оператор, не я.", idempotencyKey: "c00-03-4a-race-1" },
+    () => completeWrongSpeaker(prisma, reel.id, "Это сказал оператор, не я."),
+  );
+  v03TestSeams.afterAcceptedAtBeforeCommit = null;
+  assert.ok(draftSave);
+  await draftSave;
+  assert.equal(draftFinishedBeforeCommit, true);
+  const call = await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id, kind: "dialogue" } });
+  const envelope = parseC00Envelope(call.resultJson);
+  const draft = await prisma.scriptDraft.findUniqueOrThrow({ where: { reelId: reel.id } });
+  assert.ok(envelope?.correction?.acceptedAt);
+  assert.ok(new Date(envelope.correction.acceptedAt).getTime() <= draft.updatedAt.getTime());
+});

@@ -6,7 +6,7 @@ import { v01TestSeams } from "@/lib/v01-test-seams";
 import type { Prisma } from "@prisma/client";
 import { actionMessage, assertAgentActionAllowed, type AgentAction, type ThoughtUpdate } from "@/lib/agent-action";
 import { allowsThoughtStatePatch, routeC00Decision } from "@/lib/c00-router";
-import { resolveC00Correction, withAcceptedAt } from "@/lib/c00-correction";
+import { resolveC00Correction } from "@/lib/c00-correction";
 import type { C00SignalCandidate } from "@/lib/c00-signal";
 import { applyThoughtStateInTx, buildDialogueThoughtPatch, parseThoughtStateLists } from "@/lib/thought-state";
 import {
@@ -326,10 +326,9 @@ export async function commitDialogueReply(input: {
         acceptedAt: "",
       });
       if (resolved) {
-        const accepted = withAcceptedAt(resolved, new Date().toISOString());
-        decision = accepted.decision;
-        correction = accepted.correction;
-        patch = accepted.patch;
+        decision = resolved.decision;
+        correction = { ...resolved.correction, acceptedAt: "" };
+        patch = resolved.patch;
       }
     } else if (!existingEnvelope && allowsThoughtStatePatch(decision, routed.applyThoughtUpdate)) {
       patch = buildDialogueThoughtPatch({
@@ -342,7 +341,7 @@ export async function commitDialogueReply(input: {
         pendingGapId,
       });
     }
-    if (correction) {
+    if (correction && !existingEnvelope) {
       await assertAgentActionAllowed(tx, input.reelId, input.action, take);
     }
     if (patch) {
@@ -353,7 +352,7 @@ export async function commitDialogueReply(input: {
         turnKey: input.turnKey,
       });
     }
-    if (correction && !patch) {
+    if (correction && !patch && !existingEnvelope) {
       throw new C00EnvelopeError("correction без increment ThoughtState.", "C00_CORRECTION_ATOM");
     }
     if (!correction) {
@@ -361,6 +360,15 @@ export async function commitDialogueReply(input: {
     }
     if (v03TestSeams.afterThoughtBeforeEnvelope) {
       await v03TestSeams.afterThoughtBeforeEnvelope({ callId: input.callId, turnKey: input.turnKey });
+    }
+    if (!existingEnvelope && correction) {
+      correction = { ...correction, acceptedAt: new Date().toISOString() };
+      if (v03TestSeams.afterAcceptedAtBeforeCommit) {
+        await v03TestSeams.afterAcceptedAtBeforeCommit({
+          reelId: input.reelId,
+          acceptedAt: correction.acceptedAt,
+        });
+      }
     }
 
     const envelope =

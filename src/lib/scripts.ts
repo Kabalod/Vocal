@@ -338,6 +338,21 @@ export async function listScriptWorkspace(reelId: string, viewId?: string | null
   };
 }
 
+async function withReelWriteLock<T>(
+  reelId: string,
+  db: ScriptDb,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  const run = async (tx: Prisma.TransactionClient) => {
+    await tx.$queryRaw`SELECT id FROM "Reel" WHERE id = ${reelId} FOR UPDATE`;
+    return fn(tx);
+  };
+  if ("$transaction" in db && typeof db.$transaction === "function") {
+    return db.$transaction((tx) => run(tx));
+  }
+  return run(db);
+}
+
 export async function replaceScriptDraft(
   reelId: string,
   input: {
@@ -355,28 +370,30 @@ export async function replaceScriptDraft(
     throw new ScriptError(`Сценарий короче ${SCRIPT_BODY_MAX} символов.`, "SCRIPT_TOO_LONG");
   }
   const sources = input.sources ?? [];
-  const existing = await db.scriptDraft.findUnique({ where: { reelId } });
-  const row = existing
-    ? await db.scriptDraft.update({
-        where: { reelId },
-        data: {
-          body,
-          baseVersionId: input.baseVersionId ?? existing.baseVersionId,
-          sourceKind: input.sourceKind ?? existing.sourceKind,
-          sourcesJson: JSON.stringify(sources.length ? sources : parseSources(existing.sourcesJson)),
-          saveToken: existing.saveToken + 1,
-        },
-      })
-    : await db.scriptDraft.create({
-        data: {
-          reelId,
-          body,
-          baseVersionId: input.baseVersionId ?? null,
-          sourceKind: input.sourceKind ?? "manual",
-          sourcesJson: JSON.stringify(sources),
-        },
-      });
-  return toDraftDto(row);
+  return withReelWriteLock(reelId, db, async (tx) => {
+    const existing = await tx.scriptDraft.findUnique({ where: { reelId } });
+    const row = existing
+      ? await tx.scriptDraft.update({
+          where: { reelId },
+          data: {
+            body,
+            baseVersionId: input.baseVersionId ?? existing.baseVersionId,
+            sourceKind: input.sourceKind ?? existing.sourceKind,
+            sourcesJson: JSON.stringify(sources.length ? sources : parseSources(existing.sourcesJson)),
+            saveToken: existing.saveToken + 1,
+          },
+        })
+      : await tx.scriptDraft.create({
+          data: {
+            reelId,
+            body,
+            baseVersionId: input.baseVersionId ?? null,
+            sourceKind: input.sourceKind ?? "manual",
+            sourcesJson: JSON.stringify(sources),
+          },
+        });
+    return toDraftDto(row);
+  });
 }
 
 export async function openScriptDraft(reelId: string, baseVersionId?: string | null): Promise<ScriptWorkspaceDto> {
@@ -420,20 +437,22 @@ export async function patchScriptDraft(
   if (body.length > SCRIPT_BODY_MAX) {
     throw new ScriptError(`Сценарий короче ${SCRIPT_BODY_MAX} символов.`, "SCRIPT_TOO_LONG");
   }
-  const draft = await prisma.scriptDraft.findUnique({ where: { reelId } });
-  if (!draft) throw new ScriptError("Черновик не найден.", "DRAFT_NOT_FOUND", 404);
-  const expectedToken = resolveDraftToken(draft, input);
-  const updated = await prisma.scriptDraft.updateMany({
-    where: { reelId, saveToken: expectedToken },
-    data: {
-      body,
-      sourcesJson: JSON.stringify(input.sources?.length ? input.sources : parseSources(draft.sourcesJson)),
-      saveToken: expectedToken + 1,
-    },
+  await withReelWriteLock(reelId, prisma, async (tx) => {
+    const draft = await tx.scriptDraft.findUnique({ where: { reelId } });
+    if (!draft) throw new ScriptError("Черновик не найден.", "DRAFT_NOT_FOUND", 404);
+    const expectedToken = resolveDraftToken(draft, input);
+    const updated = await tx.scriptDraft.updateMany({
+      where: { reelId, saveToken: expectedToken },
+      data: {
+        body,
+        sourcesJson: JSON.stringify(input.sources?.length ? input.sources : parseSources(draft.sourcesJson)),
+        saveToken: expectedToken + 1,
+      },
+    });
+    if (updated.count === 0) {
+      throw new ScriptError("Черновик уже изменился. Обновите и повторите.", "STALE", 409);
+    }
   });
-  if (updated.count === 0) {
-    throw new ScriptError("Черновик уже изменился. Обновите и повторите.", "STALE", 409);
-  }
   return listScriptWorkspace(reelId);
 }
 
@@ -443,6 +462,7 @@ export async function finalizeScriptDraft(
 ): Promise<ScriptWorkspaceDto> {
   await assertReel(reelId);
   await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Reel" WHERE id = ${reelId} FOR UPDATE`;
     const draft = await tx.scriptDraft.findUnique({ where: { reelId } });
     if (!draft) throw new ScriptError("Черновик не найден.", "DRAFT_NOT_FOUND", 404);
     if (
@@ -471,9 +491,11 @@ export async function finalizeScriptDraft(
 
 export async function deleteScriptDraft(reelId: string): Promise<ScriptWorkspaceDto> {
   await assertReel(reelId);
-  const draft = await prisma.scriptDraft.findUnique({ where: { reelId } });
-  if (!draft) throw new ScriptError("Черновик не найден.", "DRAFT_NOT_FOUND", 404);
-  await prisma.scriptDraft.delete({ where: { reelId } });
+  await withReelWriteLock(reelId, prisma, async (tx) => {
+    const draft = await tx.scriptDraft.findUnique({ where: { reelId } });
+    if (!draft) throw new ScriptError("Черновик не найден.", "DRAFT_NOT_FOUND", 404);
+    await tx.scriptDraft.delete({ where: { reelId } });
+  });
   return listScriptWorkspace(reelId);
 }
 
