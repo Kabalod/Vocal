@@ -2,6 +2,7 @@ import type { C00Decision } from "@/lib/c00-envelope";
 import { C00EnvelopeError } from "@/lib/c00-signal";
 import { StateVersionError } from "@/lib/ai/usage-guard";
 import type { C00DecisionAction, C00SignalCandidate, C00SignalType } from "@/lib/c00-signal";
+import { isNonContentUtterance } from "@/lib/thought-state";
 
 type SignalPolicy = {
   actions: readonly C00DecisionAction[];
@@ -18,17 +19,26 @@ const SIGNAL_POLICY: Record<Exclude<C00SignalType, "stale_model" | "foreign_user
   quote_not_position: { actions: ["keep_local", "discard"], scope: "thought", applyThoughtUpdate: false },
   mood_or_once: { actions: ["keep_local", "discard"], scope: "none", applyThoughtUpdate: false },
   praise_diagnosis_label: { actions: ["discard"], scope: "none", applyThoughtUpdate: false },
-  thought_episode: { actions: ["keep_local"], scope: "thought", applyThoughtUpdate: true },
+  thought_episode: { actions: ["keep_local"], scope: "thought", applyThoughtUpdate: false },
   prompt_injection: { actions: ["discard"], scope: "none", applyThoughtUpdate: false },
 };
+
+/** C00-04: empty / command / «не знаю» is not user evidence and not consent. */
+export function hasC00UserEvidence(userText: string) {
+  const text = userText.trim();
+  return Boolean(text) && !isNonContentUtterance(text);
+}
 
 export type C00RouteResult = {
   decision: C00Decision | null;
   applyThoughtUpdate: boolean;
 };
 
-/** C00-02: queued correct_thought must not reach the V03 ThoughtState reducer. */
+/** C00-02/04: queued correct_thought and keep_local/discard never reach the V03 reducer. */
 export function allowsThoughtStatePatch(decision: C00Decision | null, policyAllows: boolean): boolean {
+  if (decision?.action === "keep_local" || decision?.action === "discard") {
+    return false;
+  }
   if (decision?.action === "correct_thought" && decision.applyResult === "not_applied") {
     return false;
   }
@@ -42,6 +52,7 @@ export function routeC00Decision(input: {
   currentUserMessageId: string;
   thoughtStateRevision: number;
   callId: string;
+  userText: string;
 }): C00RouteResult {
   if (!input.candidate) return { decision: null, applyThoughtUpdate: true };
   if (input.ownerUserId !== input.callOwnerUserId || input.candidate.signalType === "foreign_user") {
@@ -61,6 +72,9 @@ export function routeC00Decision(input: {
   const action = policy.actions.includes(input.candidate.proposedAction)
     ? input.candidate.proposedAction
     : policy.actions[0];
+  if (action === "correct_thought" && !hasC00UserEvidence(input.userText)) {
+    throw new C00EnvelopeError("correct_thought требует user evidence текущего сообщения автора.", "C00_EVIDENCE", 403);
+  }
   const decision: C00Decision = {
     decisionId: `dec:${input.callId}`,
     action,

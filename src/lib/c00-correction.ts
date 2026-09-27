@@ -29,6 +29,8 @@ export function resolveC00Correction(input: {
   acceptedAt: string;
 }): ResolvedC00Correction | null {
   if (input.decision.action !== "correct_thought") return null;
+  if (input.decision.evidenceUserMessageIds.length !== 1) return null;
+  if (input.decision.evidenceUserMessageIds[0] !== input.currentUserMessageId) return null;
   const targetKind = input.candidate?.targetKind ?? "fact";
   const replacement = input.thoughtUpdate.fact?.text.trim() ?? "";
   const operation = input.candidate?.operation ?? defaultOperation(input.decision.signalType, Boolean(replacement));

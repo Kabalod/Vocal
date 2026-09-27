@@ -303,6 +303,7 @@ export async function commitDialogueReply(input: {
           currentUserMessageId: input.userMessageId,
           thoughtStateRevision: input.snapshot.thoughtStateRevision,
           callId: call.id,
+          userText: userMessage.body,
         });
     const lists = parseThoughtStateLists(state);
     let decision: C00Decision | null = routed.decision;
