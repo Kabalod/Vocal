@@ -1,4 +1,5 @@
 import type { C00Decision } from "@/lib/c00-envelope";
+import { isC00PolicyEnabled } from "@/lib/c00-policy";
 import { C00EnvelopeError } from "@/lib/c00-signal";
 import { StateVersionError } from "@/lib/ai/usage-guard";
 import type { C00DecisionAction, C00SignalCandidate, C00SignalType } from "@/lib/c00-signal";
@@ -54,6 +55,7 @@ export function routeC00Decision(input: {
   callId: string;
   userText: string;
 }): C00RouteResult {
+  if (!isC00PolicyEnabled()) return { decision: null, applyThoughtUpdate: true };
   if (!input.candidate) return { decision: null, applyThoughtUpdate: true };
   if (input.ownerUserId !== input.callOwnerUserId || input.candidate.signalType === "foreign_user") {
     throw new C00EnvelopeError("Чужой владелец не пишет решение мысли.", "C00_FOREIGN_USER", 403);

@@ -316,6 +316,10 @@ export async function commitDialogueReply(input: {
           select: { id: true, resultJson: true },
         }),
       );
+      const targetId = input.c00Signal?.targetId;
+      const priorOnTarget = prior.filter(
+        (item) => !targetId || item.correction.targetId === targetId,
+      );
       const resolved = resolveC00Correction({
         decision,
         candidate: input.c00Signal ?? null,
@@ -323,7 +327,7 @@ export async function commitDialogueReply(input: {
         openGaps: lists.openGaps,
         thoughtUpdate: input.thoughtUpdate,
         currentUserMessageId: userMessage.id,
-        priorDecisionIdOnTarget: prior.at(-1)?.correction.decisionId ?? null,
+        priorDecisionIdOnTarget: priorOnTarget.at(-1)?.correction.decisionId ?? null,
         acceptedAt: "",
       });
       if (resolved) {

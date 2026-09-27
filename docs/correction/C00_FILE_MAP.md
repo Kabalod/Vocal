@@ -1,6 +1,6 @@
 # C00 — файлы и риски схемы
 
-Документы C00 **приняты**. C00-01–C00-03 **приняты** (C00-03 = `f1eeb54`). C00-04 **реализован, не принят**. Продукт C00 **не принят**. Маршрут: [`../ROADMAP.md`](../ROADMAP.md). Следующий этап — приёмка C00-04, затем C00-05.
+Документы C00 **приняты**. C00-01–C00-04 **приняты** (C00-04 = `ce6a43c`). C00-05 **реализован, не принят**. Продукт C00 **не принят**. Маршрут: [`../ROADMAP.md`](../ROADMAP.md). Следующий этап — приёмка C00-05.
 
 ## Читать как есть (принятый V03 + BASE портрета)
 
@@ -24,7 +24,7 @@
 Предпочтительно без live migrate:
 
 1. Единый конверт `c00-envelope-1` в `AiCall.resultJson` хода мысли (сейчас там только action: `working-take.ts`). Не класть C00 в `profile_dialogue` и не в payload `ProfileRevision`.
-2. Политика: логический модуль вроде `correction-policy.ts`.
+2. Политика: `src/lib/c00-policy.ts` (`VOCAL_C00_POLICY`; `0`/`off` — откат на путь V03).
 3. Вызов из `commitDialogueReply` — `correct_thought` / `keep_local` / `discard`. Портрет не вызывать.
 4. Stale: `correction.acceptedAt` в конверте; revision в снимке, если есть. В `questions.ts` сейчас нет `thoughtStateRevision` — добавить отдельной задачей этапа. Без колонки `stale`.
 
