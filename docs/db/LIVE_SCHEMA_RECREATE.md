@@ -1,12 +1,12 @@
 # Live-схема: пересоздание таблиц приложения
 
-Status: **стратегия принята** (28.09.2026). Удаление и `migrate deploy` **не выполнены**.
+Status: **применено 28.09.2026** (DROP 19 таблиц Prisma + SQL миграций `0`…`9` + `_prisma_migrations`). Шаг 5 (вход Auth + короткий C00 на тестовом пользователе) **не закрыт**. Продукт live-схемы **не принят**, пока нет этой сверки.
 
 Решение: в том же проекте Supabase очистить только таблицы Prisma и заново применить миграции репозитория `0_postgres_baseline` → `9_v03_dialogue_exec_lease`, чтобы появилась настоящая `_prisma_migrations`. Auth (`auth.users`), `public.profiles`, триггер создания профиля и Storage **не трогать**. Старое содержимое приложения не переносить.
 
 Карта: [`../ROADMAP.md`](../ROADMAP.md). Это не приёмка V04 и не принятие всей карты.
 
-## Свежая сверка (28.09.2026, только чтение)
+## Сверка до DROP (28.09.2026, только чтение)
 
 Проект live тот же (`zfbiyyhedhqdgrxxajrj`). Старый [`DB00_DRIFT_REPORT.md`](./DB00_DRIFT_REPORT.md) сверял baseline и **не** подтверждает состояние после V02–V03.
 
@@ -44,13 +44,16 @@ Status: **стратегия принята** (28.09.2026). Удаление и 
 
 `Criterion` — каталог, не авторский контент. После recreate таблица из baseline будет пустой; посев критериев — отдельная проверка, не импорт старых мыслей.
 
-## Порядок (ещё не начат с шага дампа)
+## Что сделано 28.09.2026
 
-1. Дамп / backup проекта **до** DELETE/DROP. Повторить счётчики в тот же день, что и удаление.
-2. `DROP TABLE` только 19 Prisma-таблиц (CASCADE внутри этого набора). Не `DROP SCHEMA public`. `ThoughtState` сейчас нет — не искать её как обязательную. Проверить FK ещё раз в момент удаления.
-3. Сохранить `auth.users`, `public.profiles`, `handle_new_user` / `on_auth_user_created`, политики `profiles`, bucket `vocal-private`. Не переигрывать Supabase-миграцию `vocal_app_tables`.
-4. На пустой области приложения: `prisma migrate deploy` по цепочке `0`…`9` (появится `_prisma_migrations` и `ThoughtState`, колонки 8–9). Не `migrate resolve` под уже существующие таблицы.
-5. Сверить схему, RLS/права, вход Auth, короткий путь C00 на тестовом пользователе.
+- Дамп счётчиков и списка таблиц (не полный `pg_dump` тел строк). Тестовые строки приложения удалены вместе с таблицами.
+- `DROP` 19 таблиц Prisma. `public.profiles` (4), `auth.users` (4), `on_auth_user_created`, bucket `vocal-private` на месте.
+- Накаты `0`…`9` текстом миграций репозитория. Появились `ThoughtState`, `AiCall.turnKey`, `execLeaseUntil`.
+- `_prisma_migrations`: 10 записей `0_postgres_baseline` … `9_v03_dialogue_exec_lease`. Checksum — SHA-256 файлов в worktree на момент записи. Не `migrate resolve` поверх старых таблиц.
+- RLS + FORCE на таблицах приложения, без политик (как раньше: сервер Prisma / service_role). Advisor `rls_enabled_no_policy` — ожидаемо.
+- `Criterion` пуст. `Reel` / `ThoughtState` = 0.
+
+Не сделано: вход в приложение и ход C00 на тестовом пользователе. Не стартовать V04 из этого применения.
 
 ## Запреты
 
