@@ -4,13 +4,18 @@ const XAI_CHAT_URL = "https://api.x.ai/v1/chat/completions";
 
 let groqClient: Groq | null = null;
 
+function envFlagOn(name: string) {
+  const raw = process.env[name]?.trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "on";
+}
+
+/** xAI chat only with explicit `VOCAL_USE_XAI=1`. Presence of `XAI_API_KEY` is not enough. */
 export function usesXaiChat() {
-  return Boolean(process.env.XAI_API_KEY?.trim());
+  return envFlagOn("VOCAL_USE_XAI") && Boolean(process.env.XAI_API_KEY?.trim());
 }
 
 export function noAutomaticModelRetry() {
-  const raw = process.env.VOCAL_AI_NO_RETRY?.trim().toLowerCase();
-  return usesXaiChat() || raw === "1" || raw === "true" || raw === "on";
+  return usesXaiChat() || envFlagOn("VOCAL_AI_NO_RETRY");
 }
 
 export function chatCompletionModel(requested?: string) {

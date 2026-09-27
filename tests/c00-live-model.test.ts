@@ -34,12 +34,7 @@ function loadLocalEnv() {
       }
       if (
         key === "GROQ_API_KEY" ||
-        key === "XAI_API_KEY" ||
-        key === "XAI_MODEL" ||
         key === "LLM_MODEL" ||
-        key === "VOCAL_AI_DAILY_CALL_LIMIT" ||
-        key === "VOCAL_AI_NO_RETRY" ||
-        key === "VOCAL_AI_BUDGET_FILE" ||
         key === "VOCAL_LIVE_REPEATS"
       ) {
         process.env[key] = value;
@@ -51,7 +46,7 @@ function loadLocalEnv() {
 loadLocalEnv();
 resetGroq();
 
-const LIVE = Boolean(process.env.XAI_API_KEY?.trim() || process.env.GROQ_API_KEY?.trim());
+const LIVE = Boolean(process.env.GROQ_API_KEY?.trim());
 
 function summarizePrompt(prompt: string | null | undefined) {
   if (!prompt) return null;
@@ -123,7 +118,7 @@ function summarizeReply(raw: string) {
 
 test("live model C00 chain: author message to thought slice", async (t) => {
   if (!LIVE) {
-    t.skip("XAI_API_KEY / GROQ_API_KEY not loaded");
+    t.skip("GROQ_API_KEY not loaded");
     return;
   }
   const { prisma } = await withPostgresTestDb(t);

@@ -28,12 +28,7 @@ function loadLocalEnv() {
       }
       if (
         key === "GROQ_API_KEY" ||
-        key === "XAI_API_KEY" ||
-        key === "XAI_MODEL" ||
         key === "LLM_MODEL" ||
-        key === "VOCAL_AI_DAILY_CALL_LIMIT" ||
-        key === "VOCAL_AI_NO_RETRY" ||
-        key === "VOCAL_AI_BUDGET_FILE" ||
         key === "VOCAL_LIVE_REPEATS"
       ) {
         process.env[key] = value;
@@ -45,13 +40,13 @@ function loadLocalEnv() {
 loadLocalEnv();
 resetGroq();
 
-const LIVE = Boolean(process.env.XAI_API_KEY?.trim() || process.env.GROQ_API_KEY?.trim());
+const LIVE = Boolean(process.env.GROQ_API_KEY?.trim());
 const FACT_SEED = { id: "fact_seed", text: "Вечер тихий.", sourceType: "initial_note" };
 const NEGATION_FACT = { id: "fact_seed", text: "Автор любит мат.", sourceType: "initial_note" };
 
 test("live classify C00 correction before action: two phrases on one fact_seed", async (t) => {
   if (!LIVE) {
-    t.skip("XAI_API_KEY / GROQ_API_KEY not loaded");
+    t.skip("GROQ_API_KEY not loaded");
     return;
   }
 

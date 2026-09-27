@@ -21,7 +21,13 @@ resetGroq();
 
 async function main() {
   if (!usesXaiChat()) {
-    console.log(JSON.stringify({ ok: false, reason: "no_xai" }));
+    console.log(
+      JSON.stringify({
+        ok: false,
+        reason: "xai_disabled",
+        hint: "xAI is off. Set VOCAL_USE_XAI=1 only after an explicit ask.",
+      }),
+    );
     process.exit(1);
   }
   const before = peekAiCallBudget();
