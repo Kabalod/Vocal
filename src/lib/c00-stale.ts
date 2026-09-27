@@ -55,7 +55,6 @@ export function isOpenQuestionStale(input: {
   }
   if (
     input.reviewTranscriptRevisionId != null &&
-    input.selectedTranscriptId != null &&
     input.reviewTranscriptRevisionId !== input.selectedTranscriptId
   ) {
     return true;

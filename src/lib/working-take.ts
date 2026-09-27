@@ -321,6 +321,7 @@ export async function commitDialogueReply(input: {
         facts: lists.facts,
         openGaps: lists.openGaps,
         thoughtUpdate: input.thoughtUpdate,
+        currentUserMessageId: userMessage.id,
         priorDecisionIdOnTarget: prior.at(-1)?.correction.decisionId ?? null,
         acceptedAt: "",
       });

@@ -73,6 +73,7 @@ export function c00SignalFor(
   proposedAction: C00SignalCandidate["proposedAction"],
   evidenceUserMessageId: string,
   thoughtStateRevisionSeen: number,
+  extras: Partial<Pick<C00SignalCandidate, "targetKind" | "targetId" | "operation">> = {},
 ): C00SignalCandidate {
   return {
     signalType,
@@ -80,6 +81,7 @@ export function c00SignalFor(
     evidenceUserMessageIds: [evidenceUserMessageId],
     thoughtStateRevisionSeen,
     reasonCode: signalType,
+    ...extras,
   };
 }
 

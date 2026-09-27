@@ -1,4 +1,5 @@
 import type { C00Correction, C00Decision } from "@/lib/c00-envelope";
+import { C00EnvelopeError } from "@/lib/c00-signal";
 import type { C00SignalCandidate } from "@/lib/c00-signal";
 import type { ThoughtFact, ThoughtGap, ThoughtStatePatch } from "@/lib/thought-state";
 import type { ThoughtUpdate } from "@/lib/agent-action";
@@ -23,6 +24,7 @@ export function resolveC00Correction(input: {
   facts: ThoughtFact[];
   openGaps: ThoughtGap[];
   thoughtUpdate: ThoughtUpdate;
+  currentUserMessageId: string;
   priorDecisionIdOnTarget?: string | null;
   acceptedAt: string;
 }): ResolvedC00Correction | null {
@@ -44,7 +46,24 @@ export function resolveC00Correction(input: {
       patch.facts = input.facts.filter((fact) => fact.id !== targetId);
     } else if (operation === "supersede") {
       if (!replacement) return null;
-      patch.facts = input.facts.map((fact) => (fact.id === targetId ? { ...fact, text: replacement } : fact));
+      const claimedSource = input.thoughtUpdate.fact?.sourceId;
+      if (claimedSource && claimedSource !== input.currentUserMessageId) {
+        throw new C00EnvelopeError(
+          "Источник новой версии факта должен быть текущим сообщением автора этой мысли.",
+          "C00_EVIDENCE",
+          403,
+        );
+      }
+      patch.facts = input.facts.map((fact) =>
+        fact.id === targetId
+          ? {
+              ...fact,
+              text: replacement,
+              sourceType: "dialogue_message",
+              sourceId: input.currentUserMessageId,
+            }
+          : fact,
+      );
     } else {
       return null;
     }

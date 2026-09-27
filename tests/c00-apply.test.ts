@@ -11,7 +11,37 @@ import { v03TestSeams } from "../src/lib/v03-test-seams";
 import { listAcceptedC00Corrections, parseC00Envelope } from "../src/lib/c00-envelope";
 import { listScriptWorkspace, replaceScriptDraft } from "../src/lib/scripts";
 import { listReelQuestions } from "../src/lib/ai/questions";
-import { askQuestionJson, c00SignalFor } from "./helpers/agent-action-json";
+import { isOpenQuestionStale } from "../src/lib/c00-stale";
+import { ensureOriginalFromText } from "../src/lib/transcripts";
+import { askQuestionJson, c00SignalFor, thoughtUpdateForUserText } from "./helpers/agent-action-json";
+
+test("open question is stale when review transcript id remains and working take clears selection", () => {
+  const createdAt = new Date("2026-09-27T08:00:00.000Z");
+  assert.equal(
+    isOpenQuestionStale({
+      status: "open",
+      createdAt,
+      reviewTranscriptRevisionId: "rev_old",
+      selectedTranscriptId: "rev_old",
+      roundThoughtStateRevision: null,
+      thoughtRevision: 0,
+      correctionAcceptedAt: [],
+    }),
+    false,
+  );
+  assert.equal(
+    isOpenQuestionStale({
+      status: "open",
+      createdAt,
+      reviewTranscriptRevisionId: "rev_old",
+      selectedTranscriptId: null,
+      roundThoughtStateRevision: null,
+      thoughtRevision: 0,
+      correctionAcceptedAt: [],
+    }),
+    true,
+  );
+});
 
 async function completeWrongSpeaker(
   prisma: Awaited<ReturnType<typeof withPostgresTestDb>>["prisma"],
@@ -210,4 +240,103 @@ test("losing CAS turn does not apply a second correct_thought", async (t) => {
   const state = await getThoughtState(reel.id);
   assert.equal(state.revision, 2);
   assert.equal(state.facts.length, 0);
+});
+
+test("supersede rewrites fact source to the current author message", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "C00-03 supersede source",
+    body: "Исходная заметка.",
+    idempotencyKey: "c00-03-sup-create",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: {
+      facts: [{ id: "fact_seed", text: "Старая формулировка из заметки.", sourceType: "initial_note", sourceId: reel.id }],
+    },
+  });
+  const text = "Правильнее так: это моя формулировка.";
+  await sendDialogueMessage(reel.id, { text, idempotencyKey: "c00-03-sup-1" }, async () => {
+    const update = await thoughtUpdateForUserText(prisma, reel.id, text);
+    const state = await getThoughtState(reel.id);
+    return {
+      text: askQuestionJson(
+        "Что ещё уточнить?",
+        update,
+        c00SignalFor("local_correction", "correct_thought", update.userMessageId, state.revision, {
+          targetKind: "fact",
+          targetId: "fact_seed",
+          operation: "supersede",
+        }),
+      ),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    };
+  });
+  const after = await getThoughtState(reel.id);
+  const fact = after.facts.find((item) => item.id === "fact_seed");
+  assert.ok(fact);
+  assert.equal(fact.text, text);
+  assert.equal(fact.sourceType, "dialogue_message");
+  const user = await prisma.dialogueMessage.findFirstOrThrow({
+    where: { thread: { reelId: reel.id }, role: "user", body: text },
+    orderBy: { createdAt: "desc" },
+  });
+  assert.equal(fact.sourceId, user.id);
+  const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId: reel.id } });
+  assert.equal(user.threadId, thread.id);
+  const envelope = parseC00Envelope(
+    (await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id, kind: "dialogue" } })).resultJson,
+  );
+  assert.equal(envelope?.correction?.operation, "supersede");
+  assert.equal(envelope?.correction?.targetId, "fact_seed");
+});
+
+test("open question becomes stale when working take loses selected transcript", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "C00-03 q stale",
+    body: "Мысль с расшифровкой.",
+    idempotencyKey: "c00-03-q-stale-create",
+  });
+  const take = await prisma.take.findFirstOrThrow({ where: { reelId: reel.id } });
+  const revision = await ensureOriginalFromText(take.id, "Произнесённый текст дубля.");
+  await prisma.take.update({ where: { id: take.id }, data: { selectedTranscriptId: revision.id } });
+  const review = await prisma.review.create({
+    data: {
+      reelId: reel.id,
+      takeId: take.id,
+      transcriptRevisionId: revision.id,
+      status: "done",
+    },
+  });
+  const round = await prisma.aiCall.create({
+    data: {
+      kind: "questions",
+      reelId: reel.id,
+      ownerUserId: "local",
+      model: "test",
+      status: "done",
+      promptText: "q",
+      inputSnapshotJson: JSON.stringify({}),
+    },
+  });
+  await prisma.question.create({
+    data: {
+      reelId: reel.id,
+      reviewId: review.id,
+      roundId: round.id,
+      text: "Вопрос по расшифровке",
+      status: "open",
+      sortOrder: 0,
+    },
+  });
+  const fresh = await listReelQuestions(reel.id);
+  assert.equal(fresh[0]?.stale, false);
+  await prisma.take.update({ where: { id: take.id }, data: { selectedTranscriptId: null } });
+  const stale = await listReelQuestions(reel.id);
+  assert.equal(stale[0]?.status, "open");
+  assert.equal(stale[0]?.stale, true);
 });
