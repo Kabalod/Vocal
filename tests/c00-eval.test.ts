@@ -386,3 +386,66 @@ test("contradiction without targetId binds to the inferred fact, not the last ot
   assert.equal(envelopes[2]?.decision?.contradictsDecisionId, factDecision?.decisionId);
   assert.notEqual(envelopes[2]?.decision?.contradictsDecisionId, envelopes[1]?.decision?.decisionId);
 });
+
+test("live-shaped ask_question with stray evidenceRefs reaches C00 correction", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const previous = c00PolicySeam.enabled;
+  c00PolicySeam.enabled = true;
+  t.after(() => { c00PolicySeam.enabled = previous; });
+  assert.throws(
+    () => parseAgentReply({
+      action: "ask_question",
+      question: "Что ваше?",
+      clarificationReason: "нужно уточнение",
+      whyUnknown: "говорящий неясен",
+      unexpectedField: true,
+    }),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "AGENT_ACTION_INVALID",
+  );
+  const { reel } = await createThoughtFromText({
+    title: "C00 live answer shape",
+    body: "Мысль с чужой репликой.",
+    idempotencyKey: "c00-live-shape-create",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: {
+      facts: [{ id: "fact_seed", text: "Реплика оператора.", sourceType: "initial_note", sourceId: reel.id }],
+    },
+  });
+  const before = await getThoughtState(reel.id);
+  const text = "Это сказал оператор, не я.";
+  await sendDialogueMessage(reel.id, { text, idempotencyKey: "c00-live-shape-1" }, async () => {
+    const user = await prisma.dialogueMessage.findFirstOrThrow({
+      where: { thread: { reelId: reel.id }, role: "user", body: text },
+      orderBy: { createdAt: "desc" },
+    });
+    return {
+      text: JSON.stringify({
+        action: "ask_question",
+        question: "Что тогда ваше?",
+        clarificationReason: "нужно уточнить говорящего",
+        whyUnknown: "автор пока не уточнил свою позицию",
+        evidenceRefs: ["fact_seed"],
+        thoughtUpdate: { fact: null, closeGapIds: [] },
+        c00Signal: c00SignalFor("wrong_speaker", "correct_thought", user.id, before.revision, {
+          targetKind: "fact",
+          targetId: "fact_seed",
+          operation: "clear_slot",
+        }),
+      }),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    };
+  });
+  const after = await getThoughtState(reel.id);
+  assert.equal(after.facts.some((fact) => fact.id === "fact_seed"), false);
+  assert.equal(after.revision, before.revision + 1);
+  const call = await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id, kind: "dialogue" } });
+  const envelope = parseC00Envelope(call.resultJson);
+  assert.equal(envelope?.action.action, "ask_question");
+  assert.equal(envelope?.decision?.applyResult, "applied");
+  assert.equal(envelope?.correction?.targetId, "fact_seed");
+  await assertNoThoughtPortraitBridge(prisma, reel.id);
+});
