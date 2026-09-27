@@ -394,7 +394,7 @@ async function freezeThoughtPrompt(
       openGaps: thought.openGaps,
     })}`,
     isC00PolicyEnabled()
-      ? `JSON: действие, thoughtUpdate и необязательный c00Signal. Без явного thoughtUpdate состояние не меняется. Не сообщай, что ошибка уже исправлена. Пример: {"action":"suggest_take","mainIdea":"","takeTask":"","evidenceRefs":["fact_id"],"thoughtUpdate":{"fact":{"text":"","sourceType":"dialogue_message","sourceId":""},"closeGapIds":[]},"c00Signal":{"signalType":"local_correction","proposedAction":"correct_thought","evidenceUserMessageIds":["${turn?.userMessageId ?? "user_message_id"}"],"thoughtStateRevisionSeen":${thought.revision},"reasonCode":"local_correction"}}`
+      ? `JSON: действие, thoughtUpdate и необязательный c00Signal. Без явного thoughtUpdate состояние не меняется. Не сообщай, что ошибка уже исправлена. Для ask_question передавай action, question, gapId или clarificationReason, whyUnknown; evidenceRefs бывает только у suggest_take. thoughtUpdate и c00Signal — отдельные поля корня, не поля действия. Пример: {"action":"suggest_take","mainIdea":"","takeTask":"","evidenceRefs":["fact_id"],"thoughtUpdate":{"fact":{"text":"","sourceType":"dialogue_message","sourceId":""},"closeGapIds":[]},"c00Signal":{"signalType":"local_correction","proposedAction":"correct_thought","evidenceUserMessageIds":["${turn?.userMessageId ?? "user_message_id"}"],"thoughtStateRevisionSeen":${thought.revision},"reasonCode":"local_correction"}}`
       : `JSON: действие и thoughtUpdate. Без явного thoughtUpdate состояние не меняется. Пример: {"action":"suggest_take","mainIdea":"","takeTask":"","evidenceRefs":["fact_id"],"thoughtUpdate":{"fact":{"text":"","sourceType":"dialogue_message","sourceId":""},"closeGapIds":[]}}`,
   ]
     .filter(Boolean)
