@@ -6,7 +6,7 @@ import { v01TestSeams } from "@/lib/v01-test-seams";
 import type { Prisma } from "@prisma/client";
 import { actionMessage, assertAgentActionAllowed, type AgentAction, type ThoughtUpdate } from "@/lib/agent-action";
 import { allowsThoughtStatePatch, routeC00Decision } from "@/lib/c00-router";
-import { resolveC00Correction } from "@/lib/c00-correction";
+import { priorDecisionIdForTarget, resolveC00Correction, resolveC00CorrectionTarget } from "@/lib/c00-correction";
 import type { C00SignalCandidate } from "@/lib/c00-signal";
 import { applyThoughtStateInTx, buildDialogueThoughtPatch, parseThoughtStateLists } from "@/lib/thought-state";
 import {
@@ -316,10 +316,13 @@ export async function commitDialogueReply(input: {
           select: { id: true, resultJson: true },
         }),
       );
-      const targetId = input.c00Signal?.targetId;
-      const priorOnTarget = prior.filter(
-        (item) => !targetId || item.correction.targetId === targetId,
-      );
+      const target = resolveC00CorrectionTarget({
+        candidate: input.c00Signal ?? null,
+        facts: lists.facts,
+        openGaps: lists.openGaps,
+        thoughtUpdate: input.thoughtUpdate,
+        signalType: decision.signalType,
+      });
       const resolved = resolveC00Correction({
         decision,
         candidate: input.c00Signal ?? null,
@@ -327,7 +330,16 @@ export async function commitDialogueReply(input: {
         openGaps: lists.openGaps,
         thoughtUpdate: input.thoughtUpdate,
         currentUserMessageId: userMessage.id,
-        priorDecisionIdOnTarget: priorOnTarget.at(-1)?.correction.decisionId ?? null,
+        priorDecisionIdOnTarget: target
+          ? priorDecisionIdForTarget(
+              prior.map((item) => ({
+                decisionId: item.correction.decisionId,
+                targetKind: item.correction.targetKind,
+                targetId: item.correction.targetId,
+              })),
+              target,
+            )
+          : null,
         acceptedAt: "",
       });
       if (resolved) {

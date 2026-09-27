@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
+import { isC00PolicyEnabled } from "@/lib/c00-policy";
 import { parseC00SignalCandidate, type C00SignalCandidate } from "@/lib/c00-signal";
 import { parseThoughtStateLists } from "@/lib/thought-state";
 
@@ -84,7 +85,7 @@ export function parseAgentReply(raw: unknown): {
     throw new AgentActionError("Модель вернула недопустимое действие.", "AGENT_ACTION_INVALID");
   }
   const { thoughtUpdate, c00Signal: signalRaw, ...actionRaw } = raw as Record<string, unknown>;
-  const c00Signal = parseC00SignalCandidate(signalRaw);
+  const c00Signal = isC00PolicyEnabled() ? parseC00SignalCandidate(signalRaw) : null;
   const parsed = agentActionSchema.safeParse(actionRaw);
   if (!parsed.success) {
     throw new AgentActionError("Модель вернула недопустимое действие.", "AGENT_ACTION_INVALID");

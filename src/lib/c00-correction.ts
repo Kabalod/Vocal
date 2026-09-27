@@ -18,6 +18,35 @@ function defaultOperation(signalType: C00Decision["signalType"], hasReplacement:
   return "clear_slot" as const;
 }
 
+export function resolveC00CorrectionTarget(input: {
+  candidate: C00SignalCandidate | null;
+  facts: ThoughtFact[];
+  openGaps: ThoughtGap[];
+  thoughtUpdate: ThoughtUpdate;
+  signalType: C00Decision["signalType"];
+}): { targetKind: "fact" | "gap"; targetId: string; operation: "supersede" | "reopen" | "clear_slot" } | null {
+  const targetKind = input.candidate?.targetKind ?? "fact";
+  const replacement = input.thoughtUpdate.fact?.text.trim() ?? "";
+  const operation = input.candidate?.operation ?? defaultOperation(input.signalType, Boolean(replacement));
+  const targetId =
+    input.candidate?.targetId ??
+    (targetKind === "fact" && input.facts.length === 1 ? input.facts[0]?.id : undefined);
+  if (!targetId) return null;
+  if (targetKind === "fact" && !input.facts.some((fact) => fact.id === targetId)) return null;
+  if (targetKind === "gap" && !input.openGaps.some((gap) => gap.id === targetId)) return null;
+  return { targetKind, targetId, operation };
+}
+
+export function priorDecisionIdForTarget(
+  prior: Array<{ decisionId: string; targetKind: "fact" | "gap"; targetId: string }>,
+  target: { targetKind: "fact" | "gap"; targetId: string },
+) {
+  return (
+    prior.filter((item) => item.targetKind === target.targetKind && item.targetId === target.targetId).at(-1)
+      ?.decisionId ?? null
+  );
+}
+
 export function resolveC00Correction(input: {
   decision: C00Decision;
   candidate: C00SignalCandidate | null;
@@ -31,13 +60,16 @@ export function resolveC00Correction(input: {
   if (input.decision.action !== "correct_thought") return null;
   if (input.decision.evidenceUserMessageIds.length !== 1) return null;
   if (input.decision.evidenceUserMessageIds[0] !== input.currentUserMessageId) return null;
-  const targetKind = input.candidate?.targetKind ?? "fact";
+  const target = resolveC00CorrectionTarget({
+    candidate: input.candidate,
+    facts: input.facts,
+    openGaps: input.openGaps,
+    thoughtUpdate: input.thoughtUpdate,
+    signalType: input.decision.signalType,
+  });
+  if (!target) return null;
+  const { targetKind, targetId, operation } = target;
   const replacement = input.thoughtUpdate.fact?.text.trim() ?? "";
-  const operation = input.candidate?.operation ?? defaultOperation(input.decision.signalType, Boolean(replacement));
-  const targetId =
-    input.candidate?.targetId ??
-    (targetKind === "fact" && input.facts.length === 1 ? input.facts[0]?.id : undefined);
-  if (!targetId) return null;
 
   const before = input.decision.thoughtStateRevisionSeen;
   const patch: ThoughtStatePatch = {};

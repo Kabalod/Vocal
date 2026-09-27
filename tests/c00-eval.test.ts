@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
-import { sendDialogueMessage } from "../src/lib/dialogue";
+import { parseAgentReply } from "../src/lib/agent-action";
+import { sendDialogueMessage, thoughtDialogueSystemPrompt } from "../src/lib/dialogue";
+import { C00EnvelopeError } from "../src/lib/c00-envelope";
 import { createThoughtFromText } from "../src/lib/thought-create";
 import { applyThoughtState, getThoughtState } from "../src/lib/thought-state";
 import { C00_POLICY_ENV, c00PolicySeam, isC00PolicyEnabled } from "../src/lib/c00-policy";
@@ -245,4 +247,119 @@ test("disabled C00 policy leaves V03 thoughtUpdate and writes no decision", asyn
   assert.equal(envelope?.decision, null);
   assert.equal(envelope?.correction, null);
   await assertNoThoughtPortraitBridge(prisma, reel.id);
+});
+
+test("disabled C00 policy ignores invalid c00Signal and uses the V03 prompt", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  t.after(() => {
+    c00PolicySeam.enabled = null;
+  });
+  c00PolicySeam.enabled = false;
+  assert.equal(thoughtDialogueSystemPrompt().includes("c00Signal"), false);
+  assert.doesNotThrow(() =>
+    parseAgentReply({
+      action: "ask_question",
+      question: "Что ваше?",
+      clarificationReason: "нужно уточнение задачи",
+      whyUnknown: "в материале этой мысли ответа ещё нет",
+      thoughtUpdate: { fact: null, closeGapIds: [] },
+      c00Signal: { signalType: "not_a_real_signal", proposedAction: "correct_thought" },
+    }),
+  );
+  c00PolicySeam.enabled = true;
+  assert.throws(
+    () =>
+      parseAgentReply({
+        action: "ask_question",
+        question: "Что ваше?",
+        clarificationReason: "нужно уточнение задачи",
+        whyUnknown: "в материале этой мысли ответа ещё нет",
+        c00Signal: { signalType: "not_a_real_signal", proposedAction: "correct_thought" },
+      }),
+    (error: unknown) => error instanceof C00EnvelopeError && error.code === "C00_SIGNAL_INVALID",
+  );
+  c00PolicySeam.enabled = false;
+  const { reel } = await createThoughtFromText({
+    title: "C00-05 invalid signal",
+    body: "Мысль для битого сигнала при откате.",
+    idempotencyKey: "c00-05-bad-signal-create",
+  });
+  const text = "Сцена вечером на кухне.";
+  await sendDialogueMessage(reel.id, { text, idempotencyKey: "c00-05-bad-signal-1" }, async () => {
+    const update = await thoughtUpdateForUserText(prisma, reel.id, text);
+    return {
+      text: JSON.stringify({
+        action: "ask_question",
+        question: "Что ещё уточнить?",
+        clarificationReason: "нужно уточнение задачи",
+        whyUnknown: "в материале этой мысли ответа ещё нет",
+        thoughtUpdate: { fact: update.fact, closeGapIds: [] },
+        c00Signal: { signalType: "not_a_real_signal", proposedAction: "correct_thought", extra: true },
+      }),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    };
+  });
+  const after = await getThoughtState(reel.id);
+  assert.equal(after.facts.some((fact) => fact.text === text), true);
+  const call = await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id, kind: "dialogue" } });
+  assert.equal(call.promptText?.includes("c00Signal"), false);
+  const envelope = parseC00Envelope(call.resultJson);
+  assert.equal(envelope?.decision, null);
+  assert.equal(envelope?.correction, null);
+});
+
+test("contradiction without targetId binds to the inferred fact, not the last other slot", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "C00-05 contradict target",
+    body: "Мысль с фактом и другим слотом.",
+    idempotencyKey: "c00-05-con-target-create",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: {
+      facts: [{ id: "fact_seed", text: "Исходный факт.", sourceType: "initial_note", sourceId: reel.id }],
+      openGaps: [{ id: "gap_other", text: "другой слот", status: "open" }],
+    },
+  });
+  const first = "Сначала так: версия А.";
+  await sendDialogueMessage(reel.id, { text: first, idempotencyKey: "c00-05-con-target-1" }, () =>
+    completeLocalCorrection(prisma, reel.id, first, {
+      targetKind: "fact",
+      targetId: "fact_seed",
+      operation: "supersede",
+    }),
+  );
+  const factDecision = listC00Decisions(await prisma.aiCall.findMany({ where: { reelId: reel.id } }))[0];
+  const other = "Это про пробел, не про факт.";
+  await sendDialogueMessage(reel.id, { text: other, idempotencyKey: "c00-05-con-target-2" }, () =>
+    completeLocalCorrection(
+      prisma,
+      reel.id,
+      other,
+      { targetKind: "gap", targetId: "gap_other", operation: "supersede" },
+      "local_correction",
+    ),
+  );
+  const afterGap = await getThoughtState(reel.id);
+  assert.equal(afterGap.facts.find((fact) => fact.id === "fact_seed")?.text, first);
+  assert.equal(afterGap.openGaps.find((gap) => gap.id === "gap_other")?.text, other);
+  const third = "Нет, верно версия Б.";
+  await sendDialogueMessage(reel.id, { text: third, idempotencyKey: "c00-05-con-target-3" }, () =>
+    completeLocalCorrection(prisma, reel.id, third, { operation: "supersede" }, "contradictory_correction"),
+  );
+  const after = await getThoughtState(reel.id);
+  assert.equal(after.facts.find((fact) => fact.id === "fact_seed")?.text, third);
+  const rows = await prisma.aiCall.findMany({
+    where: { reelId: reel.id, kind: "dialogue" },
+    orderBy: { createdAt: "asc" },
+  });
+  const envelopes = rows.map((row) => parseC00Envelope(row.resultJson));
+  assert.equal(envelopes[1]?.correction?.targetId, "gap_other");
+  assert.equal(envelopes[2]?.correction?.targetId, "fact_seed");
+  assert.equal(envelopes[2]?.decision?.contradictsDecisionId, factDecision?.decisionId);
+  assert.notEqual(envelopes[2]?.decision?.contradictsDecisionId, envelopes[1]?.decision?.decisionId);
 });
