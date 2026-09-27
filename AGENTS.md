@@ -1,7 +1,7 @@
 # Instructions for coding agents (Vocal)
 
 Start here:
-1. `docs/ROADMAP.md` — общая дорожная карта на 27.09.2026 (**не принята**). C00 product **accepted** at `e268c40`. Auth **accepted** at `51d6033` (confirmed 28.09.2026). Next: live-schema decision (no migrate on live from this note) or V04 only after an explicit start. Accepting Auth does not accept live schema, the map, or V04.
+1. `docs/ROADMAP.md` — общая дорожная карта на 27.09.2026 (**не принята**). C00 product **accepted** at `e268c40`. Auth **accepted** at `51d6033`. Live schema: recreate Prisma tables (plan accepted, not applied) — `docs/db/LIVE_SCHEMA_RECREATE.md`. Do not DROP or `migrate deploy` on live until that run is explicitly started. V04 only after an explicit start.
 2. `docs/design/README.md`
 3. `docs/design/SOURCE_OF_TRUTH_2026-09-15.md`
 4. Visual source of truth: `docs/design/references-new/` (approved screens 01–09; `/reels` uses screen 09)
