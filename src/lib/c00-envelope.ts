@@ -19,6 +19,18 @@ export type C00Decision = {
   applyResult: "applied" | "not_applied";
 };
 
+export type C00Correction = {
+  correctionId: string;
+  decisionId: string;
+  targetKind: "fact" | "gap";
+  targetId: string;
+  operation: "supersede" | "reopen" | "clear_slot";
+  beforeThoughtRevision: number;
+  afterThoughtRevision: number;
+  replacedBecause: string;
+  acceptedAt: string;
+};
+
 export type C00Envelope = {
   schemaVersion: typeof C00_ENVELOPE_SCHEMA;
   aiCallId: string;
@@ -27,7 +39,7 @@ export type C00Envelope = {
   reelId: string;
   action: AgentAction;
   decision: C00Decision | null;
-  correction: null;
+  correction: C00Correction | null;
 };
 
 const decisionSchema = z
@@ -45,6 +57,20 @@ const decisionSchema = z
   })
   .strict();
 
+const correctionSchema = z
+  .object({
+    correctionId: z.string().trim().min(1),
+    decisionId: z.string().trim().min(1),
+    targetKind: z.enum(["fact", "gap"]),
+    targetId: z.string().trim().min(1),
+    operation: z.enum(["supersede", "reopen", "clear_slot"]),
+    beforeThoughtRevision: z.number().int().nonnegative(),
+    afterThoughtRevision: z.number().int().nonnegative(),
+    replacedBecause: z.string().trim().min(1),
+    acceptedAt: z.string().trim().min(1),
+  })
+  .strict();
+
 const envelopeSchema = z
   .object({
     schemaVersion: z.literal(C00_ENVELOPE_SCHEMA),
@@ -54,9 +80,17 @@ const envelopeSchema = z
     reelId: z.string().trim().min(1),
     action: agentActionSchema,
     decision: z.union([z.null(), decisionSchema]),
-    correction: z.null(),
+    correction: z.union([z.null(), correctionSchema]),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.correction && value.decision?.action !== "correct_thought") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "correction requires correct_thought" });
+    }
+    if (value.correction && value.decision && value.correction.decisionId !== value.decision.decisionId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "correction.decisionId mismatch" });
+    }
+  });
 
 export function parseJsonValue(raw: string | null | undefined): unknown {
   if (!raw?.trim()) return null;
@@ -96,6 +130,23 @@ export function listC00Decisions(rows: Array<{ resultJson: string | null }>): C0
     .filter((row): row is C00Decision => row !== null);
 }
 
+export function listAcceptedC00Corrections(
+  rows: Array<{ id: string; resultJson: string | null }>,
+): Array<{ aiCallId: string; correction: C00Correction; acceptedAt: Date }> {
+  const items: Array<{ aiCallId: string; correction: C00Correction; acceptedAt: Date }> = [];
+  for (const row of rows) {
+    const envelope = parseC00Envelope(row.resultJson);
+    if (!envelope?.correction?.acceptedAt) continue;
+    const acceptedAt = new Date(envelope.correction.acceptedAt);
+    if (Number.isNaN(acceptedAt.getTime())) continue;
+    items.push({ aiCallId: row.id, correction: envelope.correction, acceptedAt });
+  }
+  return items.sort((left, right) => {
+    const byTime = left.acceptedAt.getTime() - right.acceptedAt.getTime();
+    return byTime !== 0 ? byTime : left.aiCallId.localeCompare(right.aiCallId);
+  });
+}
+
 export function buildC00Envelope(input: {
   aiCallId: string;
   turnKey: string;
@@ -103,6 +154,7 @@ export function buildC00Envelope(input: {
   reelId: string;
   action: AgentAction;
   decision?: C00Decision | null;
+  correction?: C00Correction | null;
 }): C00Envelope {
   return {
     schemaVersion: C00_ENVELOPE_SCHEMA,
@@ -112,7 +164,7 @@ export function buildC00Envelope(input: {
     reelId: input.reelId,
     action: input.action,
     decision: input.decision ?? null,
-    correction: null,
+    correction: input.correction ?? null,
   };
 }
 

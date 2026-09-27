@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
 import { ReelError } from "@/lib/reels";
 import { enqueueByKey } from "@/lib/write-queue";
+import { scriptDraftIsStale } from "@/lib/c00-stale";
 
 type ScriptDb = PrismaClient | Prisma.TransactionClient;
 import {
@@ -315,6 +316,15 @@ export async function listScriptWorkspace(reelId: string, viewId?: string | null
   const selectedId = viewId || reel.selectedScriptId || headId;
   const viewingRow = selectedId ? versions.find((row) => row.id === selectedId) ?? null : null;
   const draft = await prisma.scriptDraft.findUnique({ where: { reelId } });
+  const draftDto = draft ? toDraftDto(draft, takeMap) : null;
+  if (draft && draftDto) {
+    draftDto.stale = await scriptDraftIsStale({
+      reelId,
+      updatedAt: draft.updatedAt,
+      baseVersionId: draft.baseVersionId,
+      db: prisma,
+    });
+  }
   return {
     reelId,
     headId,
@@ -323,7 +333,7 @@ export async function listScriptWorkspace(reelId: string, viewId?: string | null
     readyCount: readyAsc.length,
     versions: versions.map((row) => toMeta(row, readyIndex.get(row.id) ?? null, takeMap)),
     viewing: viewingRow ? toDto(viewingRow) : null,
-    draft: draft ? toDraftDto(draft, takeMap) : null,
+    draft: draftDto,
     sources: await listAvailableSources(reelId),
   };
 }

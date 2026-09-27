@@ -67,6 +67,7 @@ export interface QuestionDto {
   sortOrder: number;
   createdAt: string;
   answers: AnswerDto[];
+  stale?: boolean;
 }
 
 export interface CompleteJsonResult {

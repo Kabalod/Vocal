@@ -103,7 +103,7 @@ async function completeWithSignal(
   };
 }
 
-test("wrong speaker routes to not_applied correct_thought without claiming a fix", async (t) => {
+test("wrong speaker applies correct_thought without claiming a verbal fix", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();
   const { reel } = await createThoughtFromText({
@@ -125,19 +125,21 @@ test("wrong speaker routes to not_applied correct_thought without claiming a fix
     () => completeWithSignal(prisma, reel.id, "Это сказал оператор, не я.", "wrong_speaker", "correct_thought", "Что тогда ваше?"),
   );
   const after = await getThoughtState(reel.id);
-  assert.deepEqual(after.facts, before.facts);
-  assert.equal(after.revision, before.revision);
+  assert.equal(after.facts.some((fact) => fact.id === "fact_seed"), false);
+  assert.equal(after.revision, before.revision + 1);
   const call = await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id, kind: "dialogue" } });
-  const decision = parseC00Envelope(call.resultJson)?.decision;
-  assert.equal(decision?.action, "correct_thought");
-  assert.equal(decision?.signalType, "wrong_speaker");
-  assert.equal(decision?.applyResult, "not_applied");
-  assert.equal(parseC00Envelope(call.resultJson)?.correction, null);
+  const envelope = parseC00Envelope(call.resultJson);
+  assert.equal(envelope?.decision?.action, "correct_thought");
+  assert.equal(envelope?.decision?.signalType, "wrong_speaker");
+  assert.equal(envelope?.decision?.applyResult, "applied");
+  assert.equal(envelope?.correction?.targetId, "fact_seed");
+  assert.equal(envelope?.correction?.operation, "clear_slot");
+  assert.ok(envelope?.correction?.acceptedAt);
   assert.equal(page.messages.some((item) => CLAIMS_FIXED.test(item.body)), false);
   assert.equal(await prisma.profileRevision.count(), 0);
 });
 
-test("correct_thought not_applied ignores non-empty thoughtUpdate fact and gap close", async (t) => {
+test("correct_thought apply ignores leftover thoughtUpdate fact and gap close", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();
   const { reel } = await createThoughtFromText({
@@ -181,21 +183,25 @@ test("correct_thought not_applied ignores non-empty thoughtUpdate fact and gap c
     },
   );
   const after = await getThoughtState(reel.id);
-  assert.deepEqual(after.facts, before.facts);
-  assert.deepEqual(after.openGaps, before.openGaps);
+  assert.equal(after.facts.some((fact) => fact.id === "fact_seed"), false);
+  assert.equal(after.facts.some((fact) => fact.text === "Это сказал оператор, не я."), false);
+  assert.deepEqual(
+    after.openGaps.map((gap) => gap.status),
+    before.openGaps.map((gap) => gap.status),
+  );
   assert.equal(after.takeTask, before.takeTask);
-  assert.equal(after.revision, before.revision);
-  const decision = listC00Decisions(await prisma.aiCall.findMany({ where: { reelId: reel.id, kind: "dialogue" } })).at(-1);
-  assert.equal(decision?.action, "correct_thought");
-  assert.equal(decision?.applyResult, "not_applied");
+  assert.equal(after.revision, before.revision + 1);
   const call = await prisma.aiCall.findFirstOrThrow({
     where: { reelId: reel.id, kind: "dialogue" },
     orderBy: { createdAt: "desc" },
   });
-  assert.equal(parseC00Envelope(call.resultJson)?.correction, null);
+  const envelope = parseC00Envelope(call.resultJson);
+  assert.equal(envelope?.decision?.action, "correct_thought");
+  assert.equal(envelope?.decision?.applyResult, "applied");
+  assert.equal(envelope?.correction?.targetId, "fact_seed");
 });
 
-test("correct_thought not_applied ignores suggest_take takeTask and thoughtUpdate", async (t) => {
+test("correct_thought apply ignores suggest_take takeTask and leftover thoughtUpdate", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();
   const { reel } = await createThoughtFromText({
@@ -233,19 +239,20 @@ test("correct_thought not_applied ignores suggest_take takeTask and thoughtUpdat
     },
   );
   const after = await getThoughtState(reel.id);
-  assert.deepEqual(after.facts, before.facts);
+  assert.equal(after.facts.some((fact) => fact.id === "fact_seed"), false);
+  assert.equal(after.facts.some((fact) => fact.text.includes("оператор")), false);
   assert.deepEqual(after.openGaps, before.openGaps);
   assert.equal(after.takeTask, "исходная задача дубля");
-  assert.equal(after.revision, before.revision);
+  assert.equal(after.revision, before.revision + 1);
   const call = await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id, kind: "dialogue" } });
   const envelope = parseC00Envelope(call.resultJson);
   assert.equal(envelope?.decision?.action, "correct_thought");
-  assert.equal(envelope?.decision?.applyResult, "not_applied");
-  assert.equal(envelope?.correction, null);
+  assert.equal(envelope?.decision?.applyResult, "applied");
+  assert.ok(envelope?.correction?.acceptedAt);
   assert.equal(envelope?.action.action, "suggest_take");
 });
 
-test("author negation routes to not_applied correct_thought", async (t) => {
+test("author negation applies correct_thought and clears the denied fact", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();
   const { reel } = await createThoughtFromText({
@@ -273,11 +280,12 @@ test("author negation routes to not_applied correct_thought", async (t) => {
       ),
   );
   const after = await getThoughtState(reel.id);
-  assert.deepEqual(after.facts, before.facts);
+  assert.equal(after.facts.length, 0);
+  assert.equal(after.revision, before.revision + 1);
   const decision = listC00Decisions(await prisma.aiCall.findMany({ where: { reelId: reel.id } }))[0];
   assert.equal(decision?.action, "correct_thought");
   assert.equal(decision?.signalType, "author_negation");
-  assert.equal(decision?.applyResult, "not_applied");
+  assert.equal(decision?.applyResult, "applied");
   assert.equal(await prisma.profileRevision.count(), 0);
 });
 

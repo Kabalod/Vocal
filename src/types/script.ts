@@ -72,6 +72,7 @@ export interface ScriptDraftDto {
   sourceLabel: string;
   updatedAt: string;
   saveToken: number;
+  stale?: boolean;
 }
 
 export interface ScriptWorkspaceDto {

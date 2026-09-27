@@ -34,7 +34,7 @@
 
 2. C00-02 **принят** (`548b8137e010a6fa1fd063b521696a07fc7fdd1f`). `2087859` был возвращён. Это не приёмка продукта C00, V04 или [`../ROADMAP.md`](../ROADMAP.md).
 
-3. C00-03 (**следующий**): `correct_thought` атомарно; `correction.acceptedAt`; stale-предикаты. Не `AiCall.createdAt`. Не начат.
+3. C00-03: `correct_thought` атомарно; `correction.acceptedAt`; stale-предикаты. Не `AiCall.createdAt`. Код может быть на ветке; **не принят**.
 
 4. C00-04: полнота `keep_local` / `discard` и молчание ≠ согласие. Не новый этап, если закрыто после C00-02+C00-03.
 

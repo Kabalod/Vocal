@@ -37,6 +37,9 @@ export type C00SignalCandidate = {
   evidenceUserMessageIds: string[];
   thoughtStateRevisionSeen: number;
   reasonCode: C00SignalType;
+  targetKind?: "fact" | "gap";
+  targetId?: string;
+  operation?: "supersede" | "reopen" | "clear_slot";
 };
 
 const candidateSchema = z
@@ -46,6 +49,9 @@ const candidateSchema = z
     evidenceUserMessageIds: z.array(z.string().trim().min(1)).min(1),
     thoughtStateRevisionSeen: z.number().int().nonnegative(),
     reasonCode: z.enum(C00_SIGNAL_TYPES).optional(),
+    targetKind: z.enum(["fact", "gap"]).optional(),
+    targetId: z.string().trim().min(1).optional(),
+    operation: z.enum(["supersede", "reopen", "clear_slot"]).optional(),
   })
   .strict();
 
@@ -61,5 +67,8 @@ export function parseC00SignalCandidate(raw: unknown): C00SignalCandidate | null
     evidenceUserMessageIds: parsed.data.evidenceUserMessageIds,
     thoughtStateRevisionSeen: parsed.data.thoughtStateRevisionSeen,
     reasonCode: parsed.data.reasonCode ?? parsed.data.signalType,
+    ...(parsed.data.targetKind ? { targetKind: parsed.data.targetKind } : {}),
+    ...(parsed.data.targetId ? { targetId: parsed.data.targetId } : {}),
+    ...(parsed.data.operation ? { operation: parsed.data.operation } : {}),
   };
 }

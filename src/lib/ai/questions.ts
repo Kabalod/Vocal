@@ -14,6 +14,8 @@ import {
 } from "@/types/review";
 import { uniqueNewQuestions } from "@/lib/question-text";
 import { ReviewError } from "@/lib/ai/review";
+import { openQuestionIsStale } from "@/lib/c00-stale";
+import { getThoughtState } from "@/lib/thought-state";
 
 const questionsSchema = z.object({
   questions: z.array(z.string()).optional().default([]),
@@ -61,7 +63,22 @@ export async function listReelQuestions(reelId: string): Promise<QuestionDto[]> 
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     include: { answers: { orderBy: { createdAt: "asc" } } },
   });
-  return rows.map(toQuestionDto);
+  const decorated = [];
+  for (const row of rows) {
+    const dto = toQuestionDto(row);
+    decorated.push({
+      ...dto,
+      stale: await openQuestionIsStale({
+        reelId,
+        status: row.status,
+        createdAt: row.createdAt,
+        reviewId: row.reviewId,
+        roundId: row.roundId,
+        db: prisma,
+      }),
+    });
+  }
+  return decorated;
 }
 
 export async function updateQuestion(
@@ -152,6 +169,13 @@ export async function continueQuestions(
 
   const frozen = await freezeReelContext(reelId);
   const existing = await listReelQuestions(reelId);
+  const thought = await getThoughtState(reelId).catch(() => null);
+  const workingTake = reel.workingTakeId
+    ? await prisma.take.findFirst({
+        where: { id: reel.workingTakeId, reelId },
+        select: { id: true, selectedTranscriptId: true },
+      })
+    : null;
   const inputSnapshot = {
     context: frozen.live,
     questions: existing.map((row) => ({
@@ -161,6 +185,9 @@ export async function continueQuestions(
       answer: row.answers.at(-1)?.text ?? "",
     })),
     transcriptRevisionHint: takeForCall,
+    thoughtStateRevision: thought?.revision ?? 0,
+    workingTakeId: workingTake?.id ?? reel.workingTakeId,
+    selectedTranscriptId: workingTake?.selectedTranscriptId ?? null,
   };
 
   const userPrompt = `Не повторяй эти вопросы и учти статусы (open/answered/skipped/not_relevant).

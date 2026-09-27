@@ -6,16 +6,20 @@ import { v01TestSeams } from "@/lib/v01-test-seams";
 import type { Prisma } from "@prisma/client";
 import { actionMessage, assertAgentActionAllowed, type AgentAction, type ThoughtUpdate } from "@/lib/agent-action";
 import { allowsThoughtStatePatch, routeC00Decision } from "@/lib/c00-router";
+import { resolveC00Correction, withAcceptedAt } from "@/lib/c00-correction";
 import type { C00SignalCandidate } from "@/lib/c00-signal";
 import { applyThoughtStateInTx, buildDialogueThoughtPatch, parseThoughtStateLists } from "@/lib/thought-state";
 import {
   assertEnvelopeMatchesCall,
   buildC00Envelope,
   C00EnvelopeError,
+  listAcceptedC00Corrections,
   parseC00Envelope,
   readThoughtAction,
   sameThoughtAction,
   thoughtDialogueTurnKey,
+  type C00Correction,
+  type C00Decision,
 } from "@/lib/c00-envelope";
 import { DialogueTurnExecError } from "@/lib/dialogue-exec";
 import { v03TestSeams } from "@/lib/v03-test-seams";
@@ -290,7 +294,7 @@ export async function commitDialogueReply(input: {
     const routed = existingEnvelope
       ? {
           decision: existingEnvelope.decision,
-          applyThoughtUpdate: allowsThoughtStatePatch(existingEnvelope.decision, true),
+          applyThoughtUpdate: false,
         }
       : routeC00Decision({
           candidate: input.c00Signal ?? null,
@@ -301,17 +305,45 @@ export async function commitDialogueReply(input: {
           callId: call.id,
         });
     const lists = parseThoughtStateLists(state);
-    const patch = routed.applyThoughtUpdate
-      ? buildDialogueThoughtPatch({
-          action: input.action,
-          thoughtUpdate: input.thoughtUpdate,
-          userMessageId: userMessage.id,
-          userText: userMessage.body,
-          facts: lists.facts,
-          openGaps: lists.openGaps,
-          pendingGapId,
-        })
-      : null;
+    let decision: C00Decision | null = routed.decision;
+    let correction: C00Correction | null = existingEnvelope?.correction ?? null;
+    let patch = null;
+    if (!existingEnvelope && decision?.action === "correct_thought") {
+      const prior = listAcceptedC00Corrections(
+        await tx.aiCall.findMany({
+          where: { reelId: input.reelId, kind: "dialogue", status: "done" },
+          select: { id: true, resultJson: true },
+        }),
+      );
+      const resolved = resolveC00Correction({
+        decision,
+        candidate: input.c00Signal ?? null,
+        facts: lists.facts,
+        openGaps: lists.openGaps,
+        thoughtUpdate: input.thoughtUpdate,
+        priorDecisionIdOnTarget: prior.at(-1)?.correction.decisionId ?? null,
+        acceptedAt: "",
+      });
+      if (resolved) {
+        const accepted = withAcceptedAt(resolved, new Date().toISOString());
+        decision = accepted.decision;
+        correction = accepted.correction;
+        patch = accepted.patch;
+      }
+    } else if (!existingEnvelope && allowsThoughtStatePatch(decision, routed.applyThoughtUpdate)) {
+      patch = buildDialogueThoughtPatch({
+        action: input.action,
+        thoughtUpdate: input.thoughtUpdate,
+        userMessageId: userMessage.id,
+        userText: userMessage.body,
+        facts: lists.facts,
+        openGaps: lists.openGaps,
+        pendingGapId,
+      });
+    }
+    if (correction) {
+      await assertAgentActionAllowed(tx, input.reelId, input.action, take);
+    }
     if (patch) {
       await applyThoughtStateInTx(tx, {
         reelId: input.reelId,
@@ -320,7 +352,12 @@ export async function commitDialogueReply(input: {
         turnKey: input.turnKey,
       });
     }
-    await assertAgentActionAllowed(tx, input.reelId, input.action, take);
+    if (correction && !patch) {
+      throw new C00EnvelopeError("correction без increment ThoughtState.", "C00_CORRECTION_ATOM");
+    }
+    if (!correction) {
+      await assertAgentActionAllowed(tx, input.reelId, input.action, take);
+    }
     if (v03TestSeams.afterThoughtBeforeEnvelope) {
       await v03TestSeams.afterThoughtBeforeEnvelope({ callId: input.callId, turnKey: input.turnKey });
     }
@@ -333,7 +370,8 @@ export async function commitDialogueReply(input: {
         ownerUserId: call.ownerUserId,
         reelId: call.reelId ?? input.reelId,
         action: input.action,
-        decision: routed.decision,
+        decision,
+        correction,
       });
     assertEnvelopeMatchesCall(envelope, call);
 
