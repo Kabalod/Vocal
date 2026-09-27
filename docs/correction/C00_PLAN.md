@@ -1,6 +1,6 @@
 # C00 — проверка, этапы, приёмка
 
-Документы C00 **приняты**. Продукт C00 не начинать. V04-01 / V05 / I01 не начинать.
+Общий маршрут: [`../ROADMAP.md`](../ROADMAP.md). Документы C00 **приняты**. C00-01 **принят**. Продукт C00 **не принят**. Не стартовать V04-01 / V05 / I01.
 
 ## Проверочный набор
 
@@ -28,17 +28,17 @@
 
 Совместимость: Prisma PostgreSQL в репо, тесты на localhost Postgres, Auth `ownerUserId`. Не предполагать, что **live** равен схеме репо.
 
-0. Документы C00 приняты (`8cb7351`). C00-01 — только конверт. Продукт C00 не принят.
+0. Документы C00 приняты (`8cb7351`). Продукт C00 не принят.
 
-1. C00-01 **принят** (`2391217`): конверт `c00-envelope-1` в `resultJson` хода мысли. Старый V03 action читается, не replay как C00.
+1. C00-01 **принят** (`2391217`): конверт `c00-envelope-1`. Старый V03 action читается, не replay как C00.
 
-2. C00-02 (этот этап): кандидат сигнала + маршрутизатор `correct_thought` / `keep_local` / `discard`. `correct_thought` пишет `applyResult=not_applied`, `correction=null`. Apply и stale — C00-03.
+2. C00-02 (следующий к приёмке): кандидат сигнала + маршрутизатор. Код может быть на ветке; **не принят**. `correct_thought` без патча. Пересечение с шагом 4 — в [`../ROADMAP.md`](../ROADMAP.md).
 
-3. `correct_thought` атомарно; в конверт писать `correction.acceptedAt` в той же транзакции. Привязанный черновик без revision: stale при смене дубля/транскрипта **или** `acceptedAt` > `updatedAt` (мысль исправлена, дубль тот же — тоже stale). Не `AiCall.createdAt`. Задача этапа: `thoughtStateRevision` в `questions.ts` `inputSnapshotJson`. Тест: черновик между create и accept.
+3. C00-03: `correct_thought` атомарно; `correction.acceptedAt`; stale-предикаты. Не `AiCall.createdAt`.
 
-4. `keep_local` / `discard` без смены среза. Молчание ≠ согласие.
+4. C00-04: полнота `keep_local` / `discard` и молчание ≠ согласие. Не новый этап, если закрыто после C00-02+C00-03.
 
-5. Eval + flag отката. Не live migrate. Не менять контракт V04 из C00.
+5. C00-05: eval + flag отката. Не live migrate. Не менять контракт V04 из C00.
 
 Каждый продуктовый коммит: `test:v03` если задет диалог; typecheck. Полный `test:postgres` перед внешней приёмкой продукта, не в C00.
 

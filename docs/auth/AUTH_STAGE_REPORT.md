@@ -1,6 +1,8 @@
 # Auth / Supabase stage report
 
 > Historical snapshot from the Auth stage. SQLite generate/transfer commands described below are no longer part of the app. Current provider is PostgreSQL only (`docs/auth/POSTGRES.md`).
+>
+> 27.09.2026: Auth remains **implemented, not accepted**. Do not treat leftover “Prisma generates against SQLite” lines in “What shipped” as current. Product route: `docs/ROADMAP.md`. Legacy owner transfer is not required if user content is empty (owner statement).
 
 Status: **implemented, not accepted**. This is not I01. Automatic memory is not started. P01.6-2 is not declared accepted.
 

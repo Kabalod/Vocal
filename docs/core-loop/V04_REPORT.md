@@ -1,6 +1,6 @@
 # V04-00 — аудит портрета
 
-Status: документы V04-00. Продукт V04 **not started**. V04 **не принят**.
+Status: документы V04-00. Продукт V04 **not started**. V04 **не принят**. Общий маршрут: [`../ROADMAP.md`](../ROADMAP.md).
 V04_BASE_SHA: `564c9cf8534392501e125dda7ecc747c235a5c0d`.
 V03_HEAD: `b5278f468666330bc30bb6cd9378f2f02f858264` (accepted).
 Ветка: `feat/v04-from-base`.

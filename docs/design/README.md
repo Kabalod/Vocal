@@ -1,21 +1,23 @@
 # Vocal design — единственный вход для моделей и разработки
 
-Обновлено: 2026-09-16.
+Обновлено: 2026-09-16. Продуктовый маршрут на 27.09.2026: [`docs/ROADMAP.md`](../ROADMAP.md) (карта не принята до ревью).
 
-Если ты агент или Cursor: **начинай отсюда**. Не читай champagne Design System, не открывай `docs/cursor-plan/STAGE_*`, не опирайся на старые PNG вне списка ниже.
+Если ты агент или Cursor: **дизайн начинай отсюда**; **очередь продукта** — в `docs/ROADMAP.md`. Не читай champagne Design System, не открывай `docs/cursor-plan/STAGE_*`, не опирайся на старые PNG вне списка ниже.
 
 ## Порядок чтения
 
-1. Этот файл.
-2. `SOURCE_OF_TRUTH_2026-09-15.md`
-3. `план разработки/README.md` — этапы внедрения и промпты.
-4. По задаче: `THOUGHT_JOURNEY_REVISION_2026-09-15.md`, `DEVELOPMENT_READINESS_2026-09-15.md`, `SHARED_DESIGN_BRIEF_2026-09-15.md`.
+1. [`docs/ROADMAP.md`](../ROADMAP.md) — общий маршрут V / C00 / Auth / I / запуск.
+2. Этот файл.
+3. `SOURCE_OF_TRUTH_2026-09-15.md`
+4. `план разработки/README.md` — исторический визуальный цикл P00–P17, не текущий трекер статусов.
+5. По задаче: `THOUGHT_JOURNEY_REVISION_2026-09-15.md`, `DEVELOPMENT_READINESS_2026-09-15.md`, `SHARED_DESIGN_BRIEF_2026-09-15.md`.
 
 ## Актуальные материалы (можно использовать)
 
 | Путь | Роль |
 |---|---|
-| `план разработки/` | Очередь внедрения в код + Cursor-промпты |
+| [`docs/ROADMAP.md`](../ROADMAP.md) | Общий продуктовый маршрут на 27.09.2026 |
+| `план разработки/` | Исторический визуальный цикл P00–P17, не канбан V/C00 |
 | `docs/design/SOURCE_OF_TRUTH_2026-09-15.md` | Приоритеты источников |
 | `docs/design/SHARED_DESIGN_BRIEF_2026-09-15.md` | Токены, навигация, общие правила UI |
 | `docs/design/THOUGHT_JOURNEY_REVISION_2026-09-15.md` | Рабочий цикл мысли |
