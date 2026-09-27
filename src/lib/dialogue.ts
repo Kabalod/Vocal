@@ -26,6 +26,7 @@ import {
 import { v01TestSeams } from "@/lib/v01-test-seams";
 import { AgentActionError, parseAgentReply } from "@/lib/agent-action";
 import {
+  blocksOrdinaryThoughtPatch,
   c00ClassifySeam,
   classifyC00CorrectionSignal,
   mergeClassifiedActionSignal,
@@ -697,6 +698,7 @@ export async function runDialogueTurn(
         action: reply.action,
         thoughtUpdate: thoughtUpdateAfterClassification(text, classified, reply.thoughtUpdate),
         c00Signal: mergeClassifiedActionSignal(classified, reply.c00Signal),
+        freezeThoughtSlice: blocksOrdinaryThoughtPatch(text, classified),
         rawText: reusable.responseText,
         promptTokens: reusable.promptTokens,
         completionTokens: reusable.completionTokens,
@@ -803,6 +805,7 @@ export async function runDialogueTurn(
       action: reply.action,
       thoughtUpdate: thoughtUpdateAfterClassification(text, classified, reply.thoughtUpdate),
       c00Signal: mergeClassifiedActionSignal(classified, reply.c00Signal),
+      freezeThoughtSlice: blocksOrdinaryThoughtPatch(text, classified),
       rawText: call.responseText,
       promptTokens: call.promptTokens,
       completionTokens: call.completionTokens,

@@ -1,5 +1,5 @@
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
-import type { ThoughtUpdate } from "@/lib/agent-action";
+import { emptyThoughtUpdate, type ThoughtUpdate } from "@/lib/agent-action";
 import type { C00SignalCandidate } from "@/lib/c00-signal";
 import { parseC00SignalCandidate } from "@/lib/c00-signal";
 import type { CompleteJsonFn } from "@/types/review";
@@ -61,17 +61,22 @@ export function mergeClassifiedActionSignal(
   return null;
 }
 
+export function blocksOrdinaryThoughtPatch(
+  userText: string,
+  classified: C00SignalCandidate | null | undefined,
+) {
+  if (classified !== null) return false;
+  if (isExplicitAuthorFactCorrection(userText)) return false;
+  return isQuotedOrRetoldSpeech(userText) || isPromptInjectionUtterance(userText);
+}
+
 export function thoughtUpdateAfterClassification(
   userText: string,
   classified: C00SignalCandidate | null | undefined,
   thoughtUpdate: ThoughtUpdate,
 ): ThoughtUpdate {
-  if (classified !== null) return thoughtUpdate;
-  if (isExplicitAuthorFactCorrection(userText)) return thoughtUpdate;
-  if (isQuotedOrRetoldSpeech(userText) || isPromptInjectionUtterance(userText)) {
-    return { ...thoughtUpdate, fact: null };
-  }
-  return thoughtUpdate;
+  if (!blocksOrdinaryThoughtPatch(userText, classified)) return thoughtUpdate;
+  return emptyThoughtUpdate();
 }
 
 const SYSTEM = `Ты классификатор исправления мысли Vocal. Не задавай вопросов и не предлагай дубль. Не применяй исправление. Верни JSON ровно одного объекта.

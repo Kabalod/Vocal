@@ -163,6 +163,7 @@ export async function commitDialogueReply(input: {
   execOwnerId?: string | null;
   execGeneration?: number | null;
   c00Signal?: C00SignalCandidate | null;
+  freezeThoughtSlice?: boolean;
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "DialogueThread" WHERE id = ${input.threadId} FOR UPDATE`;
@@ -347,7 +348,11 @@ export async function commitDialogueReply(input: {
         correction = { ...resolved.correction, acceptedAt: "" };
         patch = resolved.patch;
       }
-    } else if (!existingEnvelope && allowsThoughtStatePatch(decision, routed.applyThoughtUpdate)) {
+    } else if (
+      !existingEnvelope &&
+      !input.freezeThoughtSlice &&
+      allowsThoughtStatePatch(decision, routed.applyThoughtUpdate)
+    ) {
       patch = buildDialogueThoughtPatch({
         action: input.action,
         thoughtUpdate: input.thoughtUpdate,
