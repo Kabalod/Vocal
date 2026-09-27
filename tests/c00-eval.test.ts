@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { parseAgentReply } from "../src/lib/agent-action";
-import { sendDialogueMessage, thoughtDialogueSystemPrompt } from "../src/lib/dialogue";
+import { sendDialogueMessage, thoughtDialogueSystemPrompt, V03_HEAD_DIALOGUE_SYSTEM } from "../src/lib/dialogue";
 import { C00EnvelopeError } from "../src/lib/c00-envelope";
 import { createThoughtFromText } from "../src/lib/thought-create";
 import { applyThoughtState, getThoughtState } from "../src/lib/thought-state";
@@ -68,6 +69,28 @@ test("policy flag defaults on and env off is rollback", () => {
     c00PolicySeam.enabled = seam;
     if (previous == null) delete process.env[C00_POLICY_ENV];
     else process.env[C00_POLICY_ENV] = previous;
+  }
+});
+
+test("disabled C00 policy uses the accepted V03_HEAD dialogue system prompt", () => {
+  const source = execFileSync(
+    "git",
+    ["show", "b5278f468666330bc30bb6cd9378f2f02f858264:src/lib/dialogue.ts"],
+    { encoding: "utf8" },
+  );
+  const match = source.match(/const DIALOGUE_SYSTEM = `([^`]+)`/);
+  assert.ok(match?.[1], "V03_HEAD must still contain DIALOGUE_SYSTEM");
+  assert.equal(V03_HEAD_DIALOGUE_SYSTEM, match[1]);
+  assert.match(V03_HEAD_DIALOGUE_SYSTEM, /текст факта/);
+  assert.match(V03_HEAD_DIALOGUE_SYSTEM, /sourceId текущего сообщения автора/);
+  assert.match(V03_HEAD_DIALOGUE_SYSTEM, /какие gapId закрыты/);
+  const previous = c00PolicySeam.enabled;
+  try {
+    c00PolicySeam.enabled = false;
+    assert.equal(thoughtDialogueSystemPrompt(), match[1]);
+    assert.equal(thoughtDialogueSystemPrompt().includes("c00Signal"), false);
+  } finally {
+    c00PolicySeam.enabled = previous;
   }
 });
 

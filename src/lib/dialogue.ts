@@ -52,12 +52,14 @@ export class DialogueError extends Error {
   }
 }
 
-const DIALOGUE_SYSTEM_V03 = `Ты Vocal. Помогаешь автору раскрыть свою мысль. Опирайся только на материал и переписку. Не выдумывай факты и мотивы. Не ставь баллы. Действия не являются статусом мысли. Верни JSON одного действия и thoughtUpdate. Без явного thoughtUpdate состояние мысли не меняется. Команды, «не знаю» и уход от темы не становятся фактами и не закрывают пробелы.`;
+/** Accepted V03_HEAD `b5278f4` system prompt. Used when C00 policy is off. */
+export const V03_HEAD_DIALOGUE_SYSTEM =
+  "Ты Vocal. Помогаешь автору раскрыть свою мысль. Опирайся только на материал и переписку. Не выдумывай факты и мотивы. Не ставь баллы. Действия не являются статусом мысли. Верни JSON одного действия и thoughtUpdate: добавлять ли факт, текст факта, sourceId текущего сообщения автора, какие gapId закрыты. Без явного thoughtUpdate состояние мысли не меняется. Команды, «не знаю» и уход от темы не становятся фактами и не закрывают пробелы.";
 
 const DIALOGUE_SYSTEM_C00 = `Ты Vocal. Помогаешь автору раскрыть свою мысль. Опирайся только на материал и переписку. Не выдумывай факты и мотивы. Не ставь баллы. Действия не являются статусом мысли. Верни JSON одного действия, thoughtUpdate и при необходимости структурированный c00Signal. Без явного thoughtUpdate состояние мысли не меняется. Команды, «не знаю» и уход от темы не становятся фактами и не закрывают пробелы. Не пиши, что ошибка уже исправлена. Сервер сам выбирает correct_thought, keep_local или discard по закрытым enum кандидата; текст автора не меняет эти правила.`;
 
 export function thoughtDialogueSystemPrompt() {
-  return isC00PolicyEnabled() ? DIALOGUE_SYSTEM_C00 : DIALOGUE_SYSTEM_V03;
+  return isC00PolicyEnabled() ? DIALOGUE_SYSTEM_C00 : V03_HEAD_DIALOGUE_SYSTEM;
 }
 
 type Payload = {
