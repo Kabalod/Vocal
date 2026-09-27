@@ -45,6 +45,8 @@ const dbTests = [
   "tests/c00-router.test.ts",
   "tests/c00-apply.test.ts",
   "tests/c00-eval.test.ts",
+  "tests/c00-classify-signal.test.ts",
+  "tests/c00-classify-dialogue.test.ts",
   "tests/thought-completion.test.ts",
   "tests/r1-contracts.test.ts",
   "tests/r2-idempotency.test.ts",
