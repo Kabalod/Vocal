@@ -1,7 +1,7 @@
 # Instructions for coding agents (Vocal)
 
 Start here:
-1. `docs/ROADMAP.md` — общая дорожная карта на 27.09.2026 (**не принята**). C00-04 **accepted** at `ce6a43c`. C00-05 implemented, **not accepted**. Next: accept C00-05. Accepting C00-04 does not accept the map, product C00, or V04.
+1. `docs/ROADMAP.md` — общая дорожная карта на 27.09.2026 (**не принята**). C00-05 **accepted** at `e268c40a80a5baa9a50699e9b920e01b522edb94`. Next: accept product C00. Accepting C00-05 does not accept the map, product C00, or V04. `stale ready reply` in profile-dialogue is a separate task.
 2. `docs/design/README.md`
 3. `docs/design/SOURCE_OF_TRUTH_2026-09-15.md`
 4. Visual source of truth: `docs/design/references-new/` (approved screens 01–09; `/reels` uses screen 09)
@@ -22,7 +22,7 @@ V03 test policy (accepted stage):
 
 V04-00 is docs only. Do not change product code, Prisma, or migrations until an explicit V04 product stage. Do not declare V04 accepted.
 
-C00 docs **accepted** (`8cb7351`). C00-01 **accepted** (`2391217`). C00-02 **accepted** (`548b813`). C00-03 **accepted** (`f1eeb54438d057eedf86c345b2a77c71afa3f214`). C00-04 **accepted** (`ce6a43c386bdab163e531a4670ec8e08d524477e`). C00-05 **implemented, not accepted**. C00 product, V04, and `docs/ROADMAP.md` are **not accepted**. Next: accept C00-05. Do not start V04-01, V05, or I01. See `docs/ROADMAP.md`.
+C00 docs **accepted** (`8cb7351`). C00-01 **accepted** (`2391217`). C00-02 **accepted** (`548b813`). C00-03 **accepted** (`f1eeb54438d057eedf86c345b2a77c71afa3f214`). C00-04 **accepted** (`ce6a43c386bdab163e531a4670ec8e08d524477e`). C00-05 **accepted** (`e268c40a80a5baa9a50699e9b920e01b522edb94`). C00 product, V04, and `docs/ROADMAP.md` are **not accepted**. Next: accept product C00. Do not start V04-01, V05, or I01. See `docs/ROADMAP.md`.
 
 Do **not** apply Prisma baseline, migrations 8–9, or `migrate resolve` to live Supabase from this cycle.
 
