@@ -1,5 +1,6 @@
+import { consumeAiCallBudget } from "@/lib/ai-call-budget";
 import { LLM_MODEL } from "@/lib/config";
-import { getGroq, withRetry } from "@/lib/groq";
+import { chatCompletionModel, createXaiChatCompletion, getGroq, usesXaiChat, withRetry } from "@/lib/groq";
 import type { CompleteJsonFn } from "@/types/review";
 
 function parseJsonObject(text: string): unknown {
@@ -13,6 +14,16 @@ function parseJsonObject(text: string): unknown {
 }
 
 export const defaultCompleteJson: CompleteJsonFn = async ({ model, system, user, label }) => {
+  if (usesXaiChat()) {
+    consumeAiCallBudget(label ?? "dialogue");
+    const completion = await createXaiChatCompletion({
+      model: chatCompletionModel(model) ?? "grok-4",
+      system,
+      user,
+    });
+    if (!completion.text) throw new Error("Пустой ответ модели.");
+    return { text: completion.text, usage: completion.usage };
+  }
   const completion = await withRetry(
     () =>
       getGroq().chat.completions.create({

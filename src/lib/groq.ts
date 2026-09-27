@@ -1,8 +1,24 @@
 import Groq from "groq-sdk";
 
-let client: Groq | null = null;
+const XAI_CHAT_URL = "https://api.x.ai/v1/chat/completions";
 
-function createClient(): Groq {
+let groqClient: Groq | null = null;
+
+export function usesXaiChat() {
+  return Boolean(process.env.XAI_API_KEY?.trim());
+}
+
+export function noAutomaticModelRetry() {
+  const raw = process.env.VOCAL_AI_NO_RETRY?.trim().toLowerCase();
+  return usesXaiChat() || raw === "1" || raw === "true" || raw === "on";
+}
+
+export function chatCompletionModel(requested?: string) {
+  if (usesXaiChat()) return process.env.XAI_MODEL?.trim() || "grok-4";
+  return requested;
+}
+
+function createGroqClient(): Groq {
   const apiKey = process.env.GROQ_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("Не задан GROQ_API_KEY. Добавьте ключ в файл .env");
@@ -15,14 +31,59 @@ function createClient(): Groq {
 }
 
 export function getGroq(): Groq {
-  if (!client) {
-    client = createClient();
+  if (!groqClient) {
+    groqClient = createGroqClient();
   }
-  return client;
+  return groqClient;
+}
+
+export async function createXaiChatCompletion(input: {
+  model: string;
+  system: string;
+  user: string;
+}) {
+  const apiKey = process.env.XAI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("Не задан XAI_API_KEY.");
+  }
+  const response = await fetch(XAI_CHAT_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: input.model,
+      temperature: 0.2,
+      max_tokens: 1800,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: input.system },
+        { role: "user", content: input.user },
+      ],
+    }),
+  });
+  const rawText = await response.text();
+  if (!response.ok) {
+    const error = new Error(`${response.status} ${rawText.slice(0, 400)}`) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
+  const payload = JSON.parse(rawText) as {
+    choices?: Array<{ message?: { content?: string } }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
+  return {
+    text: (payload.choices?.[0]?.message?.content ?? "").trim(),
+    usage: {
+      promptTokens: payload.usage?.prompt_tokens,
+      completionTokens: payload.usage?.completion_tokens,
+    },
+  };
 }
 
 export function resetGroq() {
-  client = null;
+  groqClient = null;
 }
 
 function errorText(error: unknown): string {
@@ -70,7 +131,7 @@ export async function withRetry<T>(
   fn: () => Promise<T>,
   opts: { retries?: number; label?: string } = {},
 ): Promise<T> {
-  const retries = opts.retries ?? 4;
+  const retries = opts.retries ?? (noAutomaticModelRetry() ? 1 : 4);
   let lastError: unknown;
   for (let attempt = 0; attempt < retries; attempt++) {
     try {

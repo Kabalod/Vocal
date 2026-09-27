@@ -24,6 +24,7 @@ export function logApiError(route: string, error?: unknown): void {
 export const PRIVACY_LOG_FORBIDDEN = [
   "promptText",
   "GROQ_API_KEY",
+  "XAI_API_KEY",
   "OPENAI_API_KEY",
 ] as const;
 

@@ -4,7 +4,13 @@ import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { parseAgentReply } from "../src/lib/agent-action";
-import { sendDialogueMessage, thoughtDialogueSystemPrompt, V03_HEAD_DIALOGUE_SYSTEM } from "../src/lib/dialogue";
+import {
+  sendDialogueMessage,
+  thoughtDialogueSystemPrompt,
+  V03_HEAD_DIALOGUE_REPLY_GUIDE,
+  V03_HEAD_DIALOGUE_SYSTEM,
+  v03HeadDialogueTurnHint,
+} from "../src/lib/dialogue";
 import { C00EnvelopeError } from "../src/lib/c00-envelope";
 import { createThoughtFromText } from "../src/lib/thought-create";
 import { applyThoughtState, getThoughtState } from "../src/lib/thought-state";
@@ -79,8 +85,21 @@ test("disabled C00 policy uses the accepted V03_HEAD dialogue system prompt", ()
     { encoding: "utf8" },
   );
   const match = source.match(/const DIALOGUE_SYSTEM = `([^`]+)`/);
+  const guide = source.match(
+    /JSON: действие и thoughtUpdate\. Без явного thoughtUpdate состояние не меняется\. Пример: \{[^\n]+\}/,
+  );
+  const turnHint = source.match(
+    /Текущее сообщение автора: \$\{turn\.userMessageId\}\. Кандидат факта: \$\{candidateFactId\(turn\.userMessageId\)\}\. Если принимаешь этот ответ как факт, укажи thoughtUpdate\.fact\.sourceId = это сообщение и evidenceRefs = \[\$\{candidateFactId\(turn\.userMessageId\)\}\]\./,
+  );
   assert.ok(match?.[1], "V03_HEAD must still contain DIALOGUE_SYSTEM");
+  assert.ok(guide?.[0], "V03_HEAD must still contain the user-prompt guide");
+  assert.ok(turnHint?.[0], "V03_HEAD must still contain the user-prompt turn hint");
   assert.equal(V03_HEAD_DIALOGUE_SYSTEM, match[1]);
+  assert.equal(V03_HEAD_DIALOGUE_REPLY_GUIDE, guide[0]);
+  assert.equal(
+    v03HeadDialogueTurnHint("msg_head"),
+    "Текущее сообщение автора: msg_head. Кандидат факта: fact_msg_head. Если принимаешь этот ответ как факт, укажи thoughtUpdate.fact.sourceId = это сообщение и evidenceRefs = [fact_msg_head].",
+  );
   assert.match(V03_HEAD_DIALOGUE_SYSTEM, /текст факта/);
   assert.match(V03_HEAD_DIALOGUE_SYSTEM, /sourceId текущего сообщения автора/);
   assert.match(V03_HEAD_DIALOGUE_SYSTEM, /какие gapId закрыты/);
@@ -89,6 +108,16 @@ test("disabled C00 policy uses the accepted V03_HEAD dialogue system prompt", ()
     c00PolicySeam.enabled = false;
     assert.equal(thoughtDialogueSystemPrompt(), match[1]);
     assert.equal(thoughtDialogueSystemPrompt().includes("c00Signal"), false);
+    const parsed = parseAgentReply({
+      action: "ask_question",
+      question: "Что ваше?",
+      clarificationReason: "нужно уточнение задачи",
+      whyUnknown: "в материале этой мысли ответа ещё нет",
+      thoughtUpdate: { fact: null, closeGapIds: [] },
+      c00Signal: { signalType: "not_a_real_signal", proposedAction: "correct_thought" },
+    });
+    assert.equal(parsed.c00Signal, null);
+    assert.deepEqual(parsed.thoughtUpdate, { fact: null, closeGapIds: [] });
   } finally {
     c00PolicySeam.enabled = previous;
   }
@@ -327,6 +356,8 @@ test("disabled C00 policy ignores invalid c00Signal and uses the V03 prompt", as
   assert.equal(after.facts.some((fact) => fact.text === text), true);
   const call = await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id, kind: "dialogue" } });
   assert.equal(call.promptText?.includes("c00Signal"), false);
+  assert.equal(call.promptText?.includes(V03_HEAD_DIALOGUE_REPLY_GUIDE), true);
+  assert.equal(call.promptText?.includes("Если принимаешь этот ответ как факт, укажи thoughtUpdate.fact.sourceId"), true);
   const envelope = parseC00Envelope(call.resultJson);
   assert.equal(envelope?.decision, null);
   assert.equal(envelope?.correction, null);

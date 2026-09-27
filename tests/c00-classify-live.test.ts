@@ -26,7 +26,18 @@ function loadLocalEnv() {
       if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
         value = value.slice(1, -1);
       }
-      if (key === "GROQ_API_KEY" || key === "LLM_MODEL") process.env[key] = value;
+      if (
+        key === "GROQ_API_KEY" ||
+        key === "XAI_API_KEY" ||
+        key === "XAI_MODEL" ||
+        key === "LLM_MODEL" ||
+        key === "VOCAL_AI_DAILY_CALL_LIMIT" ||
+        key === "VOCAL_AI_NO_RETRY" ||
+        key === "VOCAL_AI_BUDGET_FILE" ||
+        key === "VOCAL_LIVE_REPEATS"
+      ) {
+        process.env[key] = value;
+      }
     }
   }
 }
@@ -34,13 +45,13 @@ function loadLocalEnv() {
 loadLocalEnv();
 resetGroq();
 
-const LIVE = Boolean(process.env.GROQ_API_KEY?.trim());
+const LIVE = Boolean(process.env.XAI_API_KEY?.trim() || process.env.GROQ_API_KEY?.trim());
 const FACT_SEED = { id: "fact_seed", text: "Вечер тихий.", sourceType: "initial_note" };
 const NEGATION_FACT = { id: "fact_seed", text: "Автор любит мат.", sourceType: "initial_note" };
 
 test("live classify C00 correction before action: two phrases on one fact_seed", async (t) => {
   if (!LIVE) {
-    t.skip("GROQ_API_KEY not loaded");
+    t.skip("XAI_API_KEY / GROQ_API_KEY not loaded");
     return;
   }
 
@@ -56,6 +67,18 @@ test("live classify C00 correction before action: two phrases on one fact_seed",
       text: "Я этого не говорил и это неправда.",
       facts: [NEGATION_FACT],
       expectType: "author_negation" as const,
+    },
+    {
+      name: "untruth_quote",
+      text: "Он сказал: «это неправда».",
+      facts: [FACT_SEED],
+      expectType: null,
+    },
+    {
+      name: "untruth_so",
+      text: "это не так",
+      facts: [FACT_SEED],
+      expectType: null,
     },
     {
       name: "quote_not_position",
@@ -82,7 +105,7 @@ test("live classify C00 correction before action: two phrases on one fact_seed",
       expectType: null,
     },
   ];
-  const repeats = 3;
+  const repeats = Math.max(1, Number(process.env.VOCAL_LIVE_REPEATS ?? 3) || 3);
   const owner = ownerUserId();
   const rows: Array<Record<string, unknown>> = [];
 
@@ -163,9 +186,9 @@ test("live classify C00 correction before action: two phrases on one fact_seed",
     }),
   );
   console.log(JSON.stringify({ summary: byCase }));
-  assert.equal(rows.length, 18);
+  assert.equal(rows.length, cases.length * repeats);
   const negatives = rows.filter((row) =>
-    ["quote_not_position", "quote_near_related_fact", "retell_near_fact", "prompt_injection"].includes(String(row.case)),
+    ["untruth_quote", "untruth_so", "quote_not_position", "quote_near_related_fact", "retell_near_fact", "prompt_injection"].includes(String(row.case)),
   );
   assert.equal(
     negatives.every((row) => row.signalType == null && row.decisionAction == null && row.classifyError == null),
