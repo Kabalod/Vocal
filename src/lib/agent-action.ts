@@ -85,6 +85,9 @@ export function parseAgentReply(raw: unknown): {
     throw new AgentActionError("Модель вернула недопустимое действие.", "AGENT_ACTION_INVALID");
   }
   const { thoughtUpdate, c00Signal: signalRaw, ...actionRaw } = raw as Record<string, unknown>;
+  // The model sometimes emits suggest_take evidenceRefs with ask_question.
+  // That field has no meaning for a question; keep every other action field strict.
+  if (actionRaw.action === "ask_question") delete actionRaw.evidenceRefs;
   const c00Signal = isC00PolicyEnabled() ? parseC00SignalCandidate(signalRaw) : null;
   const parsed = agentActionSchema.safeParse(actionRaw);
   if (!parsed.success) {
