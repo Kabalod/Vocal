@@ -22,7 +22,7 @@ V03 test policy (accepted stage):
 
 V04-00 is docs only. Do not change product code, Prisma, or migrations until an explicit V04 product stage. Do not declare V04 accepted.
 
-C00 docs **accepted** (`8cb7351`). C00-01 **accepted** (`2391217`). C00-02 code may exist on branch HEAD; C00-02 and C00 product are **not accepted**. V04 product is not started and not accepted. Auth code exists; Auth is **not accepted**. Next product stage: C00-02 review. Do not start V04-01, V05, or I01. See `docs/ROADMAP.md`.
+C00 docs **accepted** (`8cb7351`). C00-01 **accepted** (`2391217`). First C00-02 review of `2087859` **returned** the stage: `correct_thought` + `not_applied` must not apply any ThoughtState patch (including non-empty `thoughtUpdate` and `suggest_take`). C00-02 and C00 product are **not accepted**. Accepting `docs/ROADMAP.md` does **not** accept C00-02. Next product step: fix that defect in a separate commit and **re-review** C00-02 (not a first review). V04 product is not started and not accepted. Auth code exists; Auth is **not accepted**. Do not start V04-01, V05, or I01. See `docs/ROADMAP.md`.
 
 Do **not** apply Prisma baseline, migrations 8–9, or `migrate resolve` to live Supabase from this cycle.
 
