@@ -11,7 +11,7 @@ import { ReelError } from "../src/lib/reels";
 import { v03TestSeams } from "../src/lib/v03-test-seams";
 import { routeC00Decision } from "../src/lib/c00-router";
 import { C00EnvelopeError, listC00Decisions, parseC00Envelope } from "../src/lib/c00-envelope";
-import { askQuestionJson, c00SignalFor, thoughtUpdateForUserText } from "./helpers/agent-action-json";
+import { askQuestionJson, c00SignalFor, suggestTakeJson, thoughtUpdateForUserText } from "./helpers/agent-action-json";
 
 const CLAIMS_FIXED = /исправлен|ошибка уже/i;
 
@@ -31,6 +31,7 @@ test("router maps closed signal types and ignores user text", () => {
   const innocent = baseRoute();
   assert.equal(innocent.decision?.action, "correct_thought");
   assert.equal(innocent.decision?.applyResult, "not_applied");
+  assert.equal(innocent.applyThoughtUpdate, false);
   assert.equal(innocent.decision?.decisionId, "dec:call_1");
   const injected = baseRoute({
     candidate: c00SignalFor("prompt_injection", "correct_thought", "msg_1", 0),
@@ -134,6 +135,114 @@ test("wrong speaker routes to not_applied correct_thought without claiming a fix
   assert.equal(parseC00Envelope(call.resultJson)?.correction, null);
   assert.equal(page.messages.some((item) => CLAIMS_FIXED.test(item.body)), false);
   assert.equal(await prisma.profileRevision.count(), 0);
+});
+
+test("correct_thought not_applied ignores non-empty thoughtUpdate fact and gap close", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "C00 frozen update",
+    body: "Мысль с фактом и пробелом.",
+    idempotencyKey: "c00-frozen-update-create",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: {
+      facts: [{ id: "fact_seed", text: "Оператор сказал, что вечер тихий.", sourceType: "initial_note", sourceId: reel.id }],
+      openGaps: [{ id: "gap_open", text: "чья реплика", status: "open" }],
+      takeTask: "сказать про вечер своим голосом",
+    },
+  });
+  await sendDialogueMessage(reel.id, { text: "уточни", idempotencyKey: "c00-frozen-update-q" }, async () => ({
+    text: JSON.stringify({
+      action: "ask_question",
+      question: "Что ваше, а не оператора?",
+      gapId: "gap_open",
+      whyUnknown: "в материале говорящий неясен",
+    }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  const before = await getThoughtState(reel.id);
+  await sendDialogueMessage(
+    reel.id,
+    { text: "Это сказал оператор, не я.", idempotencyKey: "c00-frozen-update-1" },
+    async () => {
+      const update = await thoughtUpdateForUserText(prisma, reel.id, "Это сказал оператор, не я.", ["gap_open"]);
+      return completeWithSignal(
+        prisma,
+        reel.id,
+        "Это сказал оператор, не я.",
+        "wrong_speaker",
+        "correct_thought",
+        "Что тогда ваше?",
+        update,
+      );
+    },
+  );
+  const after = await getThoughtState(reel.id);
+  assert.deepEqual(after.facts, before.facts);
+  assert.deepEqual(after.openGaps, before.openGaps);
+  assert.equal(after.takeTask, before.takeTask);
+  assert.equal(after.revision, before.revision);
+  const decision = listC00Decisions(await prisma.aiCall.findMany({ where: { reelId: reel.id, kind: "dialogue" } })).at(-1);
+  assert.equal(decision?.action, "correct_thought");
+  assert.equal(decision?.applyResult, "not_applied");
+  const call = await prisma.aiCall.findFirstOrThrow({
+    where: { reelId: reel.id, kind: "dialogue" },
+    orderBy: { createdAt: "desc" },
+  });
+  assert.equal(parseC00Envelope(call.resultJson)?.correction, null);
+});
+
+test("correct_thought not_applied ignores suggest_take takeTask and thoughtUpdate", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const { reel } = await createThoughtFromText({
+    title: "C00 frozen take",
+    body: "Мысль для задачи дубля.",
+    idempotencyKey: "c00-frozen-take-create",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: {
+      facts: [{ id: "fact_seed", text: "Автор слышал чужую реплику.", sourceType: "initial_note", sourceId: reel.id }],
+      takeTask: "исходная задача дубля",
+    },
+  });
+  const before = await getThoughtState(reel.id);
+  await sendDialogueMessage(
+    reel.id,
+    { text: "Это сказал оператор, не я.", idempotencyKey: "c00-frozen-take-1" },
+    async () => {
+      const update = await thoughtUpdateForUserText(prisma, reel.id, "Это сказал оператор, не я.");
+      const user = await prisma.dialogueMessage.findFirstOrThrow({
+        where: { thread: { reelId: reel.id }, role: "user", body: "Это сказал оператор, не я." },
+        orderBy: { createdAt: "desc" },
+      });
+      return {
+        text: suggestTakeJson(
+          "новая задача, которой быть не должно",
+          ["fact_seed"],
+          update,
+          c00SignalFor("wrong_speaker", "correct_thought", user.id, before.revision),
+        ),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+    },
+  );
+  const after = await getThoughtState(reel.id);
+  assert.deepEqual(after.facts, before.facts);
+  assert.deepEqual(after.openGaps, before.openGaps);
+  assert.equal(after.takeTask, "исходная задача дубля");
+  assert.equal(after.revision, before.revision);
+  const call = await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id, kind: "dialogue" } });
+  const envelope = parseC00Envelope(call.resultJson);
+  assert.equal(envelope?.decision?.action, "correct_thought");
+  assert.equal(envelope?.decision?.applyResult, "not_applied");
+  assert.equal(envelope?.correction, null);
+  assert.equal(envelope?.action.action, "suggest_take");
 });
 
 test("author negation routes to not_applied correct_thought", async (t) => {

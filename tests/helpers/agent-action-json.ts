@@ -14,6 +14,33 @@ export async function insertTestScriptProposal(prisma: PrismaClient, threadId: s
   });
 }
 
+export function suggestTakeJson(
+  takeTask: string,
+  evidenceRefs: string[],
+  thoughtUpdate?: {
+    fact: { text: string; sourceType: "dialogue_message"; sourceId: string } | null;
+    closeGapIds: string[];
+  },
+  c00Signal?: C00SignalCandidate,
+  mainIdea = "главная идея",
+) {
+  return JSON.stringify({
+    action: "suggest_take",
+    mainIdea,
+    takeTask,
+    evidenceRefs,
+    ...(thoughtUpdate
+      ? {
+          thoughtUpdate: {
+            fact: thoughtUpdate.fact,
+            closeGapIds: thoughtUpdate.closeGapIds,
+          },
+        }
+      : {}),
+    ...(c00Signal ? { c00Signal } : {}),
+  });
+}
+
 export function askQuestionJson(
   question: string,
   thoughtUpdate?: {

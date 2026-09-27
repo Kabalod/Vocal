@@ -10,11 +10,11 @@ type SignalPolicy = {
 };
 
 const SIGNAL_POLICY: Record<Exclude<C00SignalType, "stale_model" | "foreign_user">, SignalPolicy> = {
-  wrong_speaker: { actions: ["correct_thought"], scope: "thought", applyThoughtUpdate: true },
-  author_negation: { actions: ["correct_thought"], scope: "thought", applyThoughtUpdate: true },
-  local_correction: { actions: ["correct_thought"], scope: "thought", applyThoughtUpdate: true },
-  repeated_correction: { actions: ["correct_thought"], scope: "thought", applyThoughtUpdate: true },
-  contradictory_correction: { actions: ["correct_thought"], scope: "thought", applyThoughtUpdate: true },
+  wrong_speaker: { actions: ["correct_thought"], scope: "thought", applyThoughtUpdate: false },
+  author_negation: { actions: ["correct_thought"], scope: "thought", applyThoughtUpdate: false },
+  local_correction: { actions: ["correct_thought"], scope: "thought", applyThoughtUpdate: false },
+  repeated_correction: { actions: ["correct_thought"], scope: "thought", applyThoughtUpdate: false },
+  contradictory_correction: { actions: ["correct_thought"], scope: "thought", applyThoughtUpdate: false },
   quote_not_position: { actions: ["keep_local", "discard"], scope: "thought", applyThoughtUpdate: false },
   mood_or_once: { actions: ["keep_local", "discard"], scope: "none", applyThoughtUpdate: false },
   praise_diagnosis_label: { actions: ["discard"], scope: "none", applyThoughtUpdate: false },
@@ -26,6 +26,14 @@ export type C00RouteResult = {
   decision: C00Decision | null;
   applyThoughtUpdate: boolean;
 };
+
+/** C00-02: queued correct_thought must not reach the V03 ThoughtState reducer. */
+export function allowsThoughtStatePatch(decision: C00Decision | null, policyAllows: boolean): boolean {
+  if (decision?.action === "correct_thought" && decision.applyResult === "not_applied") {
+    return false;
+  }
+  return policyAllows;
+}
 
 export function routeC00Decision(input: {
   candidate: C00SignalCandidate | null;
@@ -53,17 +61,18 @@ export function routeC00Decision(input: {
   const action = policy.actions.includes(input.candidate.proposedAction)
     ? input.candidate.proposedAction
     : policy.actions[0];
+  const decision: C00Decision = {
+    decisionId: `dec:${input.callId}`,
+    action,
+    signalType: input.candidate.signalType,
+    scope: policy.scope,
+    evidenceUserMessageIds: [input.currentUserMessageId],
+    thoughtStateRevisionSeen: input.thoughtStateRevision,
+    reasonCode: input.candidate.signalType,
+    applyResult: "not_applied",
+  };
   return {
-    applyThoughtUpdate: policy.applyThoughtUpdate,
-    decision: {
-      decisionId: `dec:${input.callId}`,
-      action,
-      signalType: input.candidate.signalType,
-      scope: policy.scope,
-      evidenceUserMessageIds: [input.currentUserMessageId],
-      thoughtStateRevisionSeen: input.thoughtStateRevision,
-      reasonCode: input.candidate.signalType,
-      applyResult: "not_applied",
-    },
+    applyThoughtUpdate: allowsThoughtStatePatch(decision, policy.applyThoughtUpdate),
+    decision,
   };
 }

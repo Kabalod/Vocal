@@ -4,8 +4,8 @@ import { ReelError } from "@/lib/reels";
 import { StateVersionError } from "@/lib/ai/usage-guard";
 import { v01TestSeams } from "@/lib/v01-test-seams";
 import type { Prisma } from "@prisma/client";
-import { actionMessage, assertAgentActionAllowed, emptyThoughtUpdate, type AgentAction, type ThoughtUpdate } from "@/lib/agent-action";
-import { routeC00Decision } from "@/lib/c00-router";
+import { actionMessage, assertAgentActionAllowed, type AgentAction, type ThoughtUpdate } from "@/lib/agent-action";
+import { allowsThoughtStatePatch, routeC00Decision } from "@/lib/c00-router";
 import type { C00SignalCandidate } from "@/lib/c00-signal";
 import { applyThoughtStateInTx, buildDialogueThoughtPatch, parseThoughtStateLists } from "@/lib/thought-state";
 import {
@@ -288,7 +288,10 @@ export async function commitDialogueReply(input: {
     if (!state) throw new ReelError("Состояние мысли не найдено.", "THOUGHT_STATE_NOT_FOUND", 404);
     if (state.revision !== input.snapshot.thoughtStateRevision) throw new StateVersionError();
     const routed = existingEnvelope
-      ? { decision: existingEnvelope.decision, applyThoughtUpdate: true }
+      ? {
+          decision: existingEnvelope.decision,
+          applyThoughtUpdate: allowsThoughtStatePatch(existingEnvelope.decision, true),
+        }
       : routeC00Decision({
           candidate: input.c00Signal ?? null,
           ownerUserId: ownerUserId(),
@@ -297,17 +300,18 @@ export async function commitDialogueReply(input: {
           thoughtStateRevision: input.snapshot.thoughtStateRevision,
           callId: call.id,
         });
-    const thoughtUpdate = routed.applyThoughtUpdate ? input.thoughtUpdate : emptyThoughtUpdate();
     const lists = parseThoughtStateLists(state);
-    const patch = buildDialogueThoughtPatch({
-      action: input.action,
-      thoughtUpdate,
-      userMessageId: userMessage.id,
-      userText: userMessage.body,
-      facts: lists.facts,
-      openGaps: lists.openGaps,
-      pendingGapId,
-    });
+    const patch = routed.applyThoughtUpdate
+      ? buildDialogueThoughtPatch({
+          action: input.action,
+          thoughtUpdate: input.thoughtUpdate,
+          userMessageId: userMessage.id,
+          userText: userMessage.body,
+          facts: lists.facts,
+          openGaps: lists.openGaps,
+          pendingGapId,
+        })
+      : null;
     if (patch) {
       await applyThoughtStateInTx(tx, {
         reelId: input.reelId,
