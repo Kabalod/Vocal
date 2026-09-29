@@ -17,7 +17,7 @@ import {
   readStoredProfilePayloadTx,
   serializeStoredPayload,
 } from "@/lib/profile";
-import { buildPortrait, coveredProfileKeys, decidePortraitComplete, applyFieldOperations, applyUnchangedFieldsOnly } from "@/lib/profile-portrait";
+import { buildPortrait, decidePortraitComplete, applyUnchangedFieldsOnly } from "@/lib/profile-portrait";
 import type { ProfileAiReply } from "@/lib/ai/profile";
 import { portraitProfileId, ownerUserId } from "@/lib/auth/session";
 import { V04ActionError, parseV04ModelReply } from "@/lib/v04-action";
@@ -161,34 +161,7 @@ async function hideTechnicalProfileErrors(): Promise<void> {
 
 async function healStoredPortrait(stored: Awaited<ReturnType<typeof readStoredProfilePayload>>) {
   await hideTechnicalProfileErrors();
-  if (Object.keys(stored.v04Slice).length > 0) return stored;
-  let next = stored;
-  if (!coveredProfileKeys(stored.fields).length) {
-    const calls = await prisma.aiCall.findMany({
-      where: { kind: PROFILE_DIALOGUE_KIND, profileId: portraitProfileId(), status: "done" },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      select: { responseText: true, resultJson: true },
-    });
-    let fields = stored.fields;
-    for (const call of calls) {
-      const raw = (call.responseText || call.resultJson || "").trim();
-      if (!raw) continue;
-      try {
-        const parsed = parseProfileAiReply(parseJsonObject(raw), "intake");
-        fields = applyFieldOperations(fields, parsed.operations, parsed.patch);
-      } catch {
-        continue;
-      }
-    }
-    next = { ...next, fields };
-  }
-  const changed =
-    stored.portrait?.completed !== next.portrait?.completed ||
-    stored.supplementing !== next.supplementing ||
-    JSON.stringify(stored.fields) !== JSON.stringify(next.fields);
-  if (!changed) return stored;
-  await persistProfilePayload(next);
-  return next;
+  return stored;
 }
 
 export async function getProfileWorkspace(input: { cursor?: string | null } = {}): Promise<ProfileWorkspaceDto & { dialogue: DialoguePageDto }> {
