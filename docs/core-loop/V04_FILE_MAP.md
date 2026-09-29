@@ -2,16 +2,17 @@
 
 V04_BASE_SHA: `564c9cf8534392501e125dda7ecc747c235a5c0d`.
 V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
-Продукт V04: **V04-01 начат**. Документы V04-00: этот набор. Диалог профиля / confirm ещё на BASE.
+Продукт V04: **V04-01 принят**. **V04-02 начат**. Документы V04-00: этот набор. Confirm ещё на BASE.
 
 ## Ядро портрета (менять в продукте V04)
 
 | Зона | Файлы | Сейчас / цель |
 |---|---|---|
-| Типы / union | `src/lib/v04-action.ts`, `src/types/profile.ts` | V04-01: strict union; runtime портрета ещё pending/confirm |
-| Ревизии | `src/lib/profile.ts` | пишет ревизию на persist; цель — create только при смене среза, без UPDATE payload |
-| Сборка | `src/lib/profile-portrait.ts` | плоский patch; цель — вес из events, пороги 3/1, выбор слота |
-| Диалог | `src/lib/profile-dialogue.ts` | `confirmProfilePortrait`, `healStoredPortrait`, `applyPortraitReply`; цель — атом event+AiCall+processing[+revision] |
+| Типы / union | `src/lib/v04-action.ts`, `src/types/profile.ts` | V04-01: strict union |
+| Commit | `src/lib/v04-commit.ts` | V04-02: `resultJson` event + processing в одной транзакции; срез/ревизия — позже |
+| Ревизии | `src/lib/profile.ts` | пишет ревизию на persist / legacy apply; цель — create только при смене среза |
+| Сборка | `src/lib/profile-portrait.ts` | плоский patch; цель — вес из events, пороги 3/1 |
+| Диалог | `src/lib/profile-dialogue.ts` | V04 JSON → `commitV04ProfileTurn` (проверки источников на записи); legacy JSON → confirm-путь BASE |
 | Промпт | `src/lib/ai/profile.ts` | `complete` = черновик; цель — discriminated union |
 | Runtime | `src/lib/ai-runtime-context.ts` | пусто без `completed` |
 | Контекст ролика | `src/lib/reel-context.ts` | `publicForScript` |
@@ -34,7 +35,7 @@ V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
 
 ## Тесты, которые ждут confirm
 
-`tests/profile-dialogue.test.ts`, `tests/p10-p12-profile.test.ts`, `tests/r2-idempotency.test.ts`, `tests/mvp-release.test.ts`, `tests/p17-e2e-matrix.test.ts`.
+`tests/v04-02-commit.test.ts`, `tests/v04-02-envelope.test.ts`. Confirm-тесты: `tests/profile-dialogue.test.ts`, `tests/p10-p12-profile.test.ts`, `tests/r2-idempotency.test.ts`, `tests/mvp-release.test.ts`, `tests/p17-e2e-matrix.test.ts`.
 
 Сценарии: [`V04_SCENARIOS.md`](./V04_SCENARIOS.md).
 

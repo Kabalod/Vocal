@@ -20,6 +20,8 @@ import {
 import { buildPortrait, coveredProfileKeys, decidePortraitComplete, applyFieldOperations, applyUnchangedFieldsOnly } from "@/lib/profile-portrait";
 import type { ProfileAiReply } from "@/lib/ai/profile";
 import { portraitProfileId, ownerUserId } from "@/lib/auth/session";
+import { V04ActionError, parseV04ModelReply } from "@/lib/v04-action";
+import { commitV04ProfileTurn, looksLikeV04ModelReply } from "@/lib/v04-commit";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
 import type { ProfileFieldValue, ProfileWorkspaceDto } from "@/types/profile";
@@ -49,6 +51,7 @@ type Payload = {
 
 function assistantErrorBody(error: unknown): string {
   if (error instanceof ProfileDialogueError) return error.message;
+  if (error instanceof V04ActionError) return error.message;
   if (error instanceof ZodError) {
     return "Не удалось прочитать ответ модели. Повторите отправку — прежний портрет сохранён.";
   }
@@ -609,17 +612,34 @@ ${await recentStoredText(thread.id, userMessage.id)}
         user: userPrompt,
         label: "profile_dialogue",
       });
-      const parsed = parseProfileAiReply(parseJsonObject(raw.text), mode);
-      await applyPortraitReply({
-        callId: call.id,
-        processingId: processing.id,
-        userMessageId: userMessage.id,
-        parsed,
-        rawText: raw.text,
-        promptTokens: raw.usage?.promptTokens ?? null,
-        completionTokens: raw.usage?.completionTokens ?? null,
-        snapshotFields: workingFields,
-      });
+      const modelJson = parseJsonObject(raw.text);
+      if (looksLikeV04ModelReply(modelJson)) {
+        const action = parseV04ModelReply(modelJson);
+        await commitV04ProfileTurn({
+          prisma,
+          callId: call.id,
+          processingId: processing.id,
+          userMessageId: userMessage.id,
+          profileId: portraitProfileId(),
+          ownerUserId: ownerUserId(),
+          action,
+          rawText: raw.text,
+          promptTokens: raw.usage?.promptTokens ?? null,
+          completionTokens: raw.usage?.completionTokens ?? null,
+        });
+      } else {
+        const parsed = parseProfileAiReply(modelJson, mode);
+        await applyPortraitReply({
+          callId: call.id,
+          processingId: processing.id,
+          userMessageId: userMessage.id,
+          parsed,
+          rawText: raw.text,
+          promptTokens: raw.usage?.promptTokens ?? null,
+          completionTokens: raw.usage?.completionTokens ?? null,
+          snapshotFields: workingFields,
+        });
+      }
     } catch (error) {
       const message = assistantErrorBody(error);
       const technical = error instanceof Error ? error.message.slice(0, 1000) : message;
