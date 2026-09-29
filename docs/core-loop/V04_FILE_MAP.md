@@ -2,13 +2,13 @@
 
 V04_BASE_SHA: `564c9cf8534392501e125dda7ecc747c235a5c0d`.
 V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
-Продукт V04: **not started**. Документы V04-00: этот набор. V04-01 не начат.
+Продукт V04: **V04-01 начат**. Документы V04-00: этот набор. Диалог профиля / confirm ещё на BASE.
 
 ## Ядро портрета (менять в продукте V04)
 
 | Зона | Файлы | Сейчас / цель |
 |---|---|---|
-| Типы | `src/types/profile.ts` | pending/confirm; цель — union + event |
+| Типы / union | `src/lib/v04-action.ts`, `src/types/profile.ts` | V04-01: strict union; runtime портрета ещё pending/confirm |
 | Ревизии | `src/lib/profile.ts` | пишет ревизию на persist; цель — create только при смене среза, без UPDATE payload |
 | Сборка | `src/lib/profile-portrait.ts` | плоский patch; цель — вес из events, пороги 3/1, выбор слота |
 | Диалог | `src/lib/profile-dialogue.ts` | `confirmProfilePortrait`, `healStoredPortrait`, `applyPortraitReply`; цель — атом event+AiCall+processing[+revision] |
