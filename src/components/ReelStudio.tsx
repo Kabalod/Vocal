@@ -16,7 +16,7 @@ import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status"
 import { newDialogueIdempotencyKey } from "@/lib/dialogue-client";
 import { parseStudioTab, studioThoughtHref, writeStudioTab, type StudioMobileTab } from "@/components/reel-studio";
 import { resolveStudioRecordDeepLink, studioRecordGate } from "@/lib/recording-session";
-import { studioShouldSilentRefetch } from "@/lib/recovery";
+import { studioShouldSilentRefetch } from "@/lib/recovery-client";
 import type { ReelStatus } from "@/types/reel";
 import type { ScriptWorkspaceDto } from "@/types/script";
 

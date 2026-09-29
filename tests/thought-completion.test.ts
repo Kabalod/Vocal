@@ -35,6 +35,7 @@ test("new studio UI writes finalTakeId, not selectedTakeId", () => {
   const list = readFileSync(path.join(repoRoot, "src/components/TakeList.tsx"), "utf8");
   const compare = readFileSync(path.join(repoRoot, "src/components/TakeComparison.tsx"), "utf8");
   const summary = readFileSync(path.join(repoRoot, "src/components/CompletionSummary.tsx"), "utf8");
+  const gateSrc = readFileSync(path.join(repoRoot, "src/lib/thought-completion.ts"), "utf8");
   assert.match(takes, /finalTakeId/);
   assert.equal(takes.includes("selectedTakeId:"), false);
   assert.match(list, /reel\.finalTakeId/);
@@ -43,6 +44,7 @@ test("new studio UI writes finalTakeId, not selectedTakeId", () => {
   assert.equal(compare.includes("selectedTakeId:"), false);
   assert.match(summary, /Завершить мысль/);
   assert.match(summary, /Вернуть в работу/);
+  assert.equal(gateSrc.includes("prisma"), false);
 });
 
 test("final take migrates from selectedTakeId and completion keeps history", async (t) => {
@@ -54,7 +56,7 @@ test("final take migrates from selectedTakeId and completion keeps history", asy
 
   const { createReel, createTake, getReel, updateReel, listReels, ReelError } = await import("../src/lib/reels");
   const { saveManualScript, setFinalScript, ScriptError } = await import("../src/lib/scripts");
-  const { backfillFinalTakeIds } = await import("../src/lib/thought-completion");
+  const { backfillFinalTakeIds } = await import("../src/lib/thought-completion-db");
   const { GET: listGet } = await import("../src/app/api/reels/route");
 
   const reel = await createReel({ title: "Итоги мысли", initialNote: "исходная" });

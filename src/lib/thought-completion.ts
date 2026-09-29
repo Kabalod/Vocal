@@ -1,5 +1,3 @@
-import { prisma } from "@/lib/db";
-
 export type CompletionMissing = "take" | "script";
 
 export function thoughtCompletionGate(input: {
@@ -27,15 +25,4 @@ export function thoughtCompletionGate(input: {
     isCompleted,
     blockedReason,
   };
-}
-
-export async function backfillFinalTakeIds(): Promise<{ hadSelected: number; copied: number }> {
-  const hadSelected = await prisma.reel.count({ where: { selectedTakeId: { not: null } } });
-  const copied = await prisma.$executeRaw`
-    UPDATE "Reel"
-    SET "finalTakeId" = "selectedTakeId"
-    WHERE "selectedTakeId" IS NOT NULL
-      AND "finalTakeId" IS NULL
-  `;
-  return { hadSelected, copied: Number(copied) };
 }

@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import { JOB_LEASE_MS } from "@/lib/jobs";
 
+export { studioShouldSilentRefetch } from "@/lib/recovery-client";
+
 export const STALE_PROCESSING_MS = JOB_LEASE_MS;
 
 export const STALE_PROCESSING_USER_MESSAGE =
@@ -22,12 +24,4 @@ export async function failStaleProcessingMessages(threadId: string, now = new Da
     },
   });
   return result.count;
-}
-
-export function studioShouldSilentRefetch(input: {
-  type: "online" | "visibilitychange";
-  visibilityState: string;
-}): boolean {
-  if (input.type === "online") return true;
-  return input.visibilityState === "visible";
 }

@@ -33,6 +33,8 @@ test("R3 keeps R1 mapping and reconnect/reload helpers", () => {
 
   const studio = readFileSync(path.join(repoRoot, "src/components/ReelStudio.tsx"), "utf8");
   assert.match(studio, /studioShouldSilentRefetch/);
+  assert.match(studio, /@\/lib\/recovery-client/);
+  assert.equal(studio.includes("@/lib/recovery\""), false);
   assert.match(studio, /loadThought\("silent"\)/);
   const processing = readFileSync(path.join(repoRoot, "src/app/api/thoughts/[id]/processing/route.ts"), "utf8");
   assert.match(processing, /recoverJobIfStale/);
