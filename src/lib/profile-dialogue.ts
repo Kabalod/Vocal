@@ -1,6 +1,7 @@
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ZodError } from "zod";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
@@ -60,6 +61,10 @@ function assistantErrorBody(error: unknown): string {
     return "Не удалось прочитать ответ модели. Повторите отправку — прежний портрет сохранён.";
   }
   return message;
+}
+
+function isUniqueConflict(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
 function isTechnicalErrorBody(body: string): boolean {
@@ -529,17 +534,23 @@ export async function sendProfileMessage(
     if (raced) return getProfileWorkspace();
     await assertDailyTokenBudget();
 
-    const userMessage = await prisma.dialogueMessage.create({
-      data: {
-        threadId: thread.id,
-        role: "user",
-        kind: "text",
-        body: text,
-        payloadJson: JSON.stringify(input.voiceDurationLabel ? { voiceDurationLabel: input.voiceDurationLabel } : {}),
-        status: "done",
-        idempotencyKey: key,
-      },
-    });
+    let userMessage;
+    try {
+      userMessage = await prisma.dialogueMessage.create({
+        data: {
+          threadId: thread.id,
+          role: "user",
+          kind: "text",
+          body: text,
+          payloadJson: JSON.stringify(input.voiceDurationLabel ? { voiceDurationLabel: input.voiceDurationLabel } : {}),
+          status: "done",
+          idempotencyKey: key,
+        },
+      });
+    } catch (error) {
+      if (!isUniqueConflict(error)) throw error;
+      return getProfileWorkspace();
+    }
     const processing = await prisma.dialogueMessage.create({
       data: {
         threadId: thread.id,

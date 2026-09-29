@@ -2,14 +2,14 @@
 
 V04_BASE_SHA: `564c9cf8534392501e125dda7ecc747c235a5c0d`.
 V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
-Продукт V04: **V04-01–V04-03 приняты**. **V04-04 начат**. Документы V04-00: этот набор. Confirm ещё на BASE.
+Продукт V04: **V04-01–V04-04 приняты**. **V04-05 начат**. Документы V04-00: этот набор. Confirm ещё на BASE.
 
 ## Ядро портрета (менять в продукте V04)
 
 | Зона | Файлы | Сейчас / цель |
 |---|---|---|
 | Типы / union | `src/lib/v04-action.ts`, `src/types/profile.ts` | V04-01: strict union |
-| Commit | `src/lib/v04-commit.ts`, `src/lib/v04-slice.ts` | V04-03: journal replay 3/1, slice, revision + `applyResult` в той же транзакции |
+| Commit | `src/lib/v04-commit.ts`, `src/lib/v04-slice.ts` | V04-03 веса; V04-05: FOR UPDATE профиля, журнал после lock, повтор done AiCall без второго event |
 | Ревизии | `src/lib/profile.ts` | пишет ревизию на persist / legacy apply; цель — create только при смене среза |
 | Сборка | `src/lib/profile-portrait.ts` | плоский patch; цель — вес из events, пороги 3/1 |
 | Диалог | `src/lib/profile-dialogue.ts` | V04 JSON → `commitV04ProfileTurn`; legacy JSON → confirm-путь BASE; GET не replay старых AiCall и не публикует pending |
@@ -35,7 +35,7 @@ V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
 
 ## Тесты, которые ждут confirm
 
-`tests/v04-02-commit.test.ts`, `tests/v04-02-envelope.test.ts`, `tests/v04-03-slice.test.ts`, `tests/v04-03-commit.test.ts`, `tests/v04-04-heal.test.ts`. Confirm-тесты: `tests/profile-dialogue.test.ts`, `tests/p10-p12-profile.test.ts`, `tests/r2-idempotency.test.ts`, `tests/mvp-release.test.ts`, `tests/p17-e2e-matrix.test.ts`.
+`tests/v04-02-commit.test.ts`, `tests/v04-02-envelope.test.ts`, `tests/v04-03-slice.test.ts`, `tests/v04-03-commit.test.ts`, `tests/v04-04-heal.test.ts`, `tests/v04-05-concurrency.test.ts`. Confirm-тесты: `tests/profile-dialogue.test.ts`, `tests/p10-p12-profile.test.ts`, `tests/r2-idempotency.test.ts`, `tests/mvp-release.test.ts`, `tests/p17-e2e-matrix.test.ts`.
 
 Сценарии: [`V04_SCENARIOS.md`](./V04_SCENARIOS.md).
 
