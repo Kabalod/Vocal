@@ -35,6 +35,7 @@ export const V04_DERIVED_VALUES = {
 } as const;
 
 export const V04_OPERATIONS = ["replace_explicit", "add_observation", "strengthen", "weaken"] as const;
+export const V04_COUNTING_MIN_CONFIDENCE = 0.5;
 export const V04_EVIDENCE_TYPES = ["explicit_statement", "behavioral_observation"] as const;
 export const V04_NO_CHANGE_REASONS = [
   "insufficient_signal",

@@ -5,11 +5,24 @@ import { resetPrismaClient } from "../src/lib/db";
 import { LLM_MODEL } from "../src/lib/config";
 import { PROFILE_DIALOGUE_KIND } from "../src/lib/ai/profile";
 import { ownerUserId, portraitProfileId } from "../src/lib/auth/session";
-import { parseV04ModelReply } from "../src/lib/v04-action";
+import { V04ActionError, parseV04ModelReply } from "../src/lib/v04-action";
 import { commitV04ProfileTurn, parseV04ResultEnvelope } from "../src/lib/v04-commit";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
-function applyUpdateJson(evidenceMessageIds: string[]) {
+function weakObservationJson(evidenceMessageIds: string[]) {
+  return JSON.stringify({
+    kind: "apply_update",
+    category: "concreteness",
+    value: "high",
+    scope: "global",
+    evidenceType: "behavioral_observation",
+    evidenceMessageIds,
+    confidence: 0.4,
+    operation: "add_observation",
+  });
+}
+
+function replaceExplicitJson(evidenceMessageIds: string[]) {
   return JSON.stringify({
     kind: "apply_update",
     category: "blog_goal",
@@ -17,12 +30,12 @@ function applyUpdateJson(evidenceMessageIds: string[]) {
     scope: "global",
     evidenceType: "explicit_statement",
     evidenceMessageIds,
-    confidence: 0.4,
+    confidence: 0.9,
     operation: "replace_explicit",
   });
 }
 
-test("V04-02 writes event atomically, rejects bad sources, and does not revise unchanged slice", async (t) => {
+test("V04-02 writes honest no-slice events and defers direct replace_explicit", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
@@ -39,44 +52,64 @@ test("V04-02 writes event atomically, rejects bad sources, and does not revise u
   const assistantId = started.dialogue.messages.find((item) => item.role === "assistant")?.id;
   assert.ok(assistantId);
 
-  const afterApply = await sendProfileMessage(
-    { text: "Хочу говорить своими словами.", idempotencyKey: "v04-02-apply" },
+  const afterWeak = await sendProfileMessage(
+    { text: "Обычно иду от примера.", idempotencyKey: "v04-02-weak" },
     async () => {
       const user = await prisma.dialogueMessage.findFirst({
         where: { role: "user" },
         orderBy: { createdAt: "desc" },
       });
       assert.ok(user);
-      return { text: applyUpdateJson([user.id]), usage: { promptTokens: 1, completionTokens: 1 } };
+      return { text: weakObservationJson([user.id]), usage: { promptTokens: 1, completionTokens: 1 } };
     },
   );
-  assert.equal(afterApply.dialogue.messages.at(-1)?.kind, "text");
-
-  const doneCall = await prisma.aiCall.findFirst({
+  assert.match(afterWeak.dialogue.messages.at(-1)?.body ?? "", /не меняет/);
+  const weakCall = await prisma.aiCall.findFirst({
     where: { kind: PROFILE_DIALOGUE_KIND, status: "done" },
     orderBy: { createdAt: "desc" },
   });
-  assert.ok(doneCall?.resultJson);
-  const envelope = parseV04ResultEnvelope(doneCall.resultJson);
-  assert.equal(envelope?.schemaVersion, "v04-event-1");
-  assert.equal(envelope?.event?.kind, "apply_update");
-  assert.equal(envelope?.event?.confidence, 0.4);
-  assert.equal(envelope?.event?.applyResult.newRevisionId, null);
-  assert.equal(envelope?.event?.applyResult.displaySliceChanged, false);
-  assert.equal(doneCall.responseText.includes("apply_update"), true);
+  const weakEnvelope = parseV04ResultEnvelope(weakCall?.resultJson);
+  assert.equal(weakEnvelope?.event?.operation, "add_observation");
+  assert.equal(weakEnvelope?.event?.applyResult.displaySliceChanged, false);
+  assert.equal(weakEnvelope?.event?.applyResult.newRevisionId, null);
+  assert.equal(weakEnvelope?.deferred, undefined);
+  assert.equal(
+    await prisma.profileRevision.count({ where: { profileId: portraitProfileId() } }),
+    revisionsBefore,
+  );
+
+  const afterReplace = await sendProfileMessage(
+    { text: "Хочу говорить своими словами.", idempotencyKey: "v04-02-replace" },
+    async () => {
+      const user = await prisma.dialogueMessage.findFirst({
+        where: { role: "user" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(user);
+      return { text: replaceExplicitJson([user.id]), usage: { promptTokens: 1, completionTokens: 1 } };
+    },
+  );
+  assert.match(afterReplace.dialogue.messages.at(-1)?.body ?? "", /не меняю отображаемый портрет/);
+  const replaceCall = await prisma.aiCall.findFirst({
+    where: { kind: PROFILE_DIALOGUE_KIND, status: "done" },
+    orderBy: { createdAt: "desc" },
+  });
+  const replaceEnvelope = parseV04ResultEnvelope(replaceCall?.resultJson);
+  assert.equal(replaceEnvelope?.kind, "apply_update");
+  assert.equal(replaceEnvelope?.event, null);
+  assert.equal(replaceEnvelope?.deferred, true);
   assert.equal(
     await prisma.profileRevision.count({ where: { profileId: portraitProfileId() } }),
     revisionsBefore,
   );
 
   const again = await sendProfileMessage(
-    { text: "Хочу говорить своими словами.", idempotencyKey: "v04-02-apply" },
+    { text: "Обычно иду от примера.", idempotencyKey: "v04-02-weak" },
     async () => {
       throw new Error("model must not run on the same idempotency key");
     },
   );
-  assert.equal((await prisma.aiCall.count({ where: { kind: PROFILE_DIALOGUE_KIND, status: "done" } })), 1);
-  assert.equal(again.dialogue.messages.filter((item) => item.role === "user").length, 1);
+  assert.equal(again.dialogue.messages.filter((item) => item.role === "user").length, 2);
 
   const afterNoChange = await sendProfileMessage(
     { text: "Спасибо, это приятно слышать.", idempotencyKey: "v04-02-no-change" },
@@ -86,11 +119,6 @@ test("V04-02 writes event atomically, rejects bad sources, and does not revise u
     }),
   );
   assert.match(afterNoChange.dialogue.messages.at(-1)?.body ?? "", /не записываю/);
-  const noChangeCall = await prisma.aiCall.findFirst({
-    where: { kind: PROFILE_DIALOGUE_KIND, status: "done" },
-    orderBy: { createdAt: "desc" },
-  });
-  assert.equal(parseV04ResultEnvelope(noChangeCall?.resultJson)?.event, null);
 
   const afterThought = await sendProfileMessage(
     { text: "В том ролике я сказал иначе.", idempotencyKey: "v04-02-thought" },
@@ -115,18 +143,37 @@ test("V04-02 writes event atomically, rejects bad sources, and does not revise u
   const afterBadSource = await sendProfileMessage(
     { text: "Ещё раз про цель.", idempotencyKey: "v04-02-assistant-evidence" },
     async () => ({
-      text: applyUpdateJson([assistantId]),
+      text: replaceExplicitJson([assistantId]),
       usage: { promptTokens: 1, completionTokens: 1 },
     }),
   );
   assert.equal(afterBadSource.dialogue.messages.at(-1)?.kind, "error");
-  const failedCall = await prisma.aiCall.findFirst({
-    where: { kind: PROFILE_DIALOGUE_KIND, status: "error" },
-    orderBy: { createdAt: "desc" },
+});
+
+test("V04-02 rejects mismatched turn ids and rolls back a broken processing write", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  await resetPrismaClient();
+  resetAiInflightForTests();
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+    resetAiInflightForTests();
   });
-  assert.ok(failedCall);
-  assert.equal(failedCall.resultJson, null);
-  assert.equal(failedCall.status, "error");
+
+  const { startProfileDialogue, sendProfileMessage } = await import("../src/lib/profile-dialogue");
+  await startProfileDialogue();
+  await sendProfileMessage(
+    { text: "Обычно иду от примера.", idempotencyKey: "v04-02-bind-seed" },
+    async () => {
+      const user = await prisma.dialogueMessage.findFirst({
+        where: { role: "user" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(user);
+      return { text: weakObservationJson([user.id]), usage: { promptTokens: 1, completionTokens: 1 } };
+    },
+  );
 
   const user = await prisma.dialogueMessage.findFirst({ where: { role: "user" }, orderBy: { createdAt: "asc" } });
   assert.ok(user);
@@ -152,7 +199,41 @@ test("V04-02 writes event atomically, rejects bad sources, and does not revise u
       inputSnapshotJson: "{}",
     },
   });
-  const action = parseV04ModelReply(JSON.parse(applyUpdateJson([user.id])) as unknown);
+  const action = parseV04ModelReply(JSON.parse(weakObservationJson([user.id])) as unknown);
+
+  await prisma.creatorProfile.create({ data: { id: "other-profile", ownerUserId: "other-profile" } });
+  const otherThread = await prisma.dialogueThread.create({
+    data: { scope: "profile", profileId: "other-profile" },
+  });
+  const foreignProcessing = await prisma.dialogueMessage.create({
+    data: {
+      threadId: otherThread.id,
+      role: "assistant",
+      kind: "processing",
+      body: "Собираю портрет…",
+      status: "pending",
+    },
+  });
+  await assert.rejects(
+    () =>
+      commitV04ProfileTurn({
+        prisma,
+        callId: hangingCall.id,
+        processingId: foreignProcessing.id,
+        userMessageId: user.id,
+        profileId: portraitProfileId(),
+        ownerUserId: ownerUserId(),
+        action,
+        rawText: weakObservationJson([user.id]),
+        promptTokens: 1,
+        completionTokens: 1,
+      }),
+    (err: unknown) => err instanceof V04ActionError && err.code === "V04_TURN_MISMATCH",
+  );
+  const untouched = await prisma.aiCall.findUnique({ where: { id: hangingCall.id } });
+  assert.equal(untouched?.status, "running");
+  assert.equal(untouched?.resultJson, null);
+
   await assert.rejects(
     () =>
       commitV04ProfileTurn({
@@ -163,10 +244,11 @@ test("V04-02 writes event atomically, rejects bad sources, and does not revise u
         profileId: portraitProfileId(),
         ownerUserId: ownerUserId(),
         action,
-        rawText: applyUpdateJson([user.id]),
+        rawText: weakObservationJson([user.id]),
         promptTokens: 1,
         completionTokens: 1,
       }),
+    (err: unknown) => err instanceof V04ActionError && err.code === "V04_TURN_MISMATCH",
   );
   const rolled = await prisma.aiCall.findUnique({ where: { id: hangingCall.id } });
   assert.equal(rolled?.status, "running");
