@@ -34,6 +34,7 @@ test("R6 keeps confirmed portrait in runtime and drops amend drafts", () => {
     portrait: buildPortrait(published, false),
     pending: null,
     dialogueSessionStartId: null,
+    v04Slice: {},
   };
   assert.equal(runtimePortraitFields(incomplete).every((field) => !field.text), true);
   assert.equal(runtimePortraitRevisionId(incomplete, "rev-1"), null);
@@ -51,6 +52,7 @@ test("R6 keeps confirmed portrait in runtime and drops amend drafts", () => {
       readyToConfirm: false,
     },
     dialogueSessionStartId: null,
+    v04Slice: {},
   };
   const runtime = runtimePortraitFields(amending);
   assert.equal(runtime.find((field) => field.id === "whyRecord")?.text, "опубликованная цель");
@@ -110,6 +112,7 @@ test("thought A prompt does not include thought B or amend draft", async (t) => 
       readyToConfirm: false,
     },
     dialogueSessionStartId: null,
+    v04Slice: {},
   });
 
   const thoughtA = await createReel({ title: "Мысль A про чай" });

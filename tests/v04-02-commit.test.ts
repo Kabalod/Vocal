@@ -38,7 +38,7 @@ function replaceExplicitJson(evidenceMessageIds: string[]) {
   });
 }
 
-test("V04-02 writes honest no-slice events and defers direct replace_explicit", async (t) => {
+test("V04-02 writes no-slice events and V04-03 applies replace_explicit", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
@@ -92,18 +92,18 @@ test("V04-02 writes honest no-slice events and defers direct replace_explicit", 
       return { text: replaceExplicitJson([user.id]), usage: { promptTokens: 1, completionTokens: 1 } };
     },
   );
-  assert.match(afterReplace.dialogue.messages.at(-1)?.body ?? "", /не меняю отображаемый портрет/);
+  assert.match(afterReplace.dialogue.messages.at(-1)?.body ?? "", /Записал в портрет/);
   const replaceCall = await prisma.aiCall.findFirst({
     where: { kind: PROFILE_DIALOGUE_KIND, status: "done" },
     orderBy: { createdAt: "desc" },
   });
   const replaceEnvelope = parseV04ResultEnvelope(replaceCall?.resultJson);
-  assert.equal(replaceEnvelope?.kind, "apply_update");
-  assert.equal(replaceEnvelope?.event, null);
-  assert.equal(replaceEnvelope?.deferred, true);
+  assert.equal(replaceEnvelope?.event?.operation, "replace_explicit");
+  assert.equal(replaceEnvelope?.event?.applyResult.displaySliceChanged, true);
+  assert.ok(replaceEnvelope?.event?.applyResult.newRevisionId);
   assert.equal(
     await prisma.profileRevision.count({ where: { profileId: portraitProfileId() } }),
-    revisionsBefore,
+    revisionsBefore + 1,
   );
 
   const again = await sendProfileMessage(
@@ -153,7 +153,7 @@ test("V04-02 writes honest no-slice events and defers direct replace_explicit", 
   assert.equal(afterBadSource.dialogue.messages.at(-1)?.kind, "error");
 });
 
-test("V04-02 defers replace_explicit even when the value already matches the portrait", async (t) => {
+test("V04-03 does not revise replace_explicit when the displayed value is already that goal", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   await resetPrismaClient();
@@ -176,6 +176,7 @@ test("V04-02 defers replace_explicit even when the value already matches the por
     portrait: buildPortrait(fields, true),
     pending: null,
   });
+  const revisionsBefore = await prisma.profileRevision.count({ where: { profileId: portraitProfileId() } });
 
   await sendProfileMessage(
     { text: "По-прежнему говорить своими словами.", idempotencyKey: "v04-02-replace-same" },
@@ -193,9 +194,13 @@ test("V04-02 defers replace_explicit even when the value already matches the por
     orderBy: { createdAt: "desc" },
   });
   const envelope = parseV04ResultEnvelope(sameCall?.resultJson);
-  assert.equal(envelope?.kind, "apply_update");
-  assert.equal(envelope?.event, null);
-  assert.equal(envelope?.deferred, true);
+  assert.equal(envelope?.event?.operation, "replace_explicit");
+  assert.equal(envelope?.event?.applyResult.displaySliceChanged, false);
+  assert.equal(envelope?.event?.applyResult.newRevisionId, null);
+  assert.equal(
+    await prisma.profileRevision.count({ where: { profileId: portraitProfileId() } }),
+    revisionsBefore,
+  );
 });
 
 test("V04-02 rejects mismatched turn ids and rolls back a broken processing write", async (t) => {

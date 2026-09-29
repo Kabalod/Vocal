@@ -20,6 +20,8 @@ import {
   type ProfilePortraitPatch,
   type ProfileUsage,
 } from "@/types/profile";
+import type { V04Slice } from "@/lib/v04-slice";
+import { parseV04Slice } from "@/lib/v04-slice";
 
 export type StoredProfilePayload = {
   fields: ProfileFieldValue[];
@@ -28,7 +30,20 @@ export type StoredProfilePayload = {
   portrait: PortraitDto | null;
   pending: ProfilePendingChange | null;
   dialogueSessionStartId: string | null;
+  v04Slice: V04Slice;
 };
+
+export function emptyStoredPayload(): StoredProfilePayload {
+  return {
+    fields: emptyProfileFields(),
+    skipped: false,
+    supplementing: false,
+    portrait: null,
+    pending: null,
+    dialogueSessionStartId: null,
+    v04Slice: {},
+  };
+}
 
 export function coveredProfileKeys(fields: ProfileFieldValue[]): ProfileFieldId[] {
   return PROFILE_FIELD_IDS.filter((id) => (fields.find((field) => field.id === id)?.text.trim() ?? "") !== "");
@@ -234,6 +249,7 @@ export function parseStoredPayload(raw: string): StoredProfilePayload {
       portrait?: unknown;
       pending?: unknown;
       dialogueSessionStartId?: unknown;
+      v04Slice?: unknown;
     };
     const fields =
       Array.isArray(parsed.fields) || (parsed.fields && typeof parsed.fields === "object")
@@ -249,6 +265,7 @@ export function parseStoredPayload(raw: string): StoredProfilePayload {
         typeof parsed.dialogueSessionStartId === "string" && parsed.dialogueSessionStartId.trim()
           ? parsed.dialogueSessionStartId
           : null,
+      v04Slice: parseV04Slice(parsed.v04Slice),
     };
   } catch {
     return {
@@ -258,6 +275,7 @@ export function parseStoredPayload(raw: string): StoredProfilePayload {
       portrait: null,
       pending: null,
       dialogueSessionStartId: null,
+      v04Slice: {},
     };
   }
 }

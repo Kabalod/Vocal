@@ -161,6 +161,7 @@ async function hideTechnicalProfileErrors(): Promise<void> {
 
 async function healStoredPortrait(stored: Awaited<ReturnType<typeof readStoredProfilePayload>>) {
   await hideTechnicalProfileErrors();
+  if (Object.keys(stored.v04Slice).length > 0) return stored;
   let next = stored;
   if (!coveredProfileKeys(stored.fields).length) {
     const calls = await prisma.aiCall.findMany({
@@ -328,6 +329,7 @@ async function applyPortraitReply(input: {
                 readyToConfirm: true,
               },
               dialogueSessionStartId: stored.dialogueSessionStartId,
+              v04Slice: stored.v04Slice,
             };
           } else {
             nextStored = {
@@ -343,6 +345,7 @@ async function applyPortraitReply(input: {
                 readyToConfirm: false,
               },
               dialogueSessionStartId: stored.dialogueSessionStartId,
+              v04Slice: stored.v04Slice,
             };
           }
         } else {
@@ -359,6 +362,7 @@ async function applyPortraitReply(input: {
               readyToConfirm: completed,
             },
             dialogueSessionStartId: stored.dialogueSessionStartId,
+            v04Slice: stored.v04Slice,
           };
         }
         const revision = await tx.profileRevision.create({
@@ -470,6 +474,7 @@ export async function confirmProfilePortrait(): Promise<ProfileWorkspaceDto & { 
           portrait: buildPortrait(fields, true),
           pending: null,
           dialogueSessionStartId: stored.dialogueSessionStartId,
+          v04Slice: stored.v04Slice,
         };
         const revision = await tx.profileRevision.create({
           data: {

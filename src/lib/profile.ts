@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { portraitProfileId } from "@/lib/auth/session";
-import { buildPortrait, parseStoredPayload, type StoredProfilePayload } from "@/lib/profile-portrait";
+import { buildPortrait, emptyStoredPayload, parseStoredPayload, type StoredProfilePayload } from "@/lib/profile-portrait";
 import {
   PROFILE_FIELD_IDS,
   PROFILE_FIELD_LABELS,
@@ -108,16 +108,7 @@ export async function getProfileRevision(id: string | null | undefined): Promise
   return toRevisionDto(row.id, row.createdAt, row.payloadJson);
 }
 
-export function emptyStoredPayload(): StoredProfilePayload {
-  return {
-    fields: emptyProfileFields(),
-    skipped: false,
-    supplementing: false,
-    portrait: null,
-    pending: null,
-    dialogueSessionStartId: null,
-  };
-}
+export { emptyStoredPayload };
 
 export function storedPayloadFromJson(payloadJson: string): StoredProfilePayload {
   const stored = parseStoredPayload(payloadJson);
@@ -136,6 +127,7 @@ export function serializeStoredPayload(input: StoredProfilePayload): string {
     portrait,
     pending: input.pending,
     dialogueSessionStartId: input.dialogueSessionStartId,
+    v04Slice: input.v04Slice ?? {},
   });
 }
 

@@ -1,18 +1,25 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
-  V04_COUNTING_MIN_CONFIDENCE,
   V04_EVENT_SCHEMA,
   V04ActionError,
   assertApplyUpdateCompatible,
   assertEvidenceIdsNewForSlot,
   assertProfileDialogueEvidence,
   assertThoughtSpecificAuditMessage,
+  isV04DirectCategory,
   type V04ApplyUpdate,
   type V04EvidenceRow,
   type V04ModelReply,
   type V04ThoughtSpecific,
 } from "@/lib/v04-action";
 import { PROFILE_DIALOGUE_KIND } from "@/lib/ai/profile";
+import { buildPortrait, emptyStoredPayload, parseStoredPayload } from "@/lib/profile-portrait";
+import {
+  applyDirectSliceToFields,
+  replayV04Slice,
+  sliceEqual,
+  sliceFromPublishedFields,
+} from "@/lib/v04-slice";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -44,13 +51,6 @@ export type V04ResultEnvelope = {
 
 const V04_KINDS = new Set(["apply_update", "no_change", "thought_specific"]);
 
-const NO_SLICE_CHANGE: V04ApplyResult = {
-  slotAdmitted: false,
-  systemWeight: 0,
-  displaySliceChanged: false,
-  newRevisionId: null,
-};
-
 export function looksLikeV04ModelReply(raw: unknown): boolean {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
   const kind = (raw as { kind?: unknown }).kind;
@@ -76,9 +76,6 @@ export function parseV04ResultEnvelope(raw: string | null | undefined): V04Resul
     if (!obj.event || typeof obj.event !== "object") return null;
     const event = obj.event as V04AcceptedEvent;
     if (event.kind !== "apply_update") return null;
-    if (event.applyResult?.displaySliceChanged !== false || event.applyResult.newRevisionId !== null) {
-      return null;
-    }
     return { schemaVersion: V04_EVENT_SCHEMA, kind: obj.kind as V04ModelReply["kind"], event };
   } catch {
     return null;
@@ -99,21 +96,11 @@ export function usedEvidenceIdsForSlot(
   return ids;
 }
 
-export function v04AssistantBody(input: { action: V04ModelReply; deferred: boolean }): string {
+export function v04AssistantBody(input: { action: V04ModelReply; sliceChanged: boolean }): string {
   if (input.action.kind === "no_change") return "В портрет это не записываю.";
   if (input.action.kind === "thought_specific") return "Это относится к конкретной мысли, не к портрету.";
-  if (input.deferred) return "Пока не меняю отображаемый портрет.";
+  if (input.sliceChanged) return "Записал в портрет.";
   return "В отображаемый портрет это не меняет.";
-}
-
-export function v04ApplyWithoutSliceChange(
-  action: V04ApplyUpdate,
-): { deferred: true } | { deferred: false; applyResult: V04ApplyResult } {
-  if (action.operation === "replace_explicit") return { deferred: true };
-  if (action.operation === "add_observation" && action.confidence < V04_COUNTING_MIN_CONFIDENCE) {
-    return { deferred: false, applyResult: NO_SLICE_CHANGE };
-  }
-  return { deferred: true };
 }
 
 export async function loadV04EvidenceRows(db: Db, ids: string[]): Promise<V04EvidenceRow[]> {
@@ -224,13 +211,10 @@ async function assertBoundTurn(
 function buildEnvelope(
   action: V04ModelReply,
   userMessageId: string,
-  decision: { deferred: true } | { deferred: false; applyResult: V04ApplyResult },
+  applyResult: V04ApplyResult | null,
 ): V04ResultEnvelope {
-  if (action.kind !== "apply_update") {
+  if (action.kind !== "apply_update" || !applyResult) {
     return { schemaVersion: V04_EVENT_SCHEMA, kind: action.kind, event: null };
-  }
-  if (decision.deferred) {
-    return { schemaVersion: V04_EVENT_SCHEMA, kind: action.kind, event: null, deferred: true };
   }
   return {
     schemaVersion: V04_EVENT_SCHEMA,
@@ -244,7 +228,7 @@ function buildEnvelope(
       evidenceMessageIds: action.evidenceMessageIds,
       confidence: action.confidence,
       evidenceRole: evidenceRoleFor(action.operation),
-      applyResult: decision.applyResult,
+      applyResult,
     },
   };
 }
@@ -280,16 +264,74 @@ export async function commitV04ProfileTurn(input: {
       }
     }
 
-    const decision =
-      input.action.kind === "apply_update"
-        ? v04ApplyWithoutSliceChange(input.action)
-        : ({ deferred: false, applyResult: NO_SLICE_CHANGE } as const);
-    const envelope = buildEnvelope(
-      input.action,
-      input.userMessageId,
-      input.action.kind === "apply_update" ? decision : { deferred: false, applyResult: NO_SLICE_CHANGE },
-    );
-    const deferred = envelope.deferred === true;
+    const profile = await tx.creatorProfile.findUnique({ where: { id: input.profileId } });
+    const revision = profile?.currentRevisionId
+      ? await tx.profileRevision.findUnique({ where: { id: profile.currentRevisionId } })
+      : null;
+    const stored = revision ? parseStoredPayload(revision.payloadJson) : emptyStoredPayload();
+    const previousSlice =
+      Object.keys(stored.v04Slice).length > 0
+        ? stored.v04Slice
+        : sliceFromPublishedFields(stored.fields, stored.portrait?.completed === true);
+
+    let applyResult: V04ApplyResult | null = null;
+    let sliceChanged = false;
+    if (input.action.kind === "apply_update") {
+      const journalEvents = journal
+        .map((envelope) => envelope.event)
+        .filter((event): event is V04AcceptedEvent => event !== null);
+      const candidate = {
+        operation: input.action.operation,
+        category: input.action.category,
+        value: input.action.value,
+        evidenceMessageIds: input.action.evidenceMessageIds,
+        confidence: input.action.confidence,
+        evidenceRole: evidenceRoleFor(input.action.operation),
+      };
+      const replayed = replayV04Slice({ events: [...journalEvents, candidate], previous: previousSlice });
+      sliceChanged = !sliceEqual(previousSlice, replayed.slice);
+      let newRevisionId: string | null = null;
+      if (sliceChanged) {
+        const fields = applyDirectSliceToFields(stored.fields, replayed.slice);
+        const completed = stored.portrait?.completed === true || Object.keys(replayed.slice).length > 0;
+        const nextStored = {
+          ...stored,
+          fields,
+          portrait: buildPortrait(fields, completed),
+          v04Slice: replayed.slice,
+        };
+        const created = await tx.profileRevision.create({
+          data: {
+            profileId: input.profileId,
+            payloadJson: JSON.stringify({
+              fields: nextStored.fields,
+              skipped: nextStored.skipped,
+              supplementing: nextStored.supplementing,
+              portrait: nextStored.portrait,
+              pending: nextStored.pending,
+              dialogueSessionStartId: nextStored.dialogueSessionStartId,
+              v04Slice: nextStored.v04Slice,
+            }),
+          },
+        });
+        await tx.creatorProfile.update({
+          where: { id: input.profileId },
+          data: { currentRevisionId: created.id },
+        });
+        newRevisionId = created.id;
+      }
+      const slot = replayed.slotOf(input.action.category, input.action.value);
+      applyResult = {
+        slotAdmitted: isV04DirectCategory(input.action.category)
+          ? replayed.slice[input.action.category] === input.action.value
+          : slot.slotAdmitted,
+        systemWeight: isV04DirectCategory(input.action.category) ? 1 : slot.systemWeight,
+        displaySliceChanged: sliceChanged,
+        newRevisionId,
+      };
+    }
+
+    const envelope = buildEnvelope(input.action, input.userMessageId, applyResult);
     await tx.aiCall.update({
       where: { id: input.callId },
       data: {
@@ -304,7 +346,7 @@ export async function commitV04ProfileTurn(input: {
       where: { id: input.processingId },
       data: {
         kind: "text",
-        body: v04AssistantBody({ action: input.action, deferred }),
+        body: v04AssistantBody({ action: input.action, sliceChanged }),
         status: "done",
       },
     });
