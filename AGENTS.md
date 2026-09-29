@@ -1,7 +1,7 @@
 # Instructions for coding agents (Vocal)
 
 Start here:
-1. `docs/ROADMAP.md` — общая дорожная карта на 27.09.2026 (**не принята**). C00 product **accepted** at `e268c40`. Auth **accepted** at `51d6033`. Live schema recreated 28.09.2026 (`0`…`9`); step 5 (Auth + short C00) not closed — `docs/db/LIVE_SCHEMA_RECREATE.md`. V04 only after an explicit start.
+1. `docs/ROADMAP.md` — общая дорожная карта на 27.09.2026 (**не принята**). C00 product **accepted** at `e268c40`. Auth **accepted** at `51d6033`. Live schema **accepted** 29.09.2026 — `docs/db/LIVE_SCHEMA_RECREATE.md`. V04 only after an explicit start.
 2. `docs/design/README.md`
 3. `docs/design/SOURCE_OF_TRUTH_2026-09-15.md`
 4. Visual source of truth: `docs/design/references-new/` (approved screens 01–09; `/reels` uses screen 09)
@@ -22,7 +22,7 @@ V03 test policy (accepted stage):
 
 V04-00 is docs only. Do not change product code, Prisma, or migrations until an explicit V04 product stage. Do not declare V04 accepted.
 
-C00 docs **accepted** (`8cb7351`). C00-01 **accepted** (`2391217`). C00-02 **accepted** (`548b813`). C00-03 **accepted** (`f1eeb54438d057eedf86c345b2a77c71afa3f214`). C00-04 **accepted** (`ce6a43c386bdab163e531a4670ec8e08d524477e`). C00-05 and C00 product **accepted** (`e268c40a80a5baa9a50699e9b920e01b522edb94`). Auth **accepted** (`51d6033`). V04, live schema, and `docs/ROADMAP.md` are **not accepted**. Do not start V04-01, V05, or I01 without an explicit start. See `docs/ROADMAP.md`.
+C00 docs **accepted** (`8cb7351`). C00-01 **accepted** (`2391217`). C00-02 **accepted** (`548b813`). C00-03 **accepted** (`f1eeb54438d057eedf86c345b2a77c71afa3f214`). C00-04 **accepted** (`ce6a43c386bdab163e531a4670ec8e08d524477e`). C00-05 and C00 product **accepted** (`e268c40a80a5baa9a50699e9b920e01b522edb94`). Auth **accepted** (`51d6033`). Live schema **accepted** 29.09.2026. V04 and `docs/ROADMAP.md` are **not accepted**. Do not start V04-01, V05, or I01 without an explicit start. See `docs/ROADMAP.md`.
 
 Do **not** apply Prisma baseline, migrations 8–9, or `migrate resolve` to live Supabase from this cycle.
 
