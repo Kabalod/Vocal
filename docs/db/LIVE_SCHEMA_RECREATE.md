@@ -53,7 +53,16 @@ Status: **принята 29.09.2026**. Пересоздание **примене
 - RLS + FORCE на таблицах приложения, без политик (как раньше: сервер Prisma / service_role). Advisor `rls_enabled_no_policy` — ожидаемо.
 - `Criterion` пуст. `Reel` / `ThoughtState` = 0.
 
-Шаг 5 (29.09.2026): вход под тестовым пользователем, создание мыслей, ответ в thought dialogue. SQL: 2 `Reel` / `ThoughtState`, 1 ход `DialogueMessage` user+assistant `done`, 1 `AiCall` `dialogue`/`done`; `auth.users` 4 = `profiles` 4; bucket `vocal-private`. Не стартовать V04 из этой приёмки.
+На 28.09.2026 продукт live-схемы ещё **не** принимался: не было входа и короткого C00 на тестовом пользователе.
+
+## Приёмка 29.09.2026
+
+- Вход под тестовым пользователем, создание мыслей, ответ модели в thought dialogue.
+- SQL: миграции Prisma `0`…`9` finished; есть `ThoughtState`, `AiCall.turnKey` / `execLeaseUntil`; FK Prisma → `profiles` нет.
+- Auth сохранён: `auth.users` 4 = `profiles` 4, триггер `on_auth_user_created`, bucket `vocal-private`.
+- На момент сверки: 2 `Reel` / `ThoughtState`, 1 ход `DialogueMessage` (user `text` + assistant `question`, оба `done`), 1 `AiCall` `dialogue`/`done`.
+
+Live-схема **принята** 29.09.2026. Это не V04 и не принятие [`../ROADMAP.md`](../ROADMAP.md). Не стартовать V04 из этой приёмки.
 
 ## Запреты
 

@@ -2,9 +2,9 @@
 
 > Historical snapshot from the Auth stage. SQLite generate/transfer commands described below are no longer part of the app. Current provider is PostgreSQL only (`docs/auth/POSTGRES.md`).
 >
-> 28.09.2026: Auth **accepted** (`51d6033`, in `f971a7f`). Do not treat leftover “Prisma generates against SQLite” lines in “What shipped” as current. Product route: `docs/ROADMAP.md`. Legacy owner transfer is not required if user content is empty (owner statement). Live schema remains **not accepted**.
+> 28.09.2026: Auth **accepted** (`51d6033`, in `f971a7f`). Do not treat leftover “Prisma generates against SQLite” lines in “What shipped” as current. Product route: `docs/ROADMAP.md`. Legacy owner transfer is not required if user content is empty (owner statement). Live schema was accepted later (29.09.2026); this Auth report is not that acceptance.
 
-Status: **accepted** `51d6033` (28.09.2026). This is not I01 and not live-schema acceptance. Automatic memory is not started. P01.6-2 is not declared accepted.
+Status: **accepted** `51d6033` (28.09.2026). This is not I01 and not V04. Automatic memory is not started. P01.6-2 remains a historical visual-cycle note, not a V/C00 route blocker.
 
 ## Entities
 

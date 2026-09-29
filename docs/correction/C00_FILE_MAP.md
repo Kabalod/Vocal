@@ -26,7 +26,7 @@
 1. Единый конверт `c00-envelope-1` в `AiCall.resultJson` хода мысли (сейчас там только action: `working-take.ts`). Не класть C00 в `profile_dialogue` и не в payload `ProfileRevision`.
 2. Политика: `src/lib/c00-policy.ts` (`VOCAL_C00_POLICY`; `0`/`off` — откат на путь V03).
 3. Вызов из `commitDialogueReply` — `correct_thought` / `keep_local` / `discard`. Портрет не вызывать.
-4. Stale: `correction.acceptedAt` в конверте; revision в снимке, если есть. В `questions.ts` сейчас нет `thoughtStateRevision` — добавить отдельной задачей этапа. Без колонки `stale`.
+4. Stale: `correction.acceptedAt` в конверте; revision в снимке, если есть. В `src/lib/ai/questions.ts` в `inputSnapshotJson` уже пишется `thoughtStateRevision` (`thought?.revision ?? 0`). Отдельной задачи «добавить поле» нет. Колонки `stale` по-прежнему нет.
 
 Не создавать в C00: векторную БД, scoring-v1, таблицы I00.
 
