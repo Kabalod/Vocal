@@ -105,6 +105,7 @@ export const v04ModelReplySchema = z.discriminatedUnion("kind", [
 
 export type V04ModelReply = z.infer<typeof v04ModelReplySchema>;
 export type V04ApplyUpdate = Extract<V04ModelReply, { kind: "apply_update" }>;
+export type V04ThoughtSpecific = Extract<V04ModelReply, { kind: "thought_specific" }>;
 
 export type V04EvidenceRow = {
   id: string;
@@ -208,4 +209,13 @@ export function assertProfileDialogueEvidence(
     V04_EVIDENCE_THREAD: "Основание должно быть из диалога профиля, не из мысли.",
   };
   throw new V04ActionError(messages[code] ?? "Основание портрета недопустимо.", code);
+}
+
+export function assertThoughtSpecificAuditMessage(
+  action: V04ThoughtSpecific,
+  rows: V04EvidenceRow[],
+  input: { ownerUserId: string; profileId: string },
+) {
+  if (!action.auditUserMessageId) return;
+  assertProfileDialogueEvidence([action.auditUserMessageId], rows, input);
 }

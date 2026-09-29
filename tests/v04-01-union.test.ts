@@ -5,8 +5,20 @@ import {
   assertApplyUpdateCompatible,
   assertEvidenceIdsNewForSlot,
   assertProfileDialogueEvidence,
+  assertThoughtSpecificAuditMessage,
   parseV04ModelReply,
 } from "../src/lib/v04-action";
+
+function profileUserRow(overrides: Record<string, string | null> = {}) {
+  return {
+    id: "msg_audit",
+    role: "user",
+    ownerUserId: "owner",
+    threadScope: "profile",
+    profileId: "profile",
+    ...overrides,
+  };
+}
 
 function applyUpdate(overrides: Record<string, unknown> = {}) {
   return {
@@ -123,6 +135,56 @@ test("V04-01 rejects assistant, thought-thread, and already used evidence", () =
   assert.throws(
     () => assertEvidenceIdsNewForSlot(["msg_1"], ["msg_1"]),
     (err: unknown) => err instanceof V04ActionError && err.code === "V04_EVIDENCE_USED",
+  );
+});
+
+test("V04-01 checks thought_specific.auditUserMessageId as profile-dialogue user message", () => {
+  const action = parseV04ModelReply({
+    kind: "thought_specific",
+    reasonCode: "reel_episode",
+    auditUserMessageId: "msg_audit",
+  });
+  assert.equal(action.kind, "thought_specific");
+  if (action.kind !== "thought_specific") return;
+
+  assertThoughtSpecificAuditMessage(action, [profileUserRow()], {
+    ownerUserId: "owner",
+    profileId: "profile",
+  });
+
+  const withoutAudit = parseV04ModelReply({ kind: "thought_specific", reasonCode: "thought_detail" });
+  assert.equal(withoutAudit.kind, "thought_specific");
+  if (withoutAudit.kind !== "thought_specific") return;
+  assertThoughtSpecificAuditMessage(withoutAudit, [], { ownerUserId: "owner", profileId: "profile" });
+
+  assert.throws(
+    () =>
+      assertThoughtSpecificAuditMessage(action, [profileUserRow({ ownerUserId: "other" })], {
+        ownerUserId: "owner",
+        profileId: "profile",
+      }),
+    (err: unknown) => err instanceof V04ActionError && err.code === "V04_EVIDENCE_OWNER",
+  );
+  assert.throws(
+    () =>
+      assertThoughtSpecificAuditMessage(action, [profileUserRow({ role: "assistant" })], {
+        ownerUserId: "owner",
+        profileId: "profile",
+      }),
+    (err: unknown) => err instanceof V04ActionError && err.code === "V04_EVIDENCE_ROLE",
+  );
+  assert.throws(
+    () =>
+      assertThoughtSpecificAuditMessage(
+        action,
+        [profileUserRow({ threadScope: "reel", profileId: null })],
+        { ownerUserId: "owner", profileId: "profile" },
+      ),
+    (err: unknown) => err instanceof V04ActionError && err.code === "V04_EVIDENCE_THREAD",
+  );
+  assert.throws(
+    () => assertThoughtSpecificAuditMessage(action, [], { ownerUserId: "owner", profileId: "profile" }),
+    (err: unknown) => err instanceof V04ActionError && err.code === "V04_EVIDENCE_MISSING",
   );
 });
 

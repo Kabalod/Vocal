@@ -31,7 +31,7 @@ V04-00 — документы. Prisma, миграции и live Supabase не м
 
 ### `thought_specific`
 
-Обязательно: `reasonCode`. Необязательно: `auditUserMessageId` (сообщение пользователя profile dialogue, только аудит). **Нет** фиктивной категории глобального портрета. Журнал и `ProfileRevision` не меняются.
+Обязательно: `reasonCode`. Необязательно: `auditUserMessageId` (сообщение пользователя profile dialogue, только аудит). Если поле указано — те же проверки источника, что у `evidenceMessageIds`: существование, роль `user`, владелец, профильный thread. **Нет** фиктивной категории глобального портрета. Журнал и `ProfileRevision` не меняются.
 
 `reasonCode`: `thought_detail` | `thought_dialogue` | `reel_episode`.
 
