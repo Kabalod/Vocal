@@ -60,7 +60,7 @@ test("V04-02 accepts only apply_update that cannot change the displayed slice", 
   });
   assert.equal(weak.kind, "apply_update");
   if (weak.kind !== "apply_update") return;
-  assert.equal(v04ApplyWithoutSliceChange(weak, null).deferred, false);
+  assert.equal(v04ApplyWithoutSliceChange(weak).deferred, false);
 
   const replace = parseV04ModelReply({
     kind: "apply_update",
@@ -74,6 +74,5 @@ test("V04-02 accepts only apply_update that cannot change the displayed slice", 
   });
   assert.equal(replace.kind, "apply_update");
   if (replace.kind !== "apply_update") return;
-  assert.equal(v04ApplyWithoutSliceChange(replace, null).deferred, true);
-  assert.equal(v04ApplyWithoutSliceChange(replace, "говорить своими словами").deferred, false);
+  assert.equal(v04ApplyWithoutSliceChange(replace).deferred, true);
 });

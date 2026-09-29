@@ -1,5 +1,4 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { parseStoredPayload } from "@/lib/profile-portrait";
 import {
   V04_COUNTING_MIN_CONFIDENCE,
   V04_EVENT_SCHEMA,
@@ -8,16 +7,12 @@ import {
   assertEvidenceIdsNewForSlot,
   assertProfileDialogueEvidence,
   assertThoughtSpecificAuditMessage,
-  isV04DirectCategory,
-  normalizePortraitValue,
   type V04ApplyUpdate,
-  type V04DirectCategory,
   type V04EvidenceRow,
   type V04ModelReply,
   type V04ThoughtSpecific,
 } from "@/lib/v04-action";
 import { PROFILE_DIALOGUE_KIND } from "@/lib/ai/profile";
-import type { ProfileFieldId } from "@/types/profile";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -48,13 +43,6 @@ export type V04ResultEnvelope = {
 };
 
 const V04_KINDS = new Set(["apply_update", "no_change", "thought_specific"]);
-
-const DIRECT_FIELD: Record<V04DirectCategory, ProfileFieldId> = {
-  blog_goal: "whyRecord",
-  general_audience: "audience",
-  standing_topic: "topics",
-  explicit_boundary: "boundaries",
-};
 
 const NO_SLICE_CHANGE: V04ApplyResult = {
   slotAdmitted: false,
@@ -120,22 +108,8 @@ export function v04AssistantBody(input: { action: V04ModelReply; deferred: boole
 
 export function v04ApplyWithoutSliceChange(
   action: V04ApplyUpdate,
-  displayedDirectValue: string | null,
 ): { deferred: true } | { deferred: false; applyResult: V04ApplyResult } {
-  if (action.operation === "replace_explicit" && isV04DirectCategory(action.category)) {
-    if (displayedDirectValue !== null && displayedDirectValue === action.value) {
-      return {
-        deferred: false,
-        applyResult: {
-          slotAdmitted: true,
-          systemWeight: 1,
-          displaySliceChanged: false,
-          newRevisionId: null,
-        },
-      };
-    }
-    return { deferred: true };
-  }
+  if (action.operation === "replace_explicit") return { deferred: true };
   if (action.operation === "add_observation" && action.confidence < V04_COUNTING_MIN_CONFIDENCE) {
     return { deferred: false, applyResult: NO_SLICE_CHANGE };
   }
@@ -195,16 +169,6 @@ function assertApplySources(
       envelope.event?.category === action.category && envelope.event.value === action.value,
   );
   assertApplyUpdateCompatible(action, { slotExists });
-}
-
-function displayedDirectValue(
-  stored: { portrait: { completed: boolean } | null; fields: { id: string; text: string }[] },
-  category: V04DirectCategory,
-): string | null {
-  if (!stored.portrait?.completed) return null;
-  const text = stored.fields.find((field) => field.id === DIRECT_FIELD[category])?.text ?? "";
-  const value = normalizePortraitValue(text);
-  return value || null;
 }
 
 async function assertBoundTurn(
@@ -304,11 +268,6 @@ export async function commitV04ProfileTurn(input: {
 
     const journal = await loadJournalEnvelopes(tx, input.profileId, input.callId);
     const sourceInput = { ownerUserId: input.ownerUserId, profileId: input.profileId };
-    const profile = await tx.creatorProfile.findUnique({ where: { id: input.profileId } });
-    const revision = profile?.currentRevisionId
-      ? await tx.profileRevision.findUnique({ where: { id: profile.currentRevisionId } })
-      : null;
-    const stored = revision ? parseStoredPayload(revision.payloadJson) : null;
 
     if (input.action.kind === "apply_update") {
       const rows = await loadV04EvidenceRows(tx, input.action.evidenceMessageIds);
@@ -323,12 +282,7 @@ export async function commitV04ProfileTurn(input: {
 
     const decision =
       input.action.kind === "apply_update"
-        ? v04ApplyWithoutSliceChange(
-            input.action,
-            isV04DirectCategory(input.action.category) && stored
-              ? displayedDirectValue(stored, input.action.category)
-              : null,
-          )
+        ? v04ApplyWithoutSliceChange(input.action)
         : ({ deferred: false, applyResult: NO_SLICE_CHANGE } as const);
     const envelope = buildEnvelope(
       input.action,

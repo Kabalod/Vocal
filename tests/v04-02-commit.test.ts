@@ -6,6 +6,9 @@ import { LLM_MODEL } from "../src/lib/config";
 import { PROFILE_DIALOGUE_KIND } from "../src/lib/ai/profile";
 import { ownerUserId, portraitProfileId } from "../src/lib/auth/session";
 import { V04ActionError, parseV04ModelReply } from "../src/lib/v04-action";
+import { persistProfilePayload, readStoredProfilePayload } from "../src/lib/profile";
+import { buildPortrait } from "../src/lib/profile-portrait";
+import { emptyProfileFields } from "../src/types/profile";
 import { commitV04ProfileTurn, parseV04ResultEnvelope } from "../src/lib/v04-commit";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
@@ -148,6 +151,51 @@ test("V04-02 writes honest no-slice events and defers direct replace_explicit", 
     }),
   );
   assert.equal(afterBadSource.dialogue.messages.at(-1)?.kind, "error");
+});
+
+test("V04-02 defers replace_explicit even when the value already matches the portrait", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  await resetPrismaClient();
+  resetAiInflightForTests();
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+    resetAiInflightForTests();
+  });
+
+  const { startProfileDialogue, sendProfileMessage } = await import("../src/lib/profile-dialogue");
+  await startProfileDialogue();
+  const stored = await readStoredProfilePayload();
+  const fields = emptyProfileFields().map((field) =>
+    field.id === "whyRecord" ? { ...field, text: "говорить своими словами" } : field,
+  );
+  await persistProfilePayload({
+    ...stored,
+    fields,
+    portrait: buildPortrait(fields, true),
+    pending: null,
+  });
+
+  await sendProfileMessage(
+    { text: "По-прежнему говорить своими словами.", idempotencyKey: "v04-02-replace-same" },
+    async () => {
+      const user = await prisma.dialogueMessage.findFirst({
+        where: { role: "user" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(user);
+      return { text: replaceExplicitJson([user.id]), usage: { promptTokens: 1, completionTokens: 1 } };
+    },
+  );
+  const sameCall = await prisma.aiCall.findFirst({
+    where: { kind: PROFILE_DIALOGUE_KIND, status: "done" },
+    orderBy: { createdAt: "desc" },
+  });
+  const envelope = parseV04ResultEnvelope(sameCall?.resultJson);
+  assert.equal(envelope?.kind, "apply_update");
+  assert.equal(envelope?.event, null);
+  assert.equal(envelope?.deferred, true);
 });
 
 test("V04-02 rejects mismatched turn ids and rolls back a broken processing write", async (t) => {
