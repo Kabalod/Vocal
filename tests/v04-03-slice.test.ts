@@ -34,6 +34,30 @@ test("V04-03 admits a derived slot at weight 3 and keeps a weaker slice unchange
   assert.equal(three.slotOf("concreteness", "high").slotAdmitted, true);
 });
 
+test("V04-03 counts two replace_explicit ids of the same direct value", () => {
+  const events: V04JournalEvent[] = [
+    {
+      operation: "replace_explicit",
+      category: "blog_goal",
+      value: "говорить своими словами",
+      evidenceMessageIds: ["d1"],
+      confidence: 0.9,
+      evidenceRole: "support",
+    },
+    {
+      operation: "replace_explicit",
+      category: "blog_goal",
+      value: "говорить своими словами",
+      evidenceMessageIds: ["d2"],
+      confidence: 0.9,
+      evidenceRole: "support",
+    },
+  ];
+  const replayed = replayV04Slice({ events, previous: {} });
+  assert.equal(replayed.slice.blog_goal, "говорить своими словами");
+  assert.equal(replayed.slotOf("blog_goal", "говорить своими словами").systemWeight, 2);
+});
+
 test("V04-03 keeps the current derived value on equal admitted weights", () => {
   const events: V04JournalEvent[] = [
     observation("a1", "high"),

@@ -325,7 +325,7 @@ export async function commitV04ProfileTurn(input: {
         slotAdmitted: isV04DirectCategory(input.action.category)
           ? replayed.slice[input.action.category] === input.action.value
           : slot.slotAdmitted,
-        systemWeight: isV04DirectCategory(input.action.category) ? 1 : slot.systemWeight,
+        systemWeight: slot.systemWeight,
         displaySliceChanged: sliceChanged,
         newRevisionId,
       };

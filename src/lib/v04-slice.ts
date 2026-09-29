@@ -114,9 +114,11 @@ export function replayV04Slice(input: {
     if (event.confidence >= V04_COUNTING_MIN_CONFIDENCE) {
       const bucket = event.evidenceRole === "oppose" ? slot.oppose : slot.support;
       for (const id of event.evidenceMessageIds) bucket.add(id);
-      const nextWeight = weight(slot);
-      if (nextWeight >= V04_PUBLISH_THRESHOLD) slot.admitted = true;
-      else if (nextWeight <= V04_REMOVE_THRESHOLD) slot.admitted = false;
+      if (!isV04DirectCategory(event.category)) {
+        const nextWeight = weight(slot);
+        if (nextWeight >= V04_PUBLISH_THRESHOLD) slot.admitted = true;
+        else if (nextWeight <= V04_REMOVE_THRESHOLD) slot.admitted = false;
+      }
     }
     slots.set(key, slot);
   }
