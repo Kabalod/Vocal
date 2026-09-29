@@ -29,6 +29,7 @@ import {
   blocksOrdinaryThoughtPatch,
   c00ClassifySeam,
   classifyC00CorrectionSignal,
+  isExplicitAuthorFactCorrection,
   mergeClassifiedActionSignal,
   thoughtUpdateAfterClassification,
 } from "@/lib/c00-classify-signal";
@@ -555,6 +556,9 @@ async function classifiedCorrectionSignal(input: {
   complete: CompleteJsonFn;
 }): Promise<C00SignalCandidate | null | undefined> {
   if (!shouldClassifyCorrection(input.complete)) return undefined;
+  // Classifier output is discarded unless the author explicitly corrects their own fact.
+  // Skip the extra model round-trip on the ordinary thought path.
+  if (!isExplicitAuthorFactCorrection(input.userText)) return null;
   try {
     const thought = await getThoughtState(input.reelId);
     const classified = await classifyC00CorrectionSignal(
@@ -706,6 +710,12 @@ export async function runDialogueTurn(
       return listDialoguePage(reelId);
     }
 
+    const classifiedPromise = classifiedCorrectionSignal({
+      reelId,
+      userText: text,
+      userMessageId: userMessage.id,
+      complete,
+    });
     const { prompt: userPrompt, material } = await freezeThoughtPrompt(reelId, thread.id, text, {
       userMessageId: userMessage.id,
     });
@@ -788,12 +798,7 @@ export async function runDialogueTurn(
       return listDialoguePage(reelId);
     }
     const reply = parseAgentReply(parseJsonObject(call.responseText));
-    const classified = await classifiedCorrectionSignal({
-      reelId,
-      userText: text,
-      userMessageId: userMessage.id,
-      complete,
-    });
+    const classified = await classifiedPromise;
     await commitDialogueReply({
       reelId,
       threadId: thread.id,

@@ -317,7 +317,7 @@ test("injected classify path: quote, retell, and injection do not change the sli
       orderBy: { createdAt: "desc" },
     });
     const envelope = parseC00Envelope(call.resultJson);
-    assert.deepEqual(labels.filter((label) => label === "c00_classify"), ["c00_classify"]);
+    assert.deepEqual(labels.filter((label) => label === "c00_classify"), []);
     assert.deepEqual(labels.filter((label) => label === "dialogue"), ["dialogue"]);
     assert.equal(envelope?.decision?.action ?? null, null);
     assert.equal(after.revision, before.revision);
