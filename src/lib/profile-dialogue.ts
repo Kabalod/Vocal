@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ZodError } from "zod";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
-import { PROFILE_DIALOGUE_KIND, PROFILE_DIALOGUE_SYSTEM, parseProfileAiReply, profileV04UserPrompt } from "@/lib/ai/profile";
+import { PROFILE_DIALOGUE_KIND, PROFILE_DIALOGUE_SYSTEM, profileV04UserPrompt } from "@/lib/ai/profile";
 import { aiOperationKey, assertDailyTokenBudget, withAiInflight } from "@/lib/ai/usage-guard";
 import { extractAudio } from "@/lib/ffmpeg";
 import { transcribeAudio } from "@/lib/stt";
@@ -15,17 +15,14 @@ import {
   getProfile,
   persistProfilePayload,
   readStoredProfilePayload,
-  readStoredProfilePayloadTx,
-  serializeStoredPayload,
 } from "@/lib/profile";
-import { buildPortrait, decidePortraitComplete, applyUnchangedFieldsOnly } from "@/lib/profile-portrait";
-import type { ProfileAiReply } from "@/lib/ai/profile";
+import { buildPortrait } from "@/lib/profile-portrait";
 import { portraitProfileId, ownerUserId } from "@/lib/auth/session";
 import { V04ActionError, parseV04ModelReply } from "@/lib/v04-action";
-import { commitV04ProfileTurn, looksLikeV04ModelReply } from "@/lib/v04-commit";
+import { commitV04ProfileTurn } from "@/lib/v04-commit";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
-import type { ProfileFieldValue, ProfileWorkspaceDto } from "@/types/profile";
+import type { ProfileWorkspaceDto } from "@/types/profile";
 
 export const PROFILE_DIALOGUE_PAGE_SIZE = 20;
 
@@ -213,15 +210,6 @@ export async function getProfileWorkspace(input: { cursor?: string | null } = {}
   };
 }
 
-class ProfileApplyConflict extends Error {
-  constructor() {
-    super("PROFILE_APPLY_CONFLICT");
-    this.name = "ProfileApplyConflict";
-  }
-}
-
-const APPLY_RETRIES = 5;
-
 async function recentStoredText(threadId: string, excludeMessageId?: string): Promise<string> {
   const stored = await readStoredProfilePayload();
   const rows = await prisma.dialogueMessage.findMany({
@@ -234,148 +222,6 @@ async function recentStoredText(threadId: string, excludeMessageId?: string): Pr
   });
   const visible = visibleDialogueItems(rows, stored.dialogueSessionStartId).slice(-12);
   return visible.map((row) => `${row.role}: ${row.body}`).join("\n");
-}
-
-async function applyPortraitReply(input: {
-  callId: string;
-  processingId: string;
-  userMessageId: string;
-  parsed: ProfileAiReply;
-  rawText: string;
-  promptTokens: number | null;
-  completionTokens: number | null;
-  snapshotFields: ProfileFieldValue[];
-}): Promise<void> {
-  for (let attempt = 0; attempt < APPLY_RETRIES; attempt++) {
-    try {
-      await prisma.$transaction(async (tx) => {
-        const { stored, revisionId } = await readStoredProfilePayloadTx(tx);
-        const userMessage = await tx.dialogueMessage.findUnique({ where: { id: input.userMessageId } });
-        const userIds = userMessage
-          ? (
-              await tx.dialogueMessage.findMany({
-                where: { threadId: userMessage.threadId, role: "user" },
-                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-                select: { id: true },
-              })
-            ).map((row) => row.id)
-          : [];
-        const userIndex = userMessage ? userIds.indexOf(userMessage.id) : -1;
-        const staleDialogue = userIndex >= 0 && userIndex < userIds.length - 1;
-        const mode = stored.portrait?.completed || stored.supplementing || stored.pending?.mode === "amend" ? "amend" : "intake";
-        const baseFields = mode === "amend" ? (stored.pending?.draftFields ?? stored.fields) : stored.fields;
-        const merged = applyUnchangedFieldsOnly(
-          baseFields,
-          input.snapshotFields,
-          input.parsed.operations,
-          input.parsed.patch,
-        );
-        const hasChange = baseFields.some((before) => {
-          const after = merged.find((field) => field.id === before.id);
-          return before.text !== after?.text || before.usage !== after?.usage;
-        });
-        const completed = staleDialogue
-          ? false
-          : decidePortraitComplete({
-              fields: merged,
-              modelComplete: input.parsed.complete,
-              mode,
-              hasChange,
-              noChange: input.parsed.noChange,
-              kind: input.parsed.kind,
-              openQuestions: input.parsed.openQuestions,
-            });
-        const understood = staleDialogue
-          ? stored.pending?.understood || ""
-          : input.parsed.understood || stored.pending?.understood || "";
-        const openQuestions = staleDialogue ? (stored.pending?.openQuestions ?? []) : input.parsed.openQuestions;
-        let nextStored;
-        if (mode === "amend") {
-          if (completed) {
-            nextStored = {
-              fields: stored.fields,
-              skipped: false,
-              supplementing: true,
-              portrait: stored.portrait?.completed ? buildPortrait(stored.fields, true) : stored.portrait,
-              pending: {
-                mode: "amend" as const,
-                understood,
-                openQuestions,
-                draftFields: merged,
-                readyToConfirm: true,
-              },
-              dialogueSessionStartId: stored.dialogueSessionStartId,
-              v04Slice: stored.v04Slice,
-            };
-          } else {
-            nextStored = {
-              fields: stored.fields,
-              skipped: false,
-              supplementing: true,
-              portrait: stored.portrait?.completed ? buildPortrait(stored.fields, true) : stored.portrait,
-              pending: {
-                mode: "amend" as const,
-                understood,
-                openQuestions,
-                draftFields: merged,
-                readyToConfirm: false,
-              },
-              dialogueSessionStartId: stored.dialogueSessionStartId,
-              v04Slice: stored.v04Slice,
-            };
-          }
-        } else {
-          nextStored = {
-            fields: merged,
-            skipped: false,
-            supplementing: false,
-            portrait: buildPortrait(merged, false),
-            pending: {
-              mode: "intake" as const,
-              understood,
-              openQuestions,
-              draftFields: merged,
-              readyToConfirm: completed,
-            },
-            dialogueSessionStartId: stored.dialogueSessionStartId,
-            v04Slice: stored.v04Slice,
-          };
-        }
-        const revision = await tx.profileRevision.create({
-          data: {
-            profileId: portraitProfileId(),
-            payloadJson: serializeStoredPayload(nextStored),
-          },
-        });
-        const switched = await tx.creatorProfile.updateMany({
-          where: { id: portraitProfileId(), currentRevisionId: revisionId },
-          data: { currentRevisionId: revision.id },
-        });
-        if (switched.count !== 1) throw new ProfileApplyConflict();
-        await tx.aiCall.update({
-          where: { id: input.callId },
-          data: {
-            status: "done",
-            responseText: input.rawText,
-            resultJson: JSON.stringify(input.parsed),
-            promptTokens: input.promptTokens,
-            completionTokens: input.completionTokens,
-          },
-        });
-        await tx.dialogueMessage.update({
-          where: { id: input.processingId },
-          data: staleDialogue
-            ? { kind: "text", body: "Учёл предыдущий ответ без смены текущего вопроса.", status: "done" }
-            : { kind: completed ? "text" : "question", body: input.parsed.reply, status: "done" },
-        });
-      });
-      return;
-    } catch (error) {
-      if (error instanceof ProfileApplyConflict) continue;
-      throw error;
-    }
-  }
-  throw new ProfileDialogueError("Портрет уже обновился. Повторите ответ — предыдущие смыслы не стёрты.", "STALE", 409);
 }
 
 async function startDialogueSession(body: string): Promise<string> {
@@ -562,33 +408,19 @@ export async function sendProfileMessage(
         label: "profile_dialogue",
       });
       const modelJson = parseJsonObject(raw.text);
-      if (looksLikeV04ModelReply(modelJson)) {
-        const action = parseV04ModelReply(modelJson);
-        await commitV04ProfileTurn({
-          prisma,
-          callId: call.id,
-          processingId: processing.id,
-          userMessageId: userMessage.id,
-          profileId: portraitProfileId(),
-          ownerUserId: ownerUserId(),
-          action,
-          rawText: raw.text,
-          promptTokens: raw.usage?.promptTokens ?? null,
-          completionTokens: raw.usage?.completionTokens ?? null,
-        });
-      } else {
-        const parsed = parseProfileAiReply(modelJson, mode);
-        await applyPortraitReply({
-          callId: call.id,
-          processingId: processing.id,
-          userMessageId: userMessage.id,
-          parsed,
-          rawText: raw.text,
-          promptTokens: raw.usage?.promptTokens ?? null,
-          completionTokens: raw.usage?.completionTokens ?? null,
-          snapshotFields: workingFields,
-        });
-      }
+      const action = parseV04ModelReply(modelJson);
+      await commitV04ProfileTurn({
+        prisma,
+        callId: call.id,
+        processingId: processing.id,
+        userMessageId: userMessage.id,
+        profileId: portraitProfileId(),
+        ownerUserId: ownerUserId(),
+        action,
+        rawText: raw.text,
+        promptTokens: raw.usage?.promptTokens ?? null,
+        completionTokens: raw.usage?.completionTokens ?? null,
+      });
     } catch (error) {
       const message = assistantErrorBody(error);
       const technical = error instanceof Error ? error.message.slice(0, 1000) : message;

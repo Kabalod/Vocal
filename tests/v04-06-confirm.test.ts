@@ -27,4 +27,8 @@ test("V04-06 prompt is the union and thought context is the displayed slice", ()
   const ui = readFileSync(path.join(repoRoot, "src/components/ProfileConversation.tsx"), "utf8");
   assert.doesNotMatch(ui, /Подтвердить портрет/);
   assert.doesNotMatch(ui, /action: \"confirm\"/);
+  const sendPath = readFileSync(path.join(repoRoot, "src/lib/profile-dialogue.ts"), "utf8");
+  assert.match(sendPath, /parseV04ModelReply/);
+  assert.doesNotMatch(sendPath, /applyPortraitReply/);
+  assert.doesNotMatch(sendPath, /parseProfileAiReply/);
 });

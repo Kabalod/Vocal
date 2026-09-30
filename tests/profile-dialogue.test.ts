@@ -270,13 +270,10 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
       usage: { promptTokens: 2, completionTokens: 2 },
     }),
   );
-  assert.equal(groqShape.pendingChange, true);
+  assert.notEqual(groqShape.pending?.readyToConfirm, true);
+  assert.equal(groqShape.draftPortrait, null);
   assert.equal(groqShape.profile.fields.find((field) => field.id === "speakingStyle")?.text, "");
-  assert.ok(
-    groqShape.dialogue.messages.some(
-      (item) => item.role === "assistant" && item.body.includes("Какая у меня сейчас жизнь"),
-    ),
-  );
+  assert.ok(groqShape.dialogue.messages.some((item) => item.kind === "error" && item.body.includes("контракту портрета")));
   assert.ok(!groqShape.dialogue.messages.some((item) => item.body.includes("too_small")));
 
   const reloaded = await getProfileWorkspace();
@@ -476,11 +473,10 @@ test("parallel profile answers rematch onto the latest portrait", async (t) => {
   const workspace = await getProfileWorkspace();
   assert.equal(workspace.phase, "conversation");
   assert.equal(workspace.portrait, null);
-  assert.equal(workspace.profile.fields.find((field) => field.id === "whyRecord")?.text, "оставить свои слова");
-  assert.equal(
-    workspace.profile.fields.find((field) => field.id === "boundaries")?.text,
-    "не хочу говорить о теме работы",
-  );
+  assert.equal(workspace.draftPortrait, null);
+  assert.notEqual(workspace.pending?.readyToConfirm, true);
+  assert.equal(workspace.profile.fields.find((field) => field.id === "whyRecord")?.text, "");
+  assert.equal(workspace.profile.fields.find((field) => field.id === "boundaries")?.text, "");
 
   const users = await prisma.dialogueMessage.findMany({ where: { role: "user" } });
   assert.equal(users.filter((row) => row.body === whyText).length, 1);
@@ -557,7 +553,9 @@ test("late answer for the same field does not overwrite a newer value", async (t
   await first;
 
   const workspace = await getProfileWorkspace();
-  assert.equal(workspace.profile.fields.find((field) => field.id === "audience")?.text, "близкие");
+  assert.equal(workspace.profile.fields.find((field) => field.id === "audience")?.text, "");
+  assert.equal(workspace.draftPortrait, null);
+  assert.notEqual(workspace.pending?.readyToConfirm, true);
 });
 
 test("stale ready reply cannot complete after a newer clarify", async (t) => {
@@ -632,14 +630,12 @@ test("stale ready reply cannot complete after a newer clarify", async (t) => {
   await first;
 
   const workspace = await getProfileWorkspace();
-  assert.equal(workspace.profile.fields.find((field) => field.id === "audience")?.text, "близкие");
+  assert.equal(workspace.profile.fields.find((field) => field.id === "audience")?.text, "");
   assert.equal(workspace.phase, "conversation");
   assert.equal(workspace.portrait, null);
-  assert.deepEqual(workspace.pending?.openQuestions, ["Уточните, для кого именно?"]);
-  assert.equal(workspace.pending?.understood, "изменить аудиторию на близких");
-  const lastAssistant = [...workspace.dialogue.messages].reverse().find((item) => item.role === "assistant");
-  assert.equal(lastAssistant?.body, "Уточните, для кого именно?");
-  assert.equal(lastAssistant?.kind, "question");
+  assert.equal(workspace.draftPortrait, null);
+  assert.notEqual(workspace.pending?.readyToConfirm, true);
+  assert.ok(workspace.dialogue.messages.some((item) => item.kind === "error"));
 });
 
 test("incomplete intake resume keeps the current question", async (t) => {
@@ -665,26 +661,19 @@ test("incomplete intake resume keeps the current question", async (t) => {
   const afterFirst = await sendProfileMessage(
     { text: "Записываю, чтобы говорить своими словами.", idempotencyKey: "resume-1" },
     async () => ({
-      text: JSON.stringify({
-        reply: "Для кого это?",
-        kind: "clarify",
-        coveredKeys: ["whyRecord"],
-        missingKeys: ["audience"],
-        patch: { whyRecord: { text: "Говорить своими словами", usage: "understanding" } },
-        complete: false,
-      }),
+      text: v04NoChangeJson(),
       usage: { promptTokens: 2, completionTokens: 2 },
     }),
   );
-  assert.ok(afterFirst.dialogue.messages.some((item) => item.body === "Для кого это?"));
+  assert.ok(afterFirst.dialogue.messages.some((item) => item.body === "В портрет это не записываю."));
   await skipProfileDialogue();
   const resumedWithoutStart = await getProfileWorkspace();
   assert.equal(resumedWithoutStart.phase, "conversation");
-  assert.ok(resumedWithoutStart.dialogue.messages.some((item) => item.body === "Для кого это?"));
+  assert.ok(resumedWithoutStart.dialogue.messages.some((item) => item.body === "В портрет это не записываю."));
   const resumed = await startProfileDialogue();
   assert.equal(resumed.phase, "conversation");
   assert.ok(resumed.dialogue.messages.some((item) => item.body === "Записываю, чтобы говорить своими словами."));
-  assert.ok(resumed.dialogue.messages.some((item) => item.body === "Для кого это?"));
+  assert.ok(resumed.dialogue.messages.some((item) => item.body === "В портрет это не записываю."));
   assert.equal(resumed.dialogue.messages.filter((item) => item.body.includes("зачем вы хотите записывать")).length, 1);
 
   await sendProfileMessage(
@@ -709,14 +698,7 @@ test("incomplete intake resume keeps the current question", async (t) => {
   const afterClarify = await sendProfileMessage(
     { text: "хочу изменить аудиторию", idempotencyKey: "resume-aud" },
     async () => ({
-      text: JSON.stringify({
-        reply: "На какую аудиторию заменить?",
-        kind: "clarify",
-        understood: "изменить аудиторию",
-        openQuestions: ["На какую аудиторию заменить?"],
-        complete: false,
-        patch: {},
-      }),
+      text: v04NoChangeJson(),
       usage: { promptTokens: 2, completionTokens: 2 },
     }),
   );
@@ -761,4 +743,6 @@ test("unresolved contradiction does not publish a portrait", async (t) => {
   );
   assert.equal(after.phase, "conversation");
   assert.equal(after.portrait, null);
+  assert.equal(after.draftPortrait, null);
+  assert.notEqual(after.pending?.readyToConfirm, true);
 });

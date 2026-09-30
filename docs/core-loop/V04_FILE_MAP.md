@@ -12,7 +12,7 @@ V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
 | Commit | `src/lib/v04-commit.ts`, `src/lib/v04-slice.ts` | V04-03 веса; V04-05: FOR UPDATE профиля, журнал после lock, повтор done AiCall без второго event |
 | Ревизии | `src/lib/profile.ts` | пишет ревизию на persist / legacy apply; цель — create только при смене среза |
 | Сборка | `src/lib/profile-portrait.ts` | плоский patch; цель — вес из events, пороги 3/1 |
-| Диалог | `src/lib/profile-dialogue.ts` | V04 JSON → `commitV04ProfileTurn`; confirm снят (`CONFIRM_REMOVED`); GET не replay и не публикует pending |
+| Диалог | `src/lib/profile-dialogue.ts` | новые ходы — только strict V04 union; иначе ошибка хода без смены портрета; confirm снят; GET не replay и не публикует pending |
 | Промпт | `src/lib/ai/profile.ts` | discriminated union V04; без confirm/ready |
 | Runtime | `src/lib/ai-runtime-context.ts` | пусто без `completed` |
 | Контекст ролика | `src/lib/reel-context.ts`, `src/lib/dialogue.ts` | отображаемый срез, не confirm |
@@ -35,7 +35,7 @@ V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
 
 ## Тесты V04 и диалога профиля
 
-`tests/v04-02-commit.test.ts`, `tests/v04-02-envelope.test.ts`, `tests/v04-03-slice.test.ts`, `tests/v04-03-commit.test.ts`, `tests/v04-04-heal.test.ts`, `tests/v04-05-concurrency.test.ts`, `tests/v04-06-confirm.test.ts`. Confirm снят: `tests/profile-dialogue.test.ts`, `tests/p10-p12-profile.test.ts`, `tests/r2-idempotency.test.ts`, `tests/mvp-release.test.ts`, `tests/p17-e2e-matrix.test.ts`.
+`tests/v04-02-commit.test.ts`, `tests/v04-02-envelope.test.ts`, `tests/v04-03-slice.test.ts`, `tests/v04-03-commit.test.ts`, `tests/v04-04-heal.test.ts`, `tests/v04-05-concurrency.test.ts`, `tests/v04-06-confirm.test.ts`, `tests/v04-06-legacy-reject.test.ts`. Confirm снят: `tests/profile-dialogue.test.ts`, `tests/p10-p12-profile.test.ts`, `tests/r2-idempotency.test.ts`, `tests/mvp-release.test.ts`, `tests/p17-e2e-matrix.test.ts`.
 
 Сценарии: [`V04_SCENARIOS.md`](./V04_SCENARIOS.md).
 
