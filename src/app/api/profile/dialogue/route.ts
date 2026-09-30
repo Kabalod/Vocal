@@ -11,7 +11,6 @@ import {
   skipProfileDialogue,
   startProfileDialogue,
   supplementProfileDialogue,
-  confirmProfilePortrait,
 } from "@/lib/profile-dialogue";
 
 export const dynamic = "force-dynamic";
@@ -67,7 +66,7 @@ export const POST = withApiUser(async function POST(request: Request) {
       return NextResponse.json(await supplementProfileDialogue());
     }
     if (body.action === "confirm") {
-      return NextResponse.json(await confirmProfilePortrait());
+      throw new ProfileDialogueError("Подтверждение портрета больше не используется.", "CONFIRM_REMOVED", 410);
     }
     const workspace = await sendProfileMessage({
       text: body.text ?? "",

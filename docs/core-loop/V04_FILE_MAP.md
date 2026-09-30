@@ -2,7 +2,7 @@
 
 V04_BASE_SHA: `564c9cf8534392501e125dda7ecc747c235a5c0d`.
 V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
-Продукт V04: **V04-01–V04-04 приняты**. **V04-05 начат**. Документы V04-00: этот набор. Confirm ещё на BASE.
+Продукт V04: **V04-01–V04-04 приняты**. **V04-05 и V04-06 начаты**. Документы V04-00: этот набор. Confirm снимается в V04-06.
 
 ## Ядро портрета (менять в продукте V04)
 
@@ -12,11 +12,11 @@ V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
 | Commit | `src/lib/v04-commit.ts`, `src/lib/v04-slice.ts` | V04-03 веса; V04-05: FOR UPDATE профиля, журнал после lock, повтор done AiCall без второго event |
 | Ревизии | `src/lib/profile.ts` | пишет ревизию на persist / legacy apply; цель — create только при смене среза |
 | Сборка | `src/lib/profile-portrait.ts` | плоский patch; цель — вес из events, пороги 3/1 |
-| Диалог | `src/lib/profile-dialogue.ts` | V04 JSON → `commitV04ProfileTurn`; legacy JSON → confirm-путь BASE; GET не replay старых AiCall и не публикует pending |
-| Промпт | `src/lib/ai/profile.ts` | `complete` = черновик; цель — discriminated union |
+| Диалог | `src/lib/profile-dialogue.ts` | V04 JSON → `commitV04ProfileTurn`; confirm снят (`CONFIRM_REMOVED`); GET не replay и не публикует pending |
+| Промпт | `src/lib/ai/profile.ts` | discriminated union V04; без confirm/ready |
 | Runtime | `src/lib/ai-runtime-context.ts` | пусто без `completed` |
-| Контекст ролика | `src/lib/reel-context.ts` | `publicForScript` |
-| API / UI | `app/api/profile/**`, `ProfileConversation.tsx` | `action=confirm` |
+| Контекст ролика | `src/lib/reel-context.ts`, `src/lib/dialogue.ts` | отображаемый срез, не confirm |
+| API / UI | `app/api/profile/**`, `ProfileConversation.tsx` | нет `action=confirm` |
 
 ## Данные (без новых таблиц, без live migrate)
 
@@ -33,9 +33,9 @@ V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
 
 `dialogue.ts` — портрет как предположение. `thought-state.ts` / `agent-action.ts` — не менять контракт. `ai/script.ts` — не источник событий; V05 не начинать.
 
-## Тесты, которые ждут confirm
+## Тесты V04 и диалога профиля
 
-`tests/v04-02-commit.test.ts`, `tests/v04-02-envelope.test.ts`, `tests/v04-03-slice.test.ts`, `tests/v04-03-commit.test.ts`, `tests/v04-04-heal.test.ts`, `tests/v04-05-concurrency.test.ts`. Confirm-тесты: `tests/profile-dialogue.test.ts`, `tests/p10-p12-profile.test.ts`, `tests/r2-idempotency.test.ts`, `tests/mvp-release.test.ts`, `tests/p17-e2e-matrix.test.ts`.
+`tests/v04-02-commit.test.ts`, `tests/v04-02-envelope.test.ts`, `tests/v04-03-slice.test.ts`, `tests/v04-03-commit.test.ts`, `tests/v04-04-heal.test.ts`, `tests/v04-05-concurrency.test.ts`, `tests/v04-06-confirm.test.ts`. Confirm снят: `tests/profile-dialogue.test.ts`, `tests/p10-p12-profile.test.ts`, `tests/r2-idempotency.test.ts`, `tests/mvp-release.test.ts`, `tests/p17-e2e-matrix.test.ts`.
 
 Сценарии: [`V04_SCENARIOS.md`](./V04_SCENARIOS.md).
 

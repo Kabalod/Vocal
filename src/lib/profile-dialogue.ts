@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ZodError } from "zod";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
-import { PROFILE_DIALOGUE_KIND, PROFILE_DIALOGUE_SYSTEM, parseProfileAiReply, profileChecklistPrompt } from "@/lib/ai/profile";
+import { PROFILE_DIALOGUE_KIND, PROFILE_DIALOGUE_SYSTEM, parseProfileAiReply, profileV04UserPrompt } from "@/lib/ai/profile";
 import { aiOperationKey, assertDailyTokenBudget, withAiInflight } from "@/lib/ai/usage-guard";
 import { extractAudio } from "@/lib/ffmpeg";
 import { transcribeAudio } from "@/lib/stt";
@@ -187,7 +187,7 @@ export async function getProfileWorkspace(input: { cursor?: string | null } = {}
   } else if (stored.dialogueSessionStartId) {
     phase = "conversation";
   }
-  const awaitingConfirm = Boolean(stored.pending?.readyToConfirm);
+  const awaitingConfirm = false;
   const mode: ProfileWorkspaceDto["mode"] =
     stored.supplementing || stored.pending?.mode === "amend"
       ? "amend"
@@ -205,9 +205,7 @@ export async function getProfileWorkspace(input: { cursor?: string | null } = {}
     pending: stored.pending,
     mode,
     portrait: published,
-    draftPortrait: stored.pending?.draftFields
-      ? buildPortrait(stored.pending.draftFields, awaitingConfirm)
-      : null,
+    draftPortrait: null,
     currentQuestion: lastQuestion?.body ?? null,
     applyError,
     profile: await getProfile(),
@@ -424,6 +422,7 @@ export async function skipProfileDialogue(): Promise<ProfileWorkspaceDto & { dia
       ...stored,
       skipped: false,
       supplementing: false,
+      pending: null,
     });
     return getProfileWorkspace();
   }
@@ -436,43 +435,7 @@ export async function skipProfileDialogue(): Promise<ProfileWorkspaceDto & { dia
 }
 
 export async function confirmProfilePortrait(): Promise<ProfileWorkspaceDto & { dialogue: DialoguePageDto }> {
-  for (let attempt = 0; attempt < APPLY_RETRIES; attempt++) {
-    try {
-      await prisma.$transaction(async (tx) => {
-        const { stored, revisionId } = await readStoredProfilePayloadTx(tx);
-        if (!stored.pending?.readyToConfirm) {
-          if (stored.portrait?.completed) return;
-          throw new ProfileDialogueError("Пока нечего подтверждать. Продолжите разговор.", "CONFIRM_NOT_READY");
-        }
-        const fields = stored.pending.draftFields;
-        const nextStored = {
-          fields,
-          skipped: false,
-          supplementing: false,
-          portrait: buildPortrait(fields, true),
-          pending: null,
-          dialogueSessionStartId: stored.dialogueSessionStartId,
-          v04Slice: stored.v04Slice,
-        };
-        const revision = await tx.profileRevision.create({
-          data: {
-            profileId: portraitProfileId(),
-            payloadJson: serializeStoredPayload(nextStored),
-          },
-        });
-        const switched = await tx.creatorProfile.updateMany({
-          where: { id: portraitProfileId(), currentRevisionId: revisionId },
-          data: { currentRevisionId: revision.id },
-        });
-        if (switched.count !== 1) throw new ProfileApplyConflict();
-      });
-      return getProfileWorkspace();
-    } catch (error) {
-      if (error instanceof ProfileApplyConflict) continue;
-      throw error;
-    }
-  }
-  throw new ProfileDialogueError("Портрет уже обновился. Повторите подтверждение.", "STALE", 409);
+  throw new ProfileDialogueError("Подтверждение портрета больше не используется.", "CONFIRM_REMOVED", 410);
 }
 
 export async function supplementProfileDialogue(): Promise<ProfileWorkspaceDto & { dialogue: DialoguePageDto }> {
@@ -562,18 +525,15 @@ export async function sendProfileMessage(
     });
 
     const stored = await readStoredProfilePayload();
+    const userPrompt = profileV04UserPrompt({
+      slice: stored.v04Slice,
+      published: stored.portrait?.completed === true,
+      recentText: await recentStoredText(thread.id, userMessage.id),
+      authorText: text,
+      userMessageId: userMessage.id,
+    });
     const mode = stored.portrait?.completed || stored.supplementing || stored.pending?.mode === "amend" ? "amend" : "intake";
     const workingFields = mode === "amend" ? (stored.pending?.draftFields ?? stored.fields) : stored.fields;
-    const userPrompt = `${profileChecklistPrompt(workingFields, {
-      mode,
-      understood: stored.pending?.understood,
-      openQuestions: stored.pending?.openQuestions,
-    })}
-
-Недавняя переписка:
-${await recentStoredText(thread.id, userMessage.id)}
-
-Ответ автора: ${text}`;
 
     const call = await prisma.aiCall.create({
       data: {

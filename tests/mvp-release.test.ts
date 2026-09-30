@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
+import { v04ReplaceExplicitJson } from "./helpers/v04-profile-reply";
 import { SHELL_NAV } from "../src/components/shell-nav";
 import { VOCAL_USER_STATUSES } from "../src/components/vocal-ui/kit";
 import { createAppBackup, restoreAppBackup, sha256File } from "../src/lib/backup";
@@ -54,7 +55,7 @@ test("release routes: thought, dialogue, draft, finals, profile context, usage, 
   const { askQuestionJson, insertTestScriptProposal } = await import("./helpers/agent-action-json");
   const { patchScriptDraft, finalizeScriptDraft, setFinalScript, listScriptWorkspace } =
     await import("../src/lib/scripts");
-  const { skipProfileDialogue, startProfileDialogue, sendProfileMessage, confirmProfilePortrait } =
+  const { skipProfileDialogue, startProfileDialogue, sendProfileMessage, getProfileWorkspace } =
     await import("../src/lib/profile-dialogue");
   const { saveReelContext, getReelContext } = await import("../src/lib/reel-context");
   const { buildAiUsageReport } = await import("../src/lib/ai/usage-report");
@@ -137,22 +138,19 @@ test("release routes: thought, dialogue, draft, finals, profile context, usage, 
   await startProfileDialogue();
   await sendProfileMessage(
     { text: "Записываю, чтобы говорить своими словами.", idempotencyKey: "rel-prof-1" },
-    async () => ({
-      text: JSON.stringify({
-        reply: "Портрета достаточно.",
-        coveredKeys: ["whyRecord", "experience"],
-        missingKeys: [],
-        patch: {
-          whyRecord: { text: "говорить своими словами", usage: "in_text" },
-          audience: { text: "свои", usage: "understanding" },
-          experience: { text: "веду заметки", usage: "understanding" },
-        },
-        complete: true,
-      }),
-      usage: { promptTokens: 3, completionTokens: 2 },
-    }),
+    async () => {
+      const user = await prisma.dialogueMessage.findFirst({
+        where: { role: "user" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(user);
+      return {
+        text: v04ReplaceExplicitJson([user.id], "blog_goal", "говорить своими словами"),
+        usage: { promptTokens: 3, completionTokens: 2 },
+      };
+    },
   );
-  const portrait = await confirmProfilePortrait();
+  const portrait = await getProfileWorkspace();
   assert.equal(portrait.phase, "portrait");
 
   const { reel: second } = await createThoughtFromText({
@@ -164,7 +162,7 @@ test("release routes: thought, dialogue, draft, finals, profile context, usage, 
     reelGoal: "ролик",
     selectedKeys: ["whyRecord"],
   });
-  assert.ok(frozen.live.publicForScript.some((item) => item.text.includes("своими словами")));
+  assert.ok(frozen.live.understandingOnly.some((item) => item.text.includes("своими словами")));
 
   process.env.VOCAL_DAILY_TOKEN_LIMIT = "5";
   const kept = "этот текст нельзя потерять";

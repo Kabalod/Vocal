@@ -8,6 +8,7 @@ import { runtimePortraitFields } from "../src/lib/ai-runtime-context";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { readStoredProfilePayload } from "../src/lib/profile";
+import { v04NoChangeJson, v04ReplaceExplicitJson } from "./helpers/v04-profile-reply";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -23,14 +24,14 @@ test("P10–P12 UI keeps labels, 44px targets, and no profile guard on thoughts"
   assert.match(ui, /Начать/);
   assert.match(ui, /Позже/);
   assert.match(ui, /Дополнить о себе/);
-  assert.match(ui, /Подтвердить портрет/);
+  assert.doesNotMatch(ui, /Подтвердить портрет/);
   assert.match(ui, /К текущему портрету/);
   assert.match(ui, /aria-label="Диалог анкеты"/);
   assert.match(ui, /min-h-11/);
   assert.match(ui, /Composer/);
   assert.match(ui, /\/api\/profile\/dialogue/);
   assert.equal(thought.includes("profile"), false);
-  assert.match(src("src/lib/ai/profile.ts"), /один смысловой вопрос/);
+  assert.match(src("src/lib/ai/profile.ts"), /apply_update/);
 });
 
 test("P11 resume, explicit confirm, voice≠take, unfinished amend stays off AI", async (t) => {
@@ -50,7 +51,6 @@ test("P11 resume, explicit confirm, voice≠take, unfinished amend stays off AI"
     sendProfileMessage,
     sendProfileVoice,
     getProfileWorkspace,
-    confirmProfilePortrait,
     supplementProfileDialogue,
   } = await import("../src/lib/profile-dialogue");
   const { createThoughtFromText } = await import("../src/lib/thought-create");
@@ -69,67 +69,63 @@ test("P11 resume, explicit confirm, voice≠take, unfinished amend stays off AI"
   await sendProfileMessage(
     { text: "Говорю своими словами.", idempotencyKey: "p11-1" },
     async () => ({
-      text: JSON.stringify({
-        reply: "Для кого вы хотите записывать ролики в первую очередь?",
-        kind: "clarify",
-        complete: false,
-        patch: { whyRecord: { text: "своими словами", usage: "understanding" } },
-      }),
+      text: v04NoChangeJson(),
       usage: { promptTokens: 1, completionTokens: 1 },
     }),
   );
   await skipProfileDialogue();
   const resumed = await getProfileWorkspace();
   assert.equal(resumed.phase, "conversation");
-  assert.match(resumed.currentQuestion ?? "", /Для кого/);
+  assert.match(resumed.currentQuestion ?? "", /не записываю|зачем/);
 
   await sendProfileMessage(
     { text: "Для близких.", idempotencyKey: "p11-2" },
-    async () => ({
-      text: JSON.stringify({
-        reply: "Черновик готов. Подтвердите портрет.",
-        kind: "ready",
-        complete: true,
-        patch: { audience: { text: "близкие", usage: "understanding" } },
-      }),
-      usage: { promptTokens: 1, completionTokens: 1 },
-    }),
+    async () => {
+      const user = await prisma.dialogueMessage.findFirst({
+        where: { role: "user" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(user);
+      return {
+        text: v04ReplaceExplicitJson([user.id], "general_audience", "близкие"),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+    },
   );
-  const waiting = await getProfileWorkspace();
-  assert.equal(waiting.awaitingConfirm, true);
-  assert.equal(waiting.portrait, null);
-  const storedWaiting = await readStoredProfilePayload();
-  assert.equal(runtimePortraitFields(storedWaiting).every((field) => !field.text), true);
-
-  const confirmed = await confirmProfilePortrait();
-  assert.equal(confirmed.phase, "portrait");
-  assert.equal(confirmed.portrait?.completed, true);
-  const dup = await confirmProfilePortrait();
-  assert.equal(dup.profile.currentRevisionId, confirmed.profile.currentRevisionId);
+  const published = await getProfileWorkspace();
+  assert.equal(published.awaitingConfirm, false);
+  assert.equal(published.phase, "portrait");
+  assert.equal(published.portrait?.completed, true);
+  const storedPublished = await readStoredProfilePayload();
+  assert.equal(runtimePortraitFields(storedPublished).find((field) => field.id === "audience")?.text, "близкие");
+  const again = await getProfileWorkspace();
+  assert.equal(again.profile.currentRevisionId, published.profile.currentRevisionId);
 
   await supplementProfileDialogue();
   const voice = await sendProfileVoice(
     { file: new File(["x"], "reply.webm", { type: "audio/webm" }), idempotencyKey: "p11-voice", voiceDurationLabel: "0:02" },
-    async () => ({
-      text: JSON.stringify({
-        reply: "Запишу аудиторию как коллег. Подтвердить?",
-        kind: "ready",
-        complete: true,
-        patch: { audience: { text: "коллеги", usage: "understanding" } },
-      }),
-      usage: { promptTokens: 1, completionTokens: 1 },
-    }),
+    async () => {
+      const user = await prisma.dialogueMessage.findFirst({
+        where: { role: "user" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(user);
+      return {
+        text: v04ReplaceExplicitJson([user.id], "general_audience", "коллеги"),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+    },
     async () => ({ text: "для коллег", segments: [], model: "mock" }),
     async () => undefined,
   );
-  assert.equal(voice.awaitingConfirm, true);
-  assert.equal(voice.portrait?.sections.some((section) => section.text.includes("близкие")), true);
+  assert.equal(voice.awaitingConfirm, false);
+  assert.equal(voice.portrait?.sections.some((section) => section.text.includes("коллеги")), true);
   assert.equal(await prisma.take.count({ where: { inputType: { not: "text" } } }), 0);
   assert.ok(voice.dialogue.messages.some((item) => item.voice?.durationLabel === "0:02"));
   const storedAmend = await readStoredProfilePayload();
-  assert.equal(runtimePortraitFields(storedAmend).find((field) => field.id === "audience")?.text, "близкие");
+  assert.equal(runtimePortraitFields(storedAmend).find((field) => field.id === "audience")?.text, "коллеги");
   await skipProfileDialogue();
   const cancelled = await getProfileWorkspace();
   assert.equal(cancelled.phase, "portrait");
-  assert.equal(cancelled.profile.fields.find((field) => field.id === "audience")?.text, "близкие");
+  assert.equal(cancelled.profile.fields.find((field) => field.id === "audience")?.text, "коллеги");
 });

@@ -11,6 +11,7 @@ import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { jobDeepLinkHref, legacyHistoryHref, legacyUserRedirect } from "../src/lib/legacy-routes";
 import { markJobFailed } from "../src/lib/jobs";
 import { readStoredProfilePayload } from "../src/lib/profile";
+import { v04ReplaceExplicitJson } from "./helpers/v04-profile-reply";
 import {
   finalsStayIndependent,
   scriptlessRecordingAllowed,
@@ -77,7 +78,6 @@ test("P17 matrix: thought without profile through finals, upload, compare, expor
   const {
     startProfileDialogue,
     sendProfileMessage,
-    confirmProfilePortrait,
     supplementProfileDialogue,
     skipProfileDialogue,
   } = await import("../src/lib/profile-dialogue");
@@ -224,44 +224,45 @@ test("P17 matrix: thought without profile through finals, upload, compare, expor
   await startProfileDialogue();
   await sendProfileMessage(
     { text: "Говорю своими словами.", idempotencyKey: "p17-prof-1" },
-    async () => ({
-      text: JSON.stringify({
-        reply: "Черновик готов. Подтвердите портрет.",
-        kind: "ready",
-        complete: true,
-        patch: {
-          whyRecord: { text: "своими словами", usage: "in_text" },
-          audience: { text: "свои", usage: "understanding" },
-        },
-      }),
-      usage: { promptTokens: 2, completionTokens: 2 },
-    }),
+    async () => {
+      const user = await prisma.dialogueMessage.findFirst({
+        where: { role: "user" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(user);
+      return {
+        text: v04ReplaceExplicitJson([user.id], "blog_goal", "своими словами"),
+        usage: { promptTokens: 2, completionTokens: 2 },
+      };
+    },
   );
   const waiting = await getProfileWorkspace();
-  assert.equal(waiting.awaitingConfirm, true);
-  assert.equal(waiting.portrait, null);
-  const confirmed = await confirmProfilePortrait();
+  assert.equal(waiting.awaitingConfirm, false);
+  assert.equal(waiting.portrait?.completed, true);
+  const confirmed = waiting;
   assert.equal(confirmed.portrait?.completed, true);
   await supplementProfileDialogue();
   await sendProfileMessage(
     { text: "Для коллег.", idempotencyKey: "p17-prof-2" },
-    async () => ({
-      text: JSON.stringify({
-        reply: "Обновить аудиторию?",
-        kind: "ready",
-        complete: true,
-        patch: { audience: { text: "коллеги", usage: "understanding" } },
-      }),
-      usage: { promptTokens: 1, completionTokens: 1 },
-    }),
+    async () => {
+      const user = await prisma.dialogueMessage.findFirst({
+        where: { role: "user" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(user);
+      return {
+        text: v04ReplaceExplicitJson([user.id], "general_audience", "коллеги"),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+    },
   );
   const amending = await getProfileWorkspace();
-  assert.equal(amending.awaitingConfirm, true);
-  assert.ok(amending.portrait?.sections.some((section) => /свои/.test(section.text)));
+  assert.equal(amending.awaitingConfirm, false);
+  assert.ok(amending.portrait?.sections.some((section) => /коллеги/.test(section.text)));
   const storedAmend = await readStoredProfilePayload();
-  assert.equal(runtimePortraitFields(storedAmend).find((field) => field.id === "audience")?.text, "свои");
+  assert.equal(runtimePortraitFields(storedAmend).find((field) => field.id === "audience")?.text, "коллеги");
   await skipProfileDialogue();
   const cancelled = await getProfileWorkspace();
   assert.equal(cancelled.phase, "portrait");
-  assert.equal(cancelled.profile.fields.find((field) => field.id === "audience")?.text, "свои");
+  assert.equal(cancelled.profile.fields.find((field) => field.id === "audience")?.text, "коллеги");
 });

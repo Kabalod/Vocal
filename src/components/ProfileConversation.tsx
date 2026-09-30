@@ -57,7 +57,6 @@ export function ProfileConversation() {
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [stuck, setStuck] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -292,9 +291,7 @@ export function ProfileConversation() {
     }
   }
 
-  async function runAction(action: "start" | "skip" | "supplement" | "confirm") {
-    if (action === "confirm" && confirming) return;
-    if (action === "confirm") setConfirming(true);
+  async function runAction(action: "start" | "skip" | "supplement") {
     setError(null);
     setErrorCode(null);
     try {
@@ -303,8 +300,6 @@ export function ProfileConversation() {
       if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Ошибка.");
       setErrorCode(err && typeof err === "object" && "code" in err && typeof err.code === "string" ? err.code : "SAVE");
-    } finally {
-      if (action === "confirm") setConfirming(false);
     }
   }
 
@@ -314,10 +309,8 @@ export function ProfileConversation() {
 
   const phase: ProfilePhase = workspace?.phase ?? "idle";
   const portrait: PortraitDto | null = workspace?.portrait ?? null;
-  const draftPortrait = workspace?.draftPortrait ?? null;
   const messages = workspace?.dialogue.messages ?? [];
   const amending = workspace?.mode === "amend" && phase === "conversation";
-  const awaitingConfirm = Boolean(workspace?.awaitingConfirm);
   const showChat = phase === "conversation";
 
   return (
@@ -352,21 +345,8 @@ export function ProfileConversation() {
               badge={workspace?.pendingChange ? "Уточняем · портрет пока прежний" : undefined}
             />
           ) : (
-            <EmptyState title="Портрет ещё не подтверждён" description="Действующего портрета нет." />
+            <EmptyState title="Портрет ещё не собран" description="Действующего портрета нет." />
           )}
-          {awaitingConfirm && draftPortrait ? (
-            <div className="space-y-3">
-              <Portrait portrait={draftPortrait} heading="Черновик" badge="Не действует, пока не подтвердите." />
-              <ActionButton
-                variant="primary"
-                loading={confirming}
-                loadingLabel="Подтверждаем…"
-                onClick={() => void runAction("confirm")}
-              >
-                Подтвердить портрет
-              </ActionButton>
-            </div>
-          ) : null}
           <ActionButton variant="primary" onClick={() => void runAction("supplement")}>
             {workspace?.pendingChange ? "Продолжить изменения" : "Дополнить о себе"}
           </ActionButton>
@@ -400,19 +380,6 @@ export function ProfileConversation() {
               </Link>
             )}
           </div>
-          {awaitingConfirm && draftPortrait ? (
-            <div className="mb-4 space-y-3">
-              <Portrait portrait={draftPortrait} heading="Черновик нового портрета" badge="Не действует, пока не подтвердите." />
-              <ActionButton
-                variant="primary"
-                loading={confirming}
-                loadingLabel="Подтверждаем…"
-                onClick={() => void runAction("confirm")}
-              >
-                Подтвердить портрет
-              </ActionButton>
-            </div>
-          ) : null}
           <div ref={scrollerRef} onScroll={onScroll} className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
             {workspace?.dialogue.nextCursor ? (
               <div className="text-center">
@@ -457,9 +424,7 @@ export function ProfileConversation() {
             </div>
           ) : null}
           <div className="mt-3 space-y-2 border-t border-line pt-3">
-            {awaitingConfirm ? (
-              <p className="text-sm text-muted">Чтобы сделать черновик действующим, подтвердите портрет.</p>
-            ) : recording || finalizing ? (
+            {recording || finalizing ? (
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <p className="mr-auto text-sm text-muted">
                   {finalizing ? "Собираем запись…" : `Запись · ${formatRecordingDuration(seconds)}`}

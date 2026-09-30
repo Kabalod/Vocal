@@ -12,6 +12,7 @@ import {
 } from "../src/lib/product-contracts";
 import { emptyProfileFields } from "../src/types/profile";
 import { askQuestionJson } from "./helpers/agent-action-json";
+import { v04NoChangeJson, v04ReplaceExplicitJson } from "./helpers/v04-profile-reply";
 
 test("R2 keeps R1 mapping and product invariants", () => {
   assert.deepEqual(P13_P16_TO_R_PHASE, {
@@ -198,7 +199,7 @@ test("R2 profile amend retry with the same key does not publish twice", async (t
     resetAiInflightForTests();
   });
 
-  const { startProfileDialogue, sendProfileMessage, supplementProfileDialogue, getProfileWorkspace, confirmProfilePortrait } = await import(
+  const { startProfileDialogue, sendProfileMessage, supplementProfileDialogue, getProfileWorkspace } = await import(
     "../src/lib/profile-dialogue"
   );
   await startProfileDialogue();
@@ -206,21 +207,13 @@ test("R2 profile amend retry with the same key does not publish twice", async (t
   let completeCalls = 0;
   const complete = async () => {
     completeCalls += 1;
+    const user = await prisma.dialogueMessage.findFirst({
+      where: { role: "user" },
+      orderBy: { createdAt: "desc" },
+    });
+    assert.ok(user);
     return {
-      text: JSON.stringify({
-        reply: "Портрета достаточно.",
-        kind: "ready",
-        complete: true,
-        understood: "говорить своими словами",
-        openQuestions: [],
-        coveredKeys: ["whyRecord", "audience", "experience"],
-        missingKeys: [],
-        patch: {
-          whyRecord: { text: "говорить своими словами", usage: "understanding" },
-          audience: { text: "близкие", usage: "understanding" },
-          experience: { text: "запись коротких мыслей", usage: "understanding" },
-        },
-      }),
+      text: v04ReplaceExplicitJson([user.id], "blog_goal", "говорить своими словами"),
       usage: { promptTokens: 2, completionTokens: 2 },
     };
   };
@@ -233,10 +226,10 @@ test("R2 profile amend retry with the same key does not publish twice", async (t
   assert.equal(first.dialogue.messages.filter((item) => item.role === "user").length, 1);
   assert.equal(parallel.dialogue.messages.filter((item) => item.role === "user").length, 1);
   assert.equal(await prisma.dialogueMessage.count({ where: { idempotencyKey: "prof-r2" } }), 1);
-  assert.equal((await getProfileWorkspace()).awaitingConfirm, true);
-  const published = await confirmProfilePortrait();
+  assert.equal((await getProfileWorkspace()).awaitingConfirm, false);
+  const published = await getProfileWorkspace();
   assert.equal(published.portrait?.completed, true);
-  const againConfirm = await confirmProfilePortrait();
+  const againConfirm = await getProfileWorkspace();
   assert.equal(againConfirm.portrait?.completed, true);
   assert.equal(againConfirm.profile.currentRevisionId, published.profile.currentRevisionId);
 
@@ -244,17 +237,7 @@ test("R2 profile amend retry with the same key does not publish twice", async (t
   const amend = await sendProfileMessage(
     { text: "без изменений", idempotencyKey: "amend-r2" },
     async () => ({
-      text: JSON.stringify({
-        reply: "Ничего не меняю.",
-        kind: "ready",
-        complete: true,
-        noChange: true,
-        understood: "без изменений",
-        openQuestions: [],
-        coveredKeys: ["whyRecord", "audience", "experience"],
-        missingKeys: [],
-        patch: {},
-      }),
+      text: v04NoChangeJson("already_known"),
       usage: { promptTokens: 2, completionTokens: 2 },
     }),
   );

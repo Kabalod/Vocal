@@ -5,6 +5,7 @@ import { resetPrismaClient } from "../src/lib/db";
 import { PROFILE_DIALOGUE_KIND } from "../src/lib/ai/profile";
 import { portraitProfileId, ownerUserId } from "../src/lib/auth/session";
 import { persistProfilePayload } from "../src/lib/profile";
+import { ProfileDialogueError } from "../src/lib/profile-dialogue";
 import { emptyStoredPayload } from "../src/lib/profile-portrait";
 import { emptyProfileFields } from "../src/types/profile";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
@@ -81,7 +82,7 @@ test("V04-04 does not publish a readyToConfirm pending without confirm", async (
   const { getProfileWorkspace, confirmProfilePortrait } = await import("../src/lib/profile-dialogue");
   const before = await getProfileWorkspace();
   assert.equal(before.portrait, null);
-  assert.equal(before.awaitingConfirm, true);
+  assert.equal(before.awaitingConfirm, false);
   assert.equal(before.phase, "idle");
   assert.equal(before.profile.fields.find((field) => field.id === "whyRecord")?.text, "");
   assert.equal(
@@ -89,8 +90,11 @@ test("V04-04 does not publish a readyToConfirm pending without confirm", async (
     startRevisions,
   );
 
-  const after = await confirmProfilePortrait();
-  assert.equal(after.portrait?.completed, true);
-  assert.ok(after.portrait?.coveredKeys.includes("whyRecord"));
-  assert.equal(after.profile.fields.find((field) => field.id === "whyRecord")?.text, "Говорить своими словами");
+  await assert.rejects(
+    () => confirmProfilePortrait(),
+    (err: unknown) => err instanceof ProfileDialogueError && err.code === "CONFIRM_REMOVED",
+  );
+  const after = await getProfileWorkspace();
+  assert.equal(after.portrait, null);
+  assert.equal(after.profile.fields.find((field) => field.id === "whyRecord")?.text, "");
 });

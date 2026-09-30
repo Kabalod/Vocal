@@ -462,8 +462,8 @@ async function freezeThoughtPrompt(
     script?.body ? `Сценарий:\n${script.body.slice(0, 2000)}` : "",
     `Цель ролика: ${live.live.reelGoal || "не указана"}`,
     `Аудитория ролика: ${live.live.reelAudience || "не указана"}`,
-    `Подтверждённый профиль (можно в текст): ${JSON.stringify(live.live.publicForScript)}`,
-    `Подтверждённый профиль (только понимание): ${JSON.stringify(live.live.understandingOnly)}`,
+    `Отображаемый портрет (можно в текст): ${JSON.stringify(live.live.publicForScript)}`,
+    `Отображаемый портрет (только понимание): ${JSON.stringify(live.live.understandingOnly)}`,
     `Недавняя переписка:\n${recent}`,
     `Ответ автора: ${authorText}`,
     turn

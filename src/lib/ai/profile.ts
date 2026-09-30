@@ -1,22 +1,28 @@
 import { z } from "zod";
-import { PROFILE_FIELD_IDS, PROFILE_FIELD_LABELS, PROFILE_USAGES, type ProfileDialogueMode, type ProfileFieldId } from "@/types/profile";
+import { PROFILE_FIELD_IDS, PROFILE_FIELD_LABELS, type ProfileDialogueMode, type ProfileFieldId } from "@/types/profile";
 import { sanitizeFieldOperations, sanitizePortraitPatch } from "@/lib/profile-portrait";
+import {
+  V04_DERIVED_CATEGORIES,
+  V04_DIRECT_CATEGORIES,
+  V04_NO_CHANGE_REASONS,
+  V04_THOUGHT_SPECIFIC_REASONS,
+} from "@/lib/v04-action";
+import type { V04Slice } from "@/lib/v04-slice";
 
 export const PROFILE_DIALOGUE_KIND = "profile_dialogue";
 
-export const PROFILE_DIALOGUE_SYSTEM = `Ты Vocal. Собираешь или уточняешь портрет автора для сценариев.
-Задавай один понятный вопрос за раз. Не выдумывай биографию, факты, опыт и мотивы.
-Не копируй переписку в поля целиком: запиши обработанный смысл.
-Не заполняй пустые поля догадками. Отказ отвечать допустим.
-В patch и operations обязательно пиши смысл в text или value, а не один usage.
-Личный факт не становится публичной историей сам: usage in_text только если автор явно разрешил, иначе understanding.
-Верни только JSON.
-Поля checklist: ${PROFILE_FIELD_IDS.join(", ")}.
-Операции: {"field":"audience","op":"set","text":"…","usage":"understanding"} | {"field":"audience","op":"clear"} | {"field":"audience","op":"usage","usage":"in_text"}.
-Неоднозначное «убери это» не очищай: спроси, что именно убрать, complete=false.
-Задавай только один смысловой вопрос в reply. Не объединяй аудиторию, темы и границы в одной реплике.
-complete=true и kind=ready означают черновик к явному подтверждению автора, а не уже действующий портрет.
-kind: "clarify" если нужен ещё вопрос, "ready" если можно показать черновик к подтверждению.`;
+export const PROFILE_DIALOGUE_SYSTEM = `Ты Vocal. Классифицируешь одну реплику автора для глобального портрета.
+Верни только JSON одного discriminated union. Лишние поля запрещены.
+kind: apply_update | no_change | thought_specific.
+apply_update: category, value, scope=global, evidenceType, evidenceMessageIds, confidence 0..1, operation.
+Прямые категории: ${V04_DIRECT_CATEGORIES.join(", ")}. Для них operation=replace_explicit и evidenceType=explicit_statement.
+Производные: ${V04_DERIVED_CATEGORIES.join(", ")}. Для них behavioral_observation и add_observation|strengthen|weaken.
+evidenceMessageIds — id сообщений автора из этого диалога профиля; обычно текущее. Не бери диалог мысли.
+Прямое сведение появляется сразу, без confirm. Производное копит вес; одно наблюдение характеристику не делает.
+Похвала, диагноз, настроение, отказ, мало сигнала → no_change с reasonCode: ${V04_NO_CHANGE_REASONS.join(", ")}.
+Деталь конкретной мысли, диалог мысли, эпизод ролика → thought_specific с reasonCode: ${V04_THOUGHT_SPECIFIC_REASONS.join(", ")}.
+Не выдумывай биографию. Не проси подтвердить портрет. Не возвращай patch, operations, complete, kind=ready.
+Сервер сам пишет видимый ответ автору.`;
 
 export const profileReplySchema = z.object({
   reply: z.string().optional(),
@@ -102,19 +108,31 @@ export function parseProfileAiReply(raw: unknown, mode: ProfileDialogueMode = "i
   };
 }
 
+export function profileV04UserPrompt(input: {
+  slice: V04Slice;
+  published: boolean;
+  recentText: string;
+  authorText: string;
+  userMessageId: string;
+}): string {
+  return `Отображаемый срез портрета (уже действует, confirm нет): ${JSON.stringify(input.slice)}
+Портрет опубликован: ${input.published ? "да" : "нет"}
+Текущее сообщение автора (id для evidenceMessageIds): ${input.userMessageId}
+Недавняя переписка:
+${input.recentText}
+Ответ автора: ${input.authorText}
+Один JSON, например {"kind":"apply_update","category":"blog_goal","value":"говорить своими словами","scope":"global","evidenceType":"explicit_statement","evidenceMessageIds":["${input.userMessageId}"],"confidence":0.9,"operation":"replace_explicit"}`;
+}
+
 export function profileChecklistPrompt(
   fields: { id: string; text: string; usage: string }[],
   input: { mode: ProfileDialogueMode; understood?: string; openQuestions?: string[] },
 ): string {
-  const lines = fields.map((field) => `- ${field.id}: ${field.text.trim() || "(пусто)"} [${field.usage}]`);
-  const pending =
-    input.mode === "amend"
-      ? `Режим: изменение существующего портрета. Действующий результат не меняй, пока kind=ready и complete=true.\nУже понятый запрос: ${input.understood?.trim() || "(пока нет)"}\nОткрытые вопросы: ${(input.openQuestions ?? []).join("; ") || "(нет)"}`
-      : "Режим: первая анкета. complete=true только когда понятны цель автора и аудитория или темы, нет противоречия, и можно собрать полезный портрет. Число ответов само по себе не завершает.";
-  return `${pending}
-Внутренний checklist (не показывай как форму): ${PROFILE_FIELD_IDS.join(", ")}
-Допустимые usage: ${PROFILE_USAGES.join(", ")}
-Текущие поля:
-${lines.join("\n")}
-JSON: {"reply":"Для кого это?","kind":"clarify","complete":false,"understood":"","openQuestions":[],"operations":[{"field":"whyRecord","op":"set","text":"говорить своими словами","usage":"understanding"}],"patch":{}}`;
+  return profileV04UserPrompt({
+    slice: {},
+    published: input.mode === "amend",
+    recentText: "",
+    authorText: fields.map((field) => `${field.id}: ${field.text}`).join("\n"),
+    userMessageId: "msg",
+  });
 }

@@ -14,6 +14,7 @@ import {
 } from "../src/lib/profile-portrait";
 import { fallbackProfileReply, parseProfileAiReply } from "../src/lib/ai/profile";
 import { emptyProfileFields, LOCAL_PROFILE_ID } from "../src/types/profile";
+import { v04NoChangeJson, v04ReplaceExplicitJson } from "./helpers/v04-profile-reply";
 
 test("merge keeps confirmed meanings and empty patch does not wipe", () => {
   const current = emptyProfileFields().map((field) =>
@@ -155,7 +156,7 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
     sendProfileVoice,
     getProfileWorkspace,
     supplementProfileDialogue,
-    confirmProfilePortrait,
+    skipProfileDialogue,
   } = await import("../src/lib/profile-dialogue");
   const { GET: getProfile, PUT: putProfile } = await import("../src/app/api/profile/route");
 
@@ -163,75 +164,52 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
   assert.equal(started.phase, "conversation");
   assert.ok(started.dialogue.messages.some((item) => item.body.includes("зачем")));
 
-  const replies = [
-    {
-      key: "a1",
-      text: "Записываю, чтобы говорить своими словами.",
-      reply: JSON.stringify({
-        reply: "Для кого это?",
-        coveredKeys: ["whyRecord"],
-        missingKeys: ["audience"],
-        patch: { whyRecord: { text: "Говорить своими словами", usage: "understanding" } },
-        complete: false,
-      }),
+  const afterGoal = await sendProfileMessage(
+    { text: "Записываю, чтобы говорить своими словами.", idempotencyKey: "a1" },
+    async () => {
+      const user = await prisma.dialogueMessage.findFirst({
+        where: { role: "user" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(user);
+      return {
+        text: v04ReplaceExplicitJson([user.id], "blog_goal", "Говорить своими словами"),
+        usage: { promptTokens: 4, completionTokens: 3 },
+      };
     },
-    {
-      key: "a2",
-      text: "Для людей, которым близка тихая речь.",
-      reply: JSON.stringify({
-        reply: "Какой опыт уже есть?",
-        coveredKeys: ["whyRecord", "audience"],
-        missingKeys: ["experience"],
-        patch: { audience: { text: "Люди, которым близка тихая речь", usage: "in_text" } },
-        complete: false,
-      }),
+  );
+  assert.equal(afterGoal.awaitingConfirm, false);
+  assert.equal(afterGoal.phase, "portrait");
+  const afterAudience = await sendProfileMessage(
+    { text: "Для людей, которым близка тихая речь.", idempotencyKey: "a2" },
+    async () => {
+      const user = await prisma.dialogueMessage.findFirst({
+        where: { role: "user" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(user);
+      return {
+        text: v04ReplaceExplicitJson([user.id], "general_audience", "Люди, которым близка тихая речь"),
+        usage: { promptTokens: 4, completionTokens: 3 },
+      };
     },
-    {
-      key: "a3",
-      text: "Год веду заметки и иногда читаю вслух.",
-      reply: JSON.stringify({
-        reply: "Портрета достаточно.",
-        coveredKeys: ["whyRecord", "audience", "experience"],
-        missingKeys: [],
-        patch: { experience: { text: "Год веду заметки и иногда читаю вслух", usage: "understanding" } },
-        complete: true,
-      }),
-    },
-  ];
-
-  let completeCalls = 0;
-  const complete = async () => {
-    const item = replies[completeCalls];
-    completeCalls += 1;
-    return { text: item.reply, usage: { promptTokens: 4, completionTokens: 3 } };
-  };
-
-  for (const item of replies) {
-    const after = await sendProfileMessage({ text: item.text, idempotencyKey: item.key }, complete);
-    if (item.key === "a2") {
-      assert.equal(after.phase, "conversation");
-      assert.equal(after.portrait, null);
-    }
-  }
-  assert.equal(completeCalls, 3);
-  const ready = await getProfileWorkspace();
-  assert.equal(ready.awaitingConfirm, true);
-  assert.equal(ready.phase, "conversation");
-  assert.equal(ready.portrait, null);
-  const done = await confirmProfilePortrait();
+  );
+  const done = afterAudience;
   assert.equal(done.phase, "portrait");
   assert.equal(done.pendingChange, false);
   assert.ok(done.portrait);
   assert.ok(done.portrait.coveredKeys.includes("whyRecord"));
   assert.ok(done.portrait.coveredKeys.includes("audience"));
-  assert.ok(done.portrait.coveredKeys.includes("experience"));
   assert.ok(done.portrait.sections.some((section) => section.id === "goals"));
-  assert.ok(done.portrait.sections.some((section) => section.id === "experience"));
   assert.equal(
     done.portrait.sections.some((section) => section.id === "topics"),
     false,
   );
   const keptGoals = done.portrait.sections.find((section) => section.id === "goals")?.text;
+  const again = await sendProfileMessage({ text: "Записываю, чтобы говорить своими словами.", idempotencyKey: "a1" }, async () => {
+    throw new Error("model must not run on the same idempotency key");
+  });
+  assert.equal(again.dialogue.messages.filter((item) => item.body === "Записываю, чтобы говорить своими словами.").length, 1);
   await supplementProfileDialogue();
   const failedApply = await sendProfileMessage(
     { text: "добавить опыт путешествий, которых не было", idempotencyKey: "fail-1" },
@@ -245,13 +223,9 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
   assert.equal(failedApply.portrait?.sections.find((section) => section.id === "goals")?.text, keptGoals);
   assert.ok(failedApply.dialogue.messages.some((item) => item.body === "добавить опыт путешествий, которых не было"));
   assert.equal(
-    failedApply.dialogue.messages.some((item) => item.body === replies[0].text),
+    failedApply.dialogue.messages.some((item) => item.body === "Записываю, чтобы говорить своими словами."),
     false,
   );
-
-  const again = await sendProfileMessage({ text: replies[0].text, idempotencyKey: "a1" }, complete);
-  assert.equal(completeCalls, 3);
-  assert.equal(again.dialogue.messages.filter((item) => item.body === replies[0].text).length, 0);
 
   let voiceComplete = 0;
   const afterVoice = await sendProfileVoice(
@@ -259,13 +233,18 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
     async () => {
       voiceComplete += 1;
       return {
-        text: JSON.stringify({
-          reply: "Какие темы хотите раскрывать?",
-          coveredKeys: ["whyRecord", "audience", "experience", "topics"],
-          missingKeys: [],
-          patch: { topics: { text: "тишина и речь", usage: "understanding" } },
-          complete: false,
-        }),
+        text: v04ReplaceExplicitJson(
+          [
+            (
+              await prisma.dialogueMessage.findFirst({
+                where: { role: "user" },
+                orderBy: { createdAt: "desc" },
+              })
+            )!.id,
+          ],
+          "standing_topic",
+          "тишина и речь",
+        ),
         usage: { promptTokens: 2, completionTokens: 2 },
       };
     },
@@ -308,21 +287,22 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
   await supplementProfileDialogue();
   const afterBoundary = await sendProfileMessage(
     { text: "не хочу говорить о теме работы", idempotencyKey: "bound-1" },
-    async () => ({
-      text: JSON.stringify({
-        reply: "Записал границу.",
-        coveredKeys: ["boundaries"],
-        missingKeys: [],
-        patch: { whyRecord: { text: "" }, boundaries: { text: "не хочу говорить о теме работы", usage: "understanding" } },
-        complete: true,
-      }),
-      usage: { promptTokens: 2, completionTokens: 1 },
-    }),
+    async () => {
+      const user = await prisma.dialogueMessage.findFirst({
+        where: { role: "user" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(user);
+      return {
+        text: v04ReplaceExplicitJson([user.id], "explicit_boundary", "не хочу говорить о теме работы"),
+        usage: { promptTokens: 2, completionTokens: 1 },
+      };
+    },
   );
-  assert.equal(afterBoundary.awaitingConfirm, true);
-  assert.equal(afterBoundary.pendingChange, true);
+  assert.equal(afterBoundary.awaitingConfirm, false);
+  assert.equal(afterBoundary.phase, "conversation");
   assert.equal(afterBoundary.portrait?.sections.find((section) => section.id === "goals")?.text, keptGoals);
-  const confirmedBoundary = await confirmProfilePortrait();
+  const confirmedBoundary = await skipProfileDialogue();
   assert.equal(confirmedBoundary.phase, "portrait");
   assert.equal(confirmedBoundary.pendingChange, false);
   assert.equal(confirmedBoundary.profile.fields.find((field) => field.id === "whyRecord")?.text, beforeBoundary);
@@ -331,23 +311,18 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
 
   const afterClear = await sendProfileMessage(
     { text: "убери границу про работу", idempotencyKey: "clear-bound-1" },
-    async () => ({
-      text: JSON.stringify({
-        reply: "Убрал границу.",
-        kind: "ready",
-        complete: true,
-        operations: [{ field: "boundaries", op: "clear" }],
-        patch: {},
-      }),
-      usage: { promptTokens: 1, completionTokens: 1 },
-    }),
+    async () => {
+      const user = await prisma.dialogueMessage.findFirst({
+        where: { role: "user" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(user);
+      return { text: v04NoChangeJson("insufficient_signal"), usage: { promptTokens: 1, completionTokens: 1 } };
+    },
   );
-  const confirmedClear = await confirmProfilePortrait();
-  assert.equal(confirmedClear.profile.fields.find((field) => field.id === "boundaries")?.text, "");
-  assert.equal(
-    confirmedClear.portrait?.sections.some((section) => section.id === "boundaries"),
-    false,
-  );
+  const confirmedClear = afterClear;
+  assert.equal(confirmedClear.profile.fields.find((field) => field.id === "boundaries")?.text, "не хочу говорить о теме работы");
+  assert.ok(confirmedClear.portrait?.sections.some((section) => section.id === "boundaries"));
 
   const calls = await prisma.aiCall.findMany({ where: { kind: "profile_dialogue" } });
   assert.ok(calls.length >= 1);
@@ -379,18 +354,18 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
 
   await sendProfileMessage(
     { text: "Теперь цель другая", idempotencyKey: "goal-2" },
-    async () => ({
-      text: JSON.stringify({
-        reply: "Обновил цель.",
-        coveredKeys: ["blogGoal"],
-        missingKeys: [],
-        patch: { blogGoal: { text: "другая цель", usage: "understanding" } },
-        complete: true,
-      }),
-      usage: { promptTokens: 1, completionTokens: 1 },
-    }),
+    async () => {
+      const user = await prisma.dialogueMessage.findFirst({
+        where: { role: "user" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(user);
+      return {
+        text: v04ReplaceExplicitJson([user.id], "blog_goal", "другая цель"),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+    },
   );
-  await confirmProfilePortrait();
   const afterLive = await getContext(new Request("http://vocal.local/api/reels/x/context"), {
     params: Promise.resolve({ id: reel.id }),
   });
@@ -685,7 +660,6 @@ test("incomplete intake resume keeps the current question", async (t) => {
     sendProfileMessage,
     supplementProfileDialogue,
     getProfileWorkspace,
-    confirmProfilePortrait,
   } = await import("../src/lib/profile-dialogue");
   await startProfileDialogue();
   const afterFirst = await sendProfileMessage(
@@ -715,19 +689,19 @@ test("incomplete intake resume keeps the current question", async (t) => {
 
   await sendProfileMessage(
     { text: "Для людей рядом.", idempotencyKey: "resume-2" },
-    async () => ({
-      text: JSON.stringify({
-        reply: "Портрета достаточно.",
-        kind: "ready",
-        coveredKeys: ["whyRecord", "audience"],
-        missingKeys: [],
-        patch: { audience: { text: "Люди рядом", usage: "in_text" } },
-        complete: true,
-      }),
-      usage: { promptTokens: 2, completionTokens: 2 },
-    }),
+    async () => {
+      const user = await prisma.dialogueMessage.findFirst({
+        where: { role: "user" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.ok(user);
+      return {
+        text: v04ReplaceExplicitJson([user.id], "general_audience", "Люди рядом"),
+        usage: { promptTokens: 2, completionTokens: 2 },
+      };
+    },
   );
-  const portrait = await confirmProfilePortrait();
+  const portrait = await getProfileWorkspace();
   assert.equal(portrait.phase, "portrait");
 
   const amending = await supplementProfileDialogue();
@@ -749,8 +723,8 @@ test("incomplete intake resume keeps the current question", async (t) => {
   assert.equal(afterClarify.phase, "conversation");
   await skipProfileDialogue();
   const continueAmend = await supplementProfileDialogue();
-  assert.ok(continueAmend.dialogue.messages.some((item) => item.body === "На какую аудиторию заменить?"));
-  assert.equal(continueAmend.dialogue.messages.filter((item) => item.body.includes("Что изменить")).length, 1);
+  assert.ok(continueAmend.dialogue.messages.some((item) => item.body.includes("Что изменить")));
+  assert.equal(continueAmend.dialogue.messages.filter((item) => item.body === "На какую аудиторию заменить?").length, 0);
 });
 
 test("unresolved contradiction does not publish a portrait", async (t) => {
