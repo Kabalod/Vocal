@@ -1,8 +1,35 @@
 # Live-схема: пересоздание таблиц приложения
 
-Status: **принята 29.09.2026**. Пересоздание **применено** 28.09.2026 (DROP 19 таблиц Prisma + SQL миграций `0`…`9` + `_prisma_migrations`). Шаг 5 закрыт 29.09.2026: вход, тестовые мысли, ответ модели; SQL-сверка таблиц `0`…`9`, Auth/`profiles`/Storage на месте. Это **не** приёмка V04 и не принятие [`../ROADMAP.md`](../ROADMAP.md).
+Status: **V04 live recreate применено 01.10.2026**. Живой smoke после recreate **принят 01.10.2026** (вход, мысль, start/skip/supplement профиля). Продукт V04 принят на `e8985243e85c73d181083428f80c8445fed29756`. Предыдущая приёмка live-схемы `0`…`9` была 29.09.2026.
 
-Решение: в том же проекте Supabase очистить только таблицы Prisma и заново применить миграции репозитория `0_postgres_baseline` → `9_v03_dialogue_exec_lease`, чтобы появилась настоящая `_prisma_migrations`. Auth (`auth.users`), `public.profiles`, триггер создания профиля и Storage **не трогать**. Старое содержимое приложения не переносить.
+## Пересоздание 01.10.2026 (V04, `sessionJson`)
+
+Цель: пустые таблицы приложения и Prisma-история `0`…`10` на том же проекте `zfbiyyhedhqdgrxxajrj`. Данные приложения не переносились. `DROP SCHEMA public CASCADE` не выполнялся.
+
+Сохранено:
+
+| Объект | После recreate |
+|---|---|
+| Auth | `auth.users` = 4, триггер `on_auth_user_created` |
+| `public.profiles` | 4 строки, RLS + FORCE |
+| Storage | бакет `vocal-private` (private) |
+| `private.handle_new_user` | на месте |
+
+Удалены только app-таблицы Prisma (включая `_prisma_migrations`) и `public.vocal_bump_dialogue_head`. Затем SQL файлов репозитория в лексикографическом порядке Prisma: `0`, `1`, `10_v04_profile_session`, `2`…`9`.
+
+`prisma migrate deploy` на непустом `public` (**остался `profiles`**) вернул **P3005**. Схема собрана `prisma db execute --file` по тем же migration.sql, затем `INSERT` в `_prisma_migrations` с SHA-256 файлов. После этого `prisma migrate status`: Database schema is up to date (11 finished). Checksums `0`…`9` совпали с live до DROP; `10_v04_profile_session` = `e3a161fe…`.
+
+На `_prisma_migrations` после создания: ENABLE + FORCE RLS, `REVOKE` у `anon`/`authenticated`.
+
+Проверка истории (01.10.2026, чтение): 11 строк `0_postgres_baseline` … `10_v04_profile_session` (все finished); колонка `CreatorProfile.sessionJson` есть. Сразу после recreate: `Reel` / `CreatorProfile` / `ProfileRevision` / `Criterion` = 0 (посев критериев — старт приложения, не миграция).
+
+SQL-сверка схемы **не** заменяет smoke UI (вход, мысль, диалог профиля).
+
+Живое исполнение **01.10.2026**: сессия на приложении с Prisma Client и live-подключением; студия; мысль с `ownerUserId` = `auth.users.id`; start диалога профиля пишет `sessionJson` без `ProfileRevision`; повторная загрузка сохраняет сессию; skip/supplement без ошибок и без лишних ревизий. Вызов модели в этот smoke не входил. Это не старт V05 / I01.
+
+## Запись 28–29.09.2026 (`0`…`9`)
+
+Решение тогда: очистить только таблицы Prisma и накатить `0_postgres_baseline` → `9_v03_dialogue_exec_lease`. Auth (`auth.users`), `public.profiles`, триггер и Storage не трогать. Старое содержимое приложения не переносить.
 
 Карта: [`../ROADMAP.md`](../ROADMAP.md) (порядок работ **принят** 29.09.2026). Приёмка live-схемы не была приёмкой карты и не является приёмкой V04.
 
@@ -66,7 +93,7 @@ Live-схема **принята** 29.09.2026. Это не V04 и не прин�
 
 ## Запреты
 
-- Не `migrate deploy` / `migrate resolve` поверх нынешних 19 таблиц.
+- Не `migrate deploy` / `migrate resolve` поверх живых таблиц «чтобы догнать» историю.
 - Не удалять `profiles` и не чистить `auth.users` «заодно».
-- Повторный DROP 19 таблиц без новой сверки запрещён.
-- Не стартовать V04 из этого документа.
+- Повторный DROP app-таблиц без новой явной команды запрещён.
+- Не стартовать V05 / I01 из этой записи.
