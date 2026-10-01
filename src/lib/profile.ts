@@ -174,14 +174,12 @@ export async function persistProfilePayload(input: StoredProfilePayload): Promis
   return getProfile();
 }
 
-export async function saveProfile(input: { fields: unknown }): Promise<ProfileDto> {
-  const fields = normalizeFields(input.fields);
-  const current = await readStoredProfilePayload();
-  return persistProfilePayload({
-    ...current,
-    fields,
-    portrait: current.portrait ? buildPortrait(fields, current.portrait.completed) : null,
-  });
+export async function saveProfile(_input: { fields: unknown }): Promise<ProfileDto> {
+  throw new ProfileError(
+    "Прямое сохранение анкеты больше не используется. Портрет меняется только из диалога профиля.",
+    "SAVE_PROFILE_REMOVED",
+    410,
+  );
 }
 
 export function parseSelectedKeys(raw: string | null | undefined): ProfileFieldId[] {

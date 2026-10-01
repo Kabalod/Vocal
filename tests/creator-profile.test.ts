@@ -44,7 +44,7 @@ test("assembleReelContext is deterministic and respects selection and usage", ()
   assert.ok(!a.understandingOnly.some((item) => item.text.includes("не должна")));
 });
 
-test("profile and reel context API: save, skip, snapshot survives profile change", async (t) => {
+test("profile and reel context API: PUT closed, snapshot survives later portrait change", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
       t.after(async () => {
     await prisma.$disconnect();
@@ -54,6 +54,8 @@ test("profile and reel context API: save, skip, snapshot survives profile change
   const { GET: getProfile, PUT: putProfile } = await import("../src/app/api/profile/route");
   const { POST: createReel } = await import("../src/app/api/reels/route");
   const { GET: getContext, PUT: putContext } = await import("../src/app/api/reels/[id]/context/route");
+  const { persistProfilePayload, readStoredProfilePayload } = await import("../src/lib/profile");
+  const { buildPortrait } = await import("../src/lib/profile-portrait");
 
   const empty = await getProfile();
   assert.equal(empty.status, 200);
@@ -61,7 +63,7 @@ test("profile and reel context API: save, skip, snapshot survives profile change
   assert.equal(emptyBody.profile.fields.length, 8);
   assert.equal(emptyBody.profile.fields.every((field: { text: string }) => field.text === ""), true);
 
-  const saved = await putProfile(
+  const blocked = await putProfile(
     new Request("http://vocal.local/api/profile", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -74,10 +76,23 @@ test("profile and reel context API: save, skip, snapshot survives profile change
       }),
     }),
   );
-  assert.equal(saved.status, 200);
-  const savedBody = await saved.json();
-  const firstRevision = savedBody.profile.currentRevisionId;
-  assert.ok(firstRevision);
+  assert.equal(blocked.status, 410);
+  const blockedBody = await blocked.json();
+  assert.equal(blockedBody.code, "SAVE_PROFILE_REMOVED");
+  const stillEmpty = await (await getProfile()).json();
+  assert.equal(stillEmpty.profile.fields.every((field: { text: string }) => field.text === ""), true);
+
+  const seededFields = fields({
+    whyRecord: { text: "вымышленный автор теста пишет про чай", usage: "in_text" },
+    blogGoal: { text: "набрать 10 вымышленных роликов", usage: "understanding" },
+    boundaries: { text: "не называть город", usage: "understanding" },
+  });
+  const published = await persistProfilePayload({
+    ...(await readStoredProfilePayload()),
+    fields: seededFields,
+    portrait: buildPortrait(seededFields, true),
+  });
+  const publishedRevision = published.currentRevisionId;
 
   const created = await createReel(
     new Request("http://vocal.local/api/reels", {
@@ -92,23 +107,6 @@ test("profile and reel context API: save, skip, snapshot survives profile change
     params: Promise.resolve({ id: "no-such" }),
   });
   assert.equal(missing.status, 404);
-
-  const liveEmpty = await getContext(new Request("http://vocal.local"), {
-    params: Promise.resolve({ id: reel.id }),
-  });
-  const liveEmptyBody = (await liveEmpty.json()).context;
-  assert.deepEqual(liveEmptyBody.live.publicForScript, []);
-  assert.deepEqual(liveEmptyBody.live.understandingOnly, []);
-
-  const { persistProfilePayload } = await import("../src/lib/profile");
-  const { buildPortrait } = await import("../src/lib/profile-portrait");
-  const { readStoredProfilePayload } = await import("../src/lib/profile");
-  const storedProfile = await readStoredProfilePayload();
-  const published = await persistProfilePayload({
-    ...storedProfile,
-    portrait: buildPortrait(storedProfile.fields, true),
-  });
-  const publishedRevision = published.currentRevisionId;
 
   const stored = await putContext(
     new Request(`http://vocal.local/api/reels/${reel.id}/context`, {
@@ -133,18 +131,16 @@ test("profile and reel context API: save, skip, snapshot survives profile change
   assert.equal(storedBody.snapshots.length, 1);
   const frozenPublic = storedBody.snapshots[0].assembled.publicForScript[0].text;
 
-  await putProfile(
-    new Request("http://vocal.local/api/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fields: fields({
-          whyRecord: { text: "новая вымышленная формулировка", usage: "in_text" },
-          blogGoal: { text: "другая цель", usage: "in_text" },
-        }),
-      }),
-    }),
-  );
+  const changedFields = fields({
+    whyRecord: { text: "новая вымышленная формулировка", usage: "in_text" },
+    blogGoal: { text: "другая цель", usage: "in_text" },
+    boundaries: { text: "не называть город", usage: "understanding" },
+  });
+  await persistProfilePayload({
+    ...(await readStoredProfilePayload()),
+    fields: changedFields,
+    portrait: buildPortrait(changedFields, true),
+  });
 
   const after = await getContext(new Request("http://vocal.local"), {
     params: Promise.resolve({ id: reel.id }),
@@ -179,5 +175,5 @@ test("profile and reel context API: save, skip, snapshot survives profile change
       }),
     }),
   );
-  assert.equal(tooLong.status, 400);
+  assert.equal(tooLong.status, 410);
 });

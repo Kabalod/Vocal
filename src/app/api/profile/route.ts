@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { withApiUser } from "@/lib/auth/request";
-import { ProfileError, getProfile, saveProfile } from "@/lib/profile";
+import { ProfileError, getProfile } from "@/lib/profile";
 import { logApiError } from "@/lib/safe-log";
 
 export const dynamic = "force-dynamic";
@@ -23,14 +23,13 @@ export const GET = withApiUser(async function GET() {
   }
 });
 
-export const PUT = withApiUser(async function PUT(request: Request) {
+export const PUT = withApiUser(async function PUT() {
   try {
-    const body = (await request.json()) as Record<string, unknown>;
-    if (body.fields === undefined) {
-      throw new ProfileError("Нет полей анкеты.", "FIELDS_REQUIRED");
-    }
-    const profile = await saveProfile({ fields: body.fields });
-    return NextResponse.json({ profile });
+    throw new ProfileError(
+      "Прямое сохранение анкеты больше не используется. Портрет меняется только из диалога профиля.",
+      "SAVE_PROFILE_REMOVED",
+      410,
+    );
   } catch (error) {
     return errorResponse(error);
   }

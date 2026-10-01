@@ -36,7 +36,7 @@ test("review and questions: versions, no scores, answers without AI, invalid JSO
 
   const { createReel, createTake } = await import("../src/lib/reels");
   const { ensureOriginalFromText } = await import("../src/lib/transcripts");
-  const { saveProfile } = await import("../src/lib/profile");
+  const { seedPublishedPortrait } = await import("./helpers/seed-published-portrait");
   const { saveReelContext } = await import("../src/lib/reel-context");
   const { createTakeReview, listTakeReviews } = await import("../src/lib/ai/review");
   const { continueQuestions, listReelQuestions, updateQuestion } = await import("../src/lib/ai/questions");
@@ -48,14 +48,8 @@ test("review and questions: versions, no scores, answers without AI, invalid JSO
     bodyText: "Вымышленный чай остыл на подоконнике. Я хочу говорить спокойно.",
   });
   await ensureOriginalFromText(take.id, take.bodyText);
-  await saveProfile({
-    fields: [
-      {
-        id: "whyRecord",
-        text: "вымышленный автор теста пьёт чай",
-        usage: "in_text",
-      },
-    ],
+  await seedPublishedPortrait({
+    whyRecord: { text: "вымышленный автор теста пьёт чай", usage: "in_text" },
   });
   await saveReelContext(reel.id, {
     reelGoal: "спокойный ролик про чай",

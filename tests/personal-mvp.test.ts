@@ -23,7 +23,7 @@ test("personal MVP cycle, export, compare, backup restore, failures", async (t) 
 
   const { createReel, createTake, getReel, updateReel } = await import("../src/lib/reels");
   const { ensureOriginalFromText, createEditedRevision } = await import("../src/lib/transcripts");
-  const { saveProfile } = await import("../src/lib/profile");
+  const { seedPublishedPortrait } = await import("./helpers/seed-published-portrait");
   const { saveReelContext } = await import("../src/lib/reel-context");
   const { createTakeReview } = await import("../src/lib/ai/review");
   const { listReelQuestions, updateQuestion } = await import("../src/lib/ai/questions");
@@ -33,8 +33,8 @@ test("personal MVP cycle, export, compare, backup restore, failures", async (t) 
   const { exportReel, assertExportSafe } = await import("../src/lib/export-reel");
   const { CompareError } = await import("../src/lib/compare");
 
-  await saveProfile({
-    fields: [{ id: "whyRecord", text: "вымышленный автор теста пьёт чай", usage: "in_text" }],
+  await seedPublishedPortrait({
+    whyRecord: { text: "вымышленный автор теста пьёт чай", usage: "in_text" },
   });
   const ideaA = await createReel({ title: "Идея про чай", initialNote: "подоконник" });
   const ideaB = await createReel({ title: "Вторая идея про кружку" });

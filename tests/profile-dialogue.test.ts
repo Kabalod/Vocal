@@ -382,10 +382,11 @@ test("profile dialogue covers keys, voice skips confirm, reload and snapshots st
       }),
     }),
   );
-  assert.equal(saved.status, 200);
+  assert.equal(saved.status, 410);
   const listed = await getProfile();
   const listedBody = await listed.json();
   assert.equal(listedBody.profile.fields.length, 8);
+  assert.equal(listedBody.profile.fields.find((field: { id: string }) => field.id === "lifeNow")?.text, "");
 
   process.env.VOCAL_DAILY_TOKEN_LIMIT = "5";
   await assert.rejects(
