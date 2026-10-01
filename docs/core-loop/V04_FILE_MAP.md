@@ -2,32 +2,36 @@
 
 V04_BASE_SHA: `564c9cf8534392501e125dda7ecc747c235a5c0d`.
 V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
-Продукт V04: **V04-01–V04-06 приняты**. `PUT /api/profile` закрыт. Документы V04-00: этот набор. Confirm снят в V04-06.
+Продукт V04: **V04-01–V04-06 приняты**. `PUT /api/profile` закрыт. Документы V04-00: этот набор. Confirm снят в V04-06. Продукт V04 **не принят**.
 
 ## Ядро портрета (менять в продукте V04)
 
 | Зона | Файлы | Сейчас / цель |
 |---|---|---|
-| Типы / union | `src/lib/v04-action.ts`, `src/types/profile.ts` | V04-01: strict union |
-| Commit | `src/lib/v04-commit.ts`, `src/lib/v04-slice.ts` | V04-03 веса; V04-05 lock; `applySliceToFields` пишет прямые и производные в fields |
-| Ревизии | `src/lib/profile.ts` | `saveProfile` — 410; start/skip/supplement — `persistProfileSession` после FOR UPDATE; новая ревизия только если срез изменился |
-| Runtime | `src/lib/ai-runtime-context.ts` | completed: `displayedProfileFields` из `v04Slice` |
+| Типы / union | `src/lib/v04-action.ts`, `src/types/profile.ts` | V04-01: strict union; `V04_DERIVED_DISPLAY` — русские строки видимого портрета |
+| Commit | `src/lib/v04-commit.ts`, `src/lib/v04-slice.ts` | V04-03 веса; V04-05 lock; `applySliceToFields` пишет прямые и русские производные в fields; при смене среза и пустом `sessionJson` — материализация legacy-сессии до `currentRevisionId` |
+| Ревизии | `src/lib/profile.ts` | `saveProfile` — 410; start/skip/supplement — `persistProfileSession` после FOR UPDATE; payload ревизии — только `fields`, `portrait`, `v04Slice`; UPDATE `payloadJson` нет |
+| Runtime | `src/lib/ai-runtime-context.ts` | completed: `displayedProfileFields` из `v04Slice` (enum в срезе, русский текст в fields) |
 | Сборка | `src/lib/profile-portrait.ts` | плоский patch; цель — вес из events, пороги 3/1 |
 | Диалог | `src/lib/profile-dialogue.ts` | новые ходы — только strict V04 union; иначе ошибка хода без смены портрета; confirm снят; GET не replay и не публикует pending |
 | Промпт | `src/lib/ai/profile.ts` | discriminated union V04; без confirm/ready |
 | Контекст ролика | `src/lib/reel-context.ts`, `src/lib/dialogue.ts` | отображаемый срез, не confirm |
 | API / UI | `app/api/profile/**`, `ProfileConversation.tsx` | нет `action=confirm`; `PUT /api/profile` — 410 `SAVE_PROFILE_REMOVED` |
+| Шов тестов | `src/lib/profile-lock-seam.ts` | барьер lock для skip/apply и откат после записи сессии |
 
-## Данные (без новых таблиц, без live migrate)
+## Данные (колонка сессии в репо, без live migrate)
 
 | Модель | Роль в V04 |
 |---|---|
-| `ProfileRevision` | неизменяемый снимок отображаемого среза |
+| `ProfileRevision` | неизменяемый снимок отображаемого среза: `fields`, `portrait`, `v04Slice` |
 | `CreatorProfile.currentRevisionId` | указатель на этот снимок |
+| `CreatorProfile.sessionJson` | `skipped`, `supplementing`, `dialogueSessionStartId`, `pending`; `{}` = legacy из ревизии |
 | `AiCall` kind `profile_dialogue` | сырой ответ + принятый `event` в `resultJson` |
 | `DialogueMessage` | лента; processing финализируется в той же транзакции, что event |
 
 Журнал **не** хранить в `ProfileRevision.payloadJson`. Вес = replay только `schemaVersion = "v04-event-1"` в порядке `createdAt`, `id`.
+
+Миграция репо `prisma/migrations/10_v04_profile_session` (`sessionJson TEXT NOT NULL DEFAULT '{}'`). Live Supabase: не применена (0…9). Тестовая БД: 0…10 через `tests/helpers/postgres-test-db.ts`.
 
 ## Стык V01–V03 (узко)
 
@@ -35,10 +39,10 @@ V03: **accepted** на `b5278f468666330bc30bb6cd9378f2f02f858264`.
 
 ## Тесты V04 и диалога профиля
 
-`tests/v04-02-commit.test.ts`, `tests/v04-02-envelope.test.ts`, `tests/v04-03-slice.test.ts`, `tests/v04-03-commit.test.ts`, `tests/v04-04-heal.test.ts`, `tests/v04-05-concurrency.test.ts`, `tests/v04-06-confirm.test.ts`, `tests/v04-06-legacy-reject.test.ts`, `tests/v04-save-profile.test.ts`, `tests/v04-display-session.test.ts`. Confirm снят: `tests/profile-dialogue.test.ts`, `tests/p10-p12-profile.test.ts`, `tests/r2-idempotency.test.ts`, `tests/mvp-release.test.ts`, `tests/p17-e2e-matrix.test.ts`. Сид опубликованного портрета в тестах: `tests/helpers/seed-published-portrait.ts`.
+`tests/v04-02-commit.test.ts`, `tests/v04-02-envelope.test.ts`, `tests/v04-03-slice.test.ts`, `tests/v04-03-commit.test.ts`, `tests/v04-04-heal.test.ts`, `tests/v04-05-concurrency.test.ts`, `tests/v04-06-confirm.test.ts`, `tests/v04-06-legacy-reject.test.ts`, `tests/v04-save-profile.test.ts`, `tests/v04-display-session.test.ts`, `tests/v04-commit-session.test.ts`. Confirm снят: `tests/profile-dialogue.test.ts`, `tests/p10-p12-profile.test.ts`, `tests/r2-idempotency.test.ts`, `tests/mvp-release.test.ts`, `tests/p17-e2e-matrix.test.ts`. Сид опубликованного портрета в тестах: `tests/helpers/seed-published-portrait.ts`.
 
 Сценарии: [`V04_SCENARIOS.md`](./V04_SCENARIOS.md).
 
 ## Не входят
 
-Prisma baseline, миграции 8–9, `migrate resolve`, вкладка «Сценарий», champagne/STAGE/Desktop.
+Prisma baseline, миграции 8–10 на live, `migrate resolve`, вкладка «Сценарий», champagne/STAGE/Desktop.

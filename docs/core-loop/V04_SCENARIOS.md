@@ -44,5 +44,6 @@ V04_BASE_SHA: `564c9cf8534392501e125dda7ecc747c235a5c0d`.
 28. **Производная характеристика.** Три основания `concreteness=high` — поле подачи, секции портрета и контекст мысли содержат значение. Снятие слота убирает его из отображения.
 29. **Служебные start/skip/supplement.** Срез тот же — `currentRevisionId` и набор ревизий те же.
 30. **Конкурентный skip и apply_update.** Новый срез не затирается служебным persist.
+31. **Legacy-сессия при первой смене среза.** Старая ревизия держит `pending` / `dialogueSessionStartId` / `supplementing` / `skipped`, `sessionJson='{}'`. Валидный `apply_update` со сменой среза без предварительных start/skip/supplement материализует сессию в той же транзакции. Старый `payloadJson` побайтно тот же. Новая ревизия — только `fields`, `portrait`, `v04Slice`. Явные `false`/`null` в `sessionJson` не подменяются legacy. Откат транзакции откатывает и перенос сессии, и смену ревизии.
 
 Вне сценариев: V05, V06, live migrate.

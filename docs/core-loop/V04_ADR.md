@@ -3,7 +3,7 @@
 V04_BASE_SHA: `564c9cf8534392501e125dda7ecc747c235a5c0d`.
 V03_HEAD: `b5278f468666330bc30bb6cd9378f2f02f858264`.
 V03: **accepted**. V04-01: **принят** (`4411b22c716d44a92a8d7d762c64d1f22184f0e1`). V04-02: **принят** (`bc413e0df0e09348256319f10af884f8ef6727b4`). V04-03: **принят** (`5dfa595cc08f938bb9859aca3b1b3a585c6ba565`). V04-04: **принят** (`c0d8523e41455fef0281b6e8f62f44ae22cd3a58`). V04-05: **принят** (`3fda3de1d5630f97fe83e46ae5b73c0ad5ce09e0`). V04-06: **принят** (`119ee44`). `saveProfile` / `PUT /api/profile`: 410. V04 принят: нет.
-V04-00 — документы. Prisma, миграции и live Supabase не менять. V05 не начинать. Общий маршрут: [`../ROADMAP.md`](../ROADMAP.md). Thought-исправления C00 не являются источниками этого контракта. Пороги `support − oppose` (3/1) считаются только по `profile_dialogue` и не закрывают остаток I04 / мост по разным мыслям.
+V04-00 — документы. Live Supabase не менять. V05 не начинать. Общий маршрут: [`../ROADMAP.md`](../ROADMAP.md). Thought-исправления C00 не являются источниками этого контракта. Пороги `support − oppose` (3/1) считаются только по `profile_dialogue` и не закрывают остаток I04 / мост по разным мыслям.
 
 ## Граница ответственности
 
@@ -67,7 +67,11 @@ V04-00 — документы. Prisma, миграции и live Supabase не м
 
 ## Хранение
 
-`ProfileRevision` — неизменяемый снимок **только отображаемого** портрета. Уже созданный `payloadJson` не обновлять. Не создавать ревизию ради журнала или смены внутреннего веса.
+`ProfileRevision` — неизменяемый снимок **только отображаемого** портрета. Новый `payloadJson` содержит только `fields`, `portrait`, `v04Slice`. Уже созданный `payloadJson` не обновлять. Не создавать ревизию ради журнала, смены внутреннего веса или служебного start/skip/supplement.
+
+Состояние сессии диалога (`skipped`, `supplementing`, `dialogueSessionStartId`, `pending`) хранится в `CreatorProfile.sessionJson`, не в ревизии. Пустой `{}` — сессия ещё не материализована: чтение берёт те же поля из текущей ревизии (legacy). Явные `false` и `null` в `sessionJson` сильнее legacy и при смене среза не перезаписываются.
+
+При первой смене отображаемого среза, если `sessionJson` ещё пустой, `commitV04ProfileTurn` в той же транзакции записывает legacy-сессию в `sessionJson` **до** смены `currentRevisionId`. Старый `payloadJson` не меняется. `pending` автоматически не публикуется.
 
 Журнал принятых оснований — версионированные события в `resultJson` успешно завершённых `AiCall` (`kind=profile_dialogue`, `status=done`). Сырой ответ модели (`responseText` или эквивалент) отделён от принятого `event`.
 
@@ -87,7 +91,9 @@ V04-00 — документы. Prisma, миграции и live Supabase не м
 
 Существующий **опубликованный** портрет (`portrait.completed === true` на BASE) — исходный отображаемый снимок. Старый неподтверждённый `pending` автоматически не публиковать.
 
-Новых таблиц нет. Live migrate не применять.
+Новых таблиц нет. Колонка `CreatorProfile.sessionJson` — миграция репо `prisma/migrations/10_v04_profile_session`. На live Supabase её не применять (live остаётся 0…9). Тестовая Postgres применяет 0…10.
+
+В журнале и `v04Slice` производные хранятся enum-именами. В видимом портрете и runtime — русские формулировки из `V04_DERIVED_DISPLAY`; технических имён категорий/значений в тексте нет.
 
 ## Атомарность и гонки
 
@@ -95,7 +101,7 @@ V04-00 — документы. Prisma, миграции и live Supabase не м
 
 - записать принятый `event` в `resultJson` и `AiCall.status=done`;
 - зафиксировать финальное processing-сообщение;
-- при смене отображаемого среза — **создать** новую `ProfileRevision` (не UPDATE старой) и сменить `currentRevisionId`.
+- при смене отображаемого среза — **создать** новую `ProfileRevision` (не UPDATE старой), при legacy-сессии материализовать `sessionJson`, затем сменить `currentRevisionId`.
 
 При ошибке или проигрыше гонки не остаётся частично принятого основания: нет `event` без согласованного `AiCall=done` и без согласованного сообщения; нет новой ревизии без `event`; нет `event` с `newRevisionId`, которого нет в БД.
 
@@ -164,8 +170,8 @@ Confirm нет.
 
 Один вопрос за ход. Отказ отвечать → `no_change` / `refusal`. Голос = STT + тот же контракт.
 
-Пользователь смотрит отображаемый снимок и продолжает разговор. `saveProfile` и `PUT /api/profile` возвращают 410 `SAVE_PROFILE_REMOVED` и не пишут поля. `persistProfilePayload` — внутренний путь skip/start и тестовых сидов, не публичный обход журнала. `confirmProfilePortrait` снят в V04-06.
+Пользователь смотрит отображаемый снимок и продолжает разговор. `saveProfile` и `PUT /api/profile` возвращают 410 `SAVE_PROFILE_REMOVED` и не пишут поля. `persistProfilePayload` — внутренний путь тестовых сидов, не публичный обход журнала. start / skip / supplement пишут только `sessionJson` через `persistProfileSession` (тот же `FOR UPDATE`). `confirmProfilePortrait` снят в V04-06.
 
 Без портрета V03 и запись работают. Мысль важнее портрета. Портрет не `fact` и не источник сценария. `ai/script.ts` в V04 не расширять.
 
-Не применять Prisma baseline, миграции 8–9 и `migrate resolve` на live Supabase.
+Не применять Prisma baseline, миграции 8–10 и `migrate resolve` на live Supabase.
