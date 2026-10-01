@@ -1,6 +1,7 @@
 export type ProfileLockSeam = {
   afterCommitLocked?: () => Promise<void>;
   beforeSessionLock?: () => Promise<void>;
+  afterLegacySessionWrite?: () => Promise<void>;
 };
 
 let seam: ProfileLockSeam = {};
@@ -19,4 +20,8 @@ export async function afterCommitLockedForTests() {
 
 export async function beforeSessionLockForTests() {
   await seam.beforeSessionLock?.();
+}
+
+export async function afterLegacySessionWriteForTests() {
+  await seam.afterLegacySessionWrite?.();
 }

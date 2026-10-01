@@ -13,8 +13,14 @@ import {
   type V04ThoughtSpecific,
 } from "@/lib/v04-action";
 import { PROFILE_DIALOGUE_KIND } from "@/lib/ai/profile";
-import { overlayProfileSession, serializeStoredPayload } from "@/lib/profile";
-import { afterCommitLockedForTests } from "@/lib/profile-lock-seam";
+import {
+  overlayProfileSession,
+  parseProfileSessionJson,
+  serializeProfileSessionJson,
+  serializeStoredPayload,
+  sessionStateFromStored,
+} from "@/lib/profile";
+import { afterCommitLockedForTests, afterLegacySessionWriteForTests } from "@/lib/profile-lock-seam";
 import { buildPortrait, emptyStoredPayload, parseStoredPayload } from "@/lib/profile-portrait";
 import {
   applySliceToFields,
@@ -271,6 +277,7 @@ export async function commitV04ProfileTurn(input: {
     const revision = profile?.currentRevisionId
       ? await tx.profileRevision.findUnique({ where: { id: profile.currentRevisionId } })
       : null;
+    const legacySession = parseProfileSessionJson(profile?.sessionJson) === null;
     const stored = overlayProfileSession(
       revision ? parseStoredPayload(revision.payloadJson) : emptyStoredPayload(),
       profile?.sessionJson,
@@ -312,6 +319,13 @@ export async function commitV04ProfileTurn(input: {
             payloadJson: serializeStoredPayload(nextStored),
           },
         });
+        if (legacySession) {
+          await tx.creatorProfile.update({
+            where: { id: input.profileId },
+            data: { sessionJson: serializeProfileSessionJson(sessionStateFromStored(stored)) },
+          });
+          await afterLegacySessionWriteForTests();
+        }
         await tx.creatorProfile.update({
           where: { id: input.profileId },
           data: { currentRevisionId: created.id },
