@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyProfileFields } from "../src/types/profile";
 import { applySliceToFields, replayV04Slice, sliceEqual } from "../src/lib/v04-slice";
+import { V04_DERIVED_CATEGORIES, V04_DERIVED_DISPLAY, V04_DERIVED_VALUES, derivedSliceDisplayText } from "../src/lib/v04-action";
 import type { V04JournalEvent } from "../src/lib/v04-slice";
 
 function observation(id: string, value = "high"): V04JournalEvent {
@@ -61,9 +62,26 @@ test("V04-03 counts two replace_explicit ids of the same direct value", () => {
 
 test("V04-03 projects derived slice into speakingStyle and clears it when removed", () => {
   const published = applySliceToFields(emptyProfileFields(), { concreteness: "high" });
-  assert.match(published.find((field) => field.id === "speakingStyle")?.text ?? "", /concreteness: high/);
+  assert.equal(published.find((field) => field.id === "speakingStyle")?.text, "Говорит конкретно, с деталями");
   const removed = applySliceToFields(published, {});
   assert.equal(removed.find((field) => field.id === "speakingStyle")?.text, "");
+});
+
+test("V04-03 keeps journal enums while display text covers every derived pair", () => {
+  const slice = { concreteness: "high", lead_style: "example_first" };
+  assert.equal(slice.concreteness, "high");
+  const text = derivedSliceDisplayText(slice);
+  assert.match(text, /Говорит конкретно, с деталями/);
+  assert.match(text, /Начинает с примера/);
+  assert.equal(/concreteness:|lead_style:|example_first/.test(text), false);
+  for (const category of V04_DERIVED_CATEGORIES) {
+    for (const value of V04_DERIVED_VALUES[category]) {
+      const line = V04_DERIVED_DISPLAY[category][value];
+      assert.ok(line);
+      assert.equal(line.includes(category), false);
+      assert.equal(line.includes(value), false);
+    }
+  }
 });
 
 test("V04-03 keeps the current derived value on equal admitted weights", () => {

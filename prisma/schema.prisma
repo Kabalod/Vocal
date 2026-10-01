@@ -46,14 +46,15 @@ model Reel {
 /// AI portrait for one author. Not the login row: that is public.profiles (auth.users.id).
 /// CreatorProfile.id equals the auth user uuid (same as public.profiles.id).
 model CreatorProfile {
-  id                 String             @id
-  ownerUserId        String             @unique
-  currentRevisionId  String?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  revisions          ProfileRevision[]
-  dialogueThreads    DialogueThread[]
-  aiCalls            AiCall[]
+  id                       String             @id
+  ownerUserId              String             @unique
+  currentRevisionId        String?
+  sessionJson              String             @default("{}")
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  revisions                ProfileRevision[]
+  dialogueThreads          DialogueThread[]
+  aiCalls                  AiCall[]
 }
 
 model ProfileRevision {

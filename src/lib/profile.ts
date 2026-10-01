@@ -1,8 +1,9 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { portraitProfileId } from "@/lib/auth/session";
-import { buildPortrait, emptyStoredPayload, parseStoredPayload, type StoredProfilePayload } from "@/lib/profile-portrait";
-import { displayedProfileFields, sliceEqual } from "@/lib/v04-slice";
+import { buildPortrait, emptyStoredPayload, parsePending, parseStoredPayload, type StoredProfilePayload } from "@/lib/profile-portrait";
+import { beforeSessionLockForTests } from "@/lib/profile-lock-seam";
+import { displayedProfileFields } from "@/lib/v04-slice";
 import {
   PROFILE_FIELD_IDS,
   PROFILE_FIELD_LABELS,
@@ -117,6 +118,67 @@ export function storedPayloadFromJson(payloadJson: string): StoredProfilePayload
   return { ...stored, fields: displayedProfileFields(stored) };
 }
 
+export type ProfileSessionState = {
+  skipped: boolean;
+  supplementing: boolean;
+  dialogueSessionStartId: string | null;
+  pending: ProfilePendingChange | null;
+};
+
+export function parseProfileSessionJson(raw: string | null | undefined): ProfileSessionState | null {
+  if (!raw?.trim() || raw.trim() === "{}") return null;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    if (
+      !("skipped" in parsed) &&
+      !("supplementing" in parsed) &&
+      !("dialogueSessionStartId" in parsed) &&
+      !("pending" in parsed)
+    ) {
+      return null;
+    }
+    return {
+      skipped: parsed.skipped === true,
+      supplementing: parsed.supplementing === true,
+      dialogueSessionStartId:
+        typeof parsed.dialogueSessionStartId === "string" && parsed.dialogueSessionStartId.trim()
+          ? parsed.dialogueSessionStartId
+          : null,
+      pending: parsePending(parsed.pending),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function serializeProfileSessionJson(session: ProfileSessionState): string {
+  return JSON.stringify({
+    skipped: session.skipped,
+    supplementing: session.supplementing,
+    dialogueSessionStartId: session.dialogueSessionStartId,
+    pending: session.pending,
+  });
+}
+
+export function overlayProfileSession(
+  portrait: StoredProfilePayload,
+  sessionJson: string | null | undefined,
+): StoredProfilePayload {
+  const session = parseProfileSessionJson(sessionJson);
+  if (!session) return portrait;
+  return { ...portrait, ...session };
+}
+
+export function sessionStateFromStored(stored: StoredProfilePayload): ProfileSessionState {
+  return {
+    skipped: stored.skipped,
+    supplementing: stored.supplementing,
+    dialogueSessionStartId: stored.dialogueSessionStartId,
+    pending: stored.pending,
+  };
+}
+
 export function serializeStoredPayload(input: StoredProfilePayload): string {
   const fields = displayedProfileFields({ ...input, fields: normalizeFields(input.fields) });
   const portrait = input.portrait
@@ -124,11 +186,7 @@ export function serializeStoredPayload(input: StoredProfilePayload): string {
     : null;
   return JSON.stringify({
     fields,
-    skipped: input.skipped,
-    supplementing: input.supplementing,
     portrait,
-    pending: input.pending,
-    dialogueSessionStartId: input.dialogueSessionStartId,
     v04Slice: input.v04Slice ?? {},
   });
 }
@@ -137,14 +195,20 @@ export async function readStoredProfilePayloadTx(
   tx: Prisma.TransactionClient,
 ): Promise<{ stored: StoredProfilePayload; revisionId: string | null }> {
   const profile = await tx.creatorProfile.findUnique({ where: { id: portraitProfileId() } });
-  if (!profile?.currentRevisionId) {
+  if (!profile) {
     return { stored: emptyStoredPayload(), revisionId: null };
+  }
+  if (!profile.currentRevisionId) {
+    return { stored: overlayProfileSession(emptyStoredPayload(), profile.sessionJson), revisionId: null };
   }
   const current = await tx.profileRevision.findUnique({ where: { id: profile.currentRevisionId } });
   if (!current) {
-    return { stored: emptyStoredPayload(), revisionId: null };
+    return { stored: overlayProfileSession(emptyStoredPayload(), profile.sessionJson), revisionId: null };
   }
-  return { stored: storedPayloadFromJson(current.payloadJson), revisionId: current.id };
+  return {
+    stored: overlayProfileSession(storedPayloadFromJson(current.payloadJson), profile.sessionJson),
+    revisionId: current.id,
+  };
 }
 
 export async function readStoredProfilePayload(): Promise<StoredProfilePayload> {
@@ -168,30 +232,33 @@ export type ProfileSessionPatch = {
   pending?: ProfilePendingChange | null;
 };
 
-export async function persistProfilePayloadTx(
-  tx: Prisma.TransactionClient,
-  input: StoredProfilePayload | ((latest: StoredProfilePayload) => StoredProfilePayload),
-): Promise<string> {
+async function lockLocalProfileTx(tx: Prisma.TransactionClient) {
   const profileId = portraitProfileId();
   await tx.$queryRaw`SELECT id FROM "CreatorProfile" WHERE id = ${profileId} FOR UPDATE`;
+}
+
+async function writeSessionTx(tx: Prisma.TransactionClient, session: ProfileSessionState) {
+  await tx.creatorProfile.update({
+    where: { id: portraitProfileId() },
+    data: { sessionJson: serializeProfileSessionJson(session) },
+  });
+}
+
+export async function persistProfilePayloadTx(
+  tx: Prisma.TransactionClient,
+  input: StoredProfilePayload,
+): Promise<string | null> {
+  const profileId = portraitProfileId();
+  await lockLocalProfileTx(tx);
   const { stored: latest, revisionId } = await readStoredProfilePayloadTx(tx);
-  const next = typeof input === "function" ? input(latest) : input;
-  const payloadJson = serializeStoredPayload(next);
-  if (revisionId) {
-    const current = await tx.profileRevision.findUnique({ where: { id: revisionId } });
-    if (current?.payloadJson === payloadJson) return revisionId;
-    if (sliceEqual(latest.v04Slice, next.v04Slice ?? {}) && displayedPortraitSignature(latest) === displayedPortraitSignature(next)) {
-      await tx.profileRevision.update({
-        where: { id: revisionId },
-        data: { payloadJson },
-      });
-      return revisionId;
-    }
+  await writeSessionTx(tx, sessionStateFromStored(input));
+  if (displayedPortraitSignature(latest) === displayedPortraitSignature(input)) {
+    return revisionId;
   }
   const revision = await tx.profileRevision.create({
     data: {
       profileId,
-      payloadJson,
+      payloadJson: serializeStoredPayload(input),
     },
   });
   await tx.creatorProfile.update({
@@ -210,14 +277,16 @@ export async function persistProfilePayload(input: StoredProfilePayload): Promis
 export async function persistProfileSession(patch: ProfileSessionPatch): Promise<ProfileDto> {
   await ensureLocalProfile();
   await prisma.$transaction(async (tx) => {
-    await persistProfilePayloadTx(tx, (latest) => ({
-      ...latest,
+    await beforeSessionLockForTests();
+    await lockLocalProfileTx(tx);
+    const { stored: latest } = await readStoredProfilePayloadTx(tx);
+    await writeSessionTx(tx, {
       skipped: patch.skipped ?? latest.skipped,
       supplementing: patch.supplementing ?? latest.supplementing,
       dialogueSessionStartId:
         patch.dialogueSessionStartId !== undefined ? patch.dialogueSessionStartId : latest.dialogueSessionStartId,
       pending: patch.pending !== undefined ? patch.pending : latest.pending,
-    }));
+    });
   });
   return getProfile();
 }

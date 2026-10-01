@@ -34,6 +34,29 @@ export const V04_DERIVED_VALUES = {
   preferred_question_form: ["open", "closed", "short_choice"],
 } as const;
 
+export const V04_DERIVED_DISPLAY = {
+  explanation_style: {
+    stepwise: "Объясняет по шагам",
+    analogy: "Объясняет через сравнение",
+    contrast: "Объясняет через противопоставление",
+  },
+  concreteness: {
+    high: "Говорит конкретно, с деталями",
+    low: "Говорит обобщённо",
+  },
+  lead_style: {
+    example_first: "Начинает с примера",
+    conclusion_first: "Начинает с вывода",
+  },
+  preferred_question_form: {
+    open: "Удобнее открытые вопросы",
+    closed: "Удобнее вопросы да/нет",
+    short_choice: "Удобнее короткий выбор",
+  },
+} as const satisfies {
+  [K in keyof typeof V04_DERIVED_VALUES]: Record<(typeof V04_DERIVED_VALUES)[K][number], string>;
+};
+
 export const V04_OPERATIONS = ["replace_explicit", "add_observation", "strengthen", "weaken"] as const;
 export const V04_COUNTING_MIN_CONFIDENCE = 0.5;
 export const V04_PUBLISH_THRESHOLD = 3;
@@ -70,6 +93,20 @@ export function isV04DerivedCategory(value: string): value is V04DerivedCategory
 
 export function normalizePortraitValue(value: string) {
   return value.trim().normalize("NFC");
+}
+
+export function derivedDisplayLine(category: string, value: string): string | null {
+  if (!isV04DerivedCategory(category)) return null;
+  const labels = V04_DERIVED_DISPLAY[category] as Record<string, string>;
+  return labels[value] ?? null;
+}
+
+export function derivedSliceDisplayText(slice: Partial<Record<string, string>>): string {
+  return V04_DERIVED_CATEGORIES.map((category) => {
+    const value = slice[category];
+    if (!value) return null;
+    return derivedDisplayLine(category, value);
+  }).filter((line): line is string => Boolean(line)).join("\n");
 }
 
 const applyUpdateSchema = z

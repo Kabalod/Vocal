@@ -13,6 +13,8 @@ import {
   type V04ThoughtSpecific,
 } from "@/lib/v04-action";
 import { PROFILE_DIALOGUE_KIND } from "@/lib/ai/profile";
+import { overlayProfileSession, serializeStoredPayload } from "@/lib/profile";
+import { afterCommitLockedForTests } from "@/lib/profile-lock-seam";
 import { buildPortrait, emptyStoredPayload, parseStoredPayload } from "@/lib/profile-portrait";
 import {
   applySliceToFields,
@@ -247,6 +249,7 @@ export async function commitV04ProfileTurn(input: {
 }): Promise<void> {
   await input.prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "CreatorProfile" WHERE id = ${input.profileId} FOR UPDATE`;
+    await afterCommitLockedForTests();
     const call = await assertBoundTurn(tx, input);
     if (call.status === "done") return;
 
@@ -268,7 +271,10 @@ export async function commitV04ProfileTurn(input: {
     const revision = profile?.currentRevisionId
       ? await tx.profileRevision.findUnique({ where: { id: profile.currentRevisionId } })
       : null;
-    const stored = revision ? parseStoredPayload(revision.payloadJson) : emptyStoredPayload();
+    const stored = overlayProfileSession(
+      revision ? parseStoredPayload(revision.payloadJson) : emptyStoredPayload(),
+      profile?.sessionJson,
+    );
     const previousSlice =
       Object.keys(stored.v04Slice).length > 0
         ? stored.v04Slice
@@ -303,15 +309,7 @@ export async function commitV04ProfileTurn(input: {
         const created = await tx.profileRevision.create({
           data: {
             profileId: input.profileId,
-            payloadJson: JSON.stringify({
-              fields: nextStored.fields,
-              skipped: nextStored.skipped,
-              supplementing: nextStored.supplementing,
-              portrait: nextStored.portrait,
-              pending: nextStored.pending,
-              dialogueSessionStartId: nextStored.dialogueSessionStartId,
-              v04Slice: nextStored.v04Slice,
-            }),
+            payloadJson: serializeStoredPayload(nextStored),
           },
         });
         await tx.creatorProfile.update({

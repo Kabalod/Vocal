@@ -4,6 +4,7 @@ import {
   V04_DIRECT_CATEGORIES,
   V04_PUBLISH_THRESHOLD,
   V04_REMOVE_THRESHOLD,
+  derivedSliceDisplayText,
   isV04DerivedCategory,
   isV04DirectCategory,
   normalizePortraitValue,
@@ -142,9 +143,7 @@ export function replayV04Slice(input: {
 }
 
 export function derivedSliceText(slice: V04Slice): string {
-  return V04_DERIVED_CATEGORIES.filter((category) => slice[category])
-    .map((category) => `${category}: ${slice[category]}`)
-    .join("\n");
+  return derivedSliceDisplayText(slice);
 }
 
 export function applySliceToFields(fields: ProfileFieldValue[], slice: V04Slice): ProfileFieldValue[] {
