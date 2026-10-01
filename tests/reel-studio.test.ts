@@ -46,6 +46,11 @@ test("thought studio shell loads by id with back, tabs and honest missing/error"
   assert.equal(studio.includes("demo"), false);
   assert.match(studio, /tab === "dialog" && !recording/);
   assert.match(studio, /tab === "script" && !recording/);
-  assert.equal(studio.includes("TakeComparison"), false);
+  assert.equal(studio.includes("onHelpWithScript"), false);
+  assert.equal(studio.includes("Помочь со сценарием"), false);
+  const editor = readFileSync(join(root, "src/components/ScriptEditor.tsx"), "utf8");
+  assert.match(editor, /data-script-fault="conflict"/);
+  assert.match(editor, /data-script-phase/);
+  assert.equal(studio.includes("onTransferred"), false);
   assert.equal(frame.includes("hidden={tab"), false);
 });

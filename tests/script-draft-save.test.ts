@@ -17,7 +17,6 @@ function composerMarkup(session: ScriptDraftSaveSession, handlers: { onFinalize?
       finalizing: snap.finalizing,
       status: snap.status,
       expectedUpdatedAt: snap.expectedUpdatedAt,
-      helping: false,
       onBodyChange: (body) => session.setBody(body),
       onFinalize: handlers.onFinalize ?? (() => undefined),
       onBackToReady: handlers.onBackToReady ?? (() => undefined),

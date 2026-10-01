@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { isAppTestRuntime } from "@/lib/db-target";
+import { isAppTestRuntime, isLocalUiTestRuntime } from "@/lib/db-target";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export class AuthError extends Error {
@@ -18,7 +18,7 @@ export type AuthUser = { id: string; email: string | null };
 const ownerContext = new AsyncLocalStorage<AuthUser>();
 
 function isTestRuntime() {
-  return isAppTestRuntime();
+  return isAppTestRuntime() || isLocalUiTestRuntime();
 }
 
 export function ownerUserId(): string {
@@ -52,7 +52,7 @@ export function ownedReelWhere(id: string) {
 }
 
 export async function resolveRequestUser(): Promise<AuthUser> {
-  if (isTestRuntime() && process.env.VOCAL_REQUIRE_SUPABASE_AUTH !== "1") {
+  if ((isTestRuntime() || isLocalUiTestRuntime()) && process.env.VOCAL_REQUIRE_SUPABASE_AUTH !== "1") {
     return { id: process.env.VOCAL_TEST_USER_ID?.trim() || "local", email: "test@vocal.local" };
   }
   const supabase = await createServerSupabaseClient();

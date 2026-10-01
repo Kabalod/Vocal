@@ -199,7 +199,7 @@ test("draft finalize keeps latest body, rejects stale token, and transfer bumps 
   assert.equal(afterOldPatch.readyCount, immediate.readyCount);
 });
 
-test("new transcribed take creates the next ready script and leaves the draft", async (t) => {
+test("new transcribed take does not mint a script and leaves the draft", async (t) => {
   const { prisma, url } = await withPostgresTestDb(t);
   process.env.DATABASE_URL = url;
     t.after(async () => {
@@ -231,11 +231,11 @@ test("new transcribed take creates the next ready script and leaves the draft", 
   await applyThoughtMediaFromTranscript(take2.id, "новый дубль про смысл");
 
   const after = await listScriptWorkspace(reel.id);
-  assert.equal(after.readyCount, 2);
+  assert.equal(after.readyCount, 1);
   assert.equal(after.selectedScriptId, ready.headId);
   assert.equal(after.draft?.body, before.draft?.body);
   const stored = await prisma.take.findUnique({ where: { id: take2.id } });
   assert.equal(stored?.scriptVersionId, ready.headId);
   await applyThoughtMediaFromTranscript(take2.id, "новый дубль про смысл");
-  assert.equal((await listScriptWorkspace(reel.id)).readyCount, 2);
+  assert.equal((await listScriptWorkspace(reel.id)).readyCount, 1);
 });

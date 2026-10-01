@@ -38,7 +38,7 @@ test("P17 matrix: history/jobs redirects, record gate, no A/B studio UI", () => 
   assert.match(src("src/components/RecordingView.tsx"), /Начать запись/);
   assert.doesNotMatch(src("src/components/RecordingView.tsx"), /<ThoughtDialogue/);
   assert.match(src("src/components/ReelStudio.tsx"), /AutoTakeCompare/);
-  assert.doesNotMatch(src("src/components/ReelStudio.tsx"), /TakeComparison/);
+  assert.doesNotMatch(src("src/components/ThoughtDialogue.tsx"), /Перенести в сценарий/);
   assert.equal(unfinishedAmendPublishesPortrait([]), false);
 });
 
@@ -67,7 +67,7 @@ test("P17 matrix: thought without profile through finals, upload, compare, expor
   const { getProfileWorkspace } = await import("../src/lib/profile-dialogue");
   const { listReels, updateReel, getReel, createTake } = await import("../src/lib/reels");
   const { createThoughtFromText } = await import("../src/lib/thought-create");
-  const { listDialoguePage, sendDialogueMessage, sendDialogueVoice, transferDialogueProposal } =
+  const { listDialoguePage, sendDialogueMessage, sendDialogueVoice, transferDialogueProposal, DialogueError } =
     await import("../src/lib/dialogue");
   const { askQuestionJson, insertTestScriptProposal } = await import("./helpers/agent-action-json");
   const { patchScriptDraft, finalizeScriptDraft, setFinalScript, listScriptWorkspace } =
@@ -124,9 +124,12 @@ test("P17 matrix: thought without profile through finals, upload, compare, expor
   assert.equal(await prisma.take.count({ where: { reelId: reel.id } }), takesBeforeVoice);
   assert.ok(voice.messages.some((item) => item.role === "user"));
 
-  const transferred = await transferDialogueProposal(reel.id, proposal.id);
-  assert.equal(transferred.messages.find((item) => item.id === proposal.id)?.proposal?.transferred, true);
-  const afterTransfer = await listScriptWorkspace(reel.id);
+  await assert.rejects(
+    () => transferDialogueProposal(reel.id, proposal.id),
+    (error: unknown) => error instanceof DialogueError && error.status === 410,
+  );
+  const { openScriptDraft } = await import("../src/lib/scripts");
+  const afterTransfer = await openScriptDraft(reel.id);
   assert.ok(afterTransfer.draft);
 
   assert.equal(studioRecordGate({ hasReadyScript: false, hasDraft: true }), "draft-open");

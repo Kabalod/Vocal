@@ -66,39 +66,37 @@ test("scripts: manual save, versions, generate, restore, sources, take link", as
   );
 
   const draftBeforeGenerate = "Черновик: чай и подоконник. Правка во время ожидания.";
+  const { ensureThoughtState } = await import("../src/lib/thought-state");
+  await prisma.$transaction(async (tx) => {
+    await ensureThoughtState(tx, { reelId: reel.id, ownerUserId: "local", workingTakeId: take.id });
+  });
   let completeCalls = 0;
   const generated = await generateScriptProposal(
     reel.id,
-    { sources: firstSources.map((item) => ({ type: item.type, id: item.id })) },
+    { sources: firstSources.map((item) => ({ type: item.type, id: item.id })), idempotencyKey: "script-gen-1" },
     async () => {
       completeCalls += 1;
       return {
         text: JSON.stringify({
           script: "Предложение модели про вымышленный чай.",
-          opening: "подоконник",
-          supports: "чай",
-          example: "",
-          ending: "спокойно",
-          inventedIdeas: ["вымышленный сосед"],
         }),
       };
     },
   );
   assert.equal(completeCalls, 1);
-  assert.equal(generated.bundle.headId, saved.headId);
-  assert.equal(generated.bundle.versions.some((row) => row.kind === "ai_proposal"), true);
+  assert.equal(generated.bundle.headId, generated.proposalId);
+  assert.equal(generated.bundle.versions.some((row) => row.kind === "accepted_ai"), true);
   const proposal = generated.bundle.versions.find((row) => row.id === generated.proposalId);
-  assert.equal(proposal?.kind, "ai_proposal");
-  assert.equal(proposal?.inventedIdeas.includes("вымышленный сосед"), true);
+  assert.equal(proposal?.kind, "accepted_ai");
   assert.notEqual(draftBeforeGenerate, proposal?.body);
 
   const afterProposal = await saveManualScript(reel.id, {
     body: draftBeforeGenerate,
-    expectedHeadId: saved.headId,
+    expectedHeadId: generated.bundle.headId,
     sources: firstSources.map((item) => ({ type: item.type, id: item.id })),
   });
   assert.equal(afterProposal.headId !== saved.headId, true);
-  assert.equal(afterProposal.versions.filter((row) => row.kind === "ai_proposal").length, 1);
+  assert.equal(afterProposal.versions.filter((row) => row.kind === "accepted_ai").length, 1);
 
   const oldest = afterProposal.versions[afterProposal.versions.length - 1];
   const restored = await restoreScript(reel.id, oldest.id, afterProposal.headId);
@@ -137,14 +135,14 @@ test("scripts: manual save, versions, generate, restore, sources, take link", as
 
   await assert.rejects(
     () => generateScriptProposal(reel.id, { sources: [] }, async () => ({ text: "{}" })),
-    (error: unknown) => error instanceof ScriptError && error.code === "SOURCES_REQUIRED",
+    (error: unknown) => error instanceof ScriptError && error.code === "IDEMPOTENCY",
   );
 
   await assert.rejects(
     () =>
       generateScriptProposal(
         reel.id,
-        { sources: firstSources.map((item) => ({ type: item.type, id: item.id })) },
+        { sources: firstSources.map((item) => ({ type: item.type, id: item.id })), idempotencyKey: "script-bad-json" },
         async () => ({ text: "это не json сценария" }),
       ),
     (error: unknown) => error instanceof ScriptError && error.code === "LLM_INVALID",

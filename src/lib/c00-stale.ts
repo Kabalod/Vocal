@@ -98,7 +98,12 @@ export async function loadScriptDraftBinding(
   });
   const spawn = calls.find((call) => {
     const result = parseJsonValue(call.resultJson);
-    return Boolean(result && typeof result === "object" && (result as { proposalId?: string }).proposalId === version.id);
+    return Boolean(
+      result &&
+        typeof result === "object" &&
+        ((result as { proposalId?: string }).proposalId === version.id ||
+          (result as { versionId?: string }).versionId === version.id),
+    );
   });
   const binding = {
     ...snapshotFields(spawn?.inputSnapshotJson),

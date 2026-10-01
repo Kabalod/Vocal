@@ -13,8 +13,6 @@ import {
   ALLOWED_EXTENSIONS,
   MAX_UPLOAD_MB,
 } from "@/lib/config";
-import { createReadyScriptFromTranscript } from "@/lib/scripts";
-import { emptyRecording } from "@/types/script";
 import type { JobDto } from "@/types/analysis";
 import type { ReelDto, TakeDto, TakeInputType } from "@/types/reel";
 import type { CompleteJsonFn } from "@/types/review";
@@ -180,59 +178,10 @@ export async function applyThoughtMediaFromTranscript(
   });
   if (!original) return;
 
-  const existingScripts = await prisma.scriptVersion.findMany({
-    where: { reelId: take.reelId },
-    orderBy: { createdAt: "asc" },
+  await prisma.take.update({
+    where: { id: take.id },
+    data: { selectedTranscriptId: original.id },
   });
-  const alreadyFromThisTranscript = existingScripts.some((row) => {
-    try {
-      const parsed = JSON.parse(row.sourcesJson) as { id?: string }[];
-      return Array.isArray(parsed) && parsed.some((item) => item.id === original.id);
-    } catch {
-      return false;
-    }
-  });
-  const firstScript = existingScripts[0];
-
-  if (!firstScript) {
-    if (key) {
-      const script = await prisma.scriptVersion.create({
-        data: {
-          reelId: take.reelId,
-          kind: "manual",
-          body: transcript,
-          recordingJson: JSON.stringify(emptyRecording()),
-          sourcesJson: JSON.stringify([{ type: "transcript", id: original.id, label: "Исходная мысль" }]),
-          inventedIdeasJson: "[]",
-        },
-      });
-      await prisma.take.update({
-        where: { id: take.id },
-        data: { selectedTranscriptId: original.id, scriptVersionId: script.id },
-      });
-      await prisma.reel.update({
-        where: { id: take.reelId },
-        data: { selectedScriptId: script.id },
-      });
-    }
-  } else if (!alreadyFromThisTranscript) {
-    await createReadyScriptFromTranscript(take.reelId, {
-      body: transcript,
-      transcriptId: original.id,
-      takeNumber: take.number,
-      parentId: take.scriptVersionId,
-      select: false,
-    });
-    await prisma.take.update({
-      where: { id: take.id },
-      data: { selectedTranscriptId: original.id },
-    });
-  } else {
-    await prisma.take.update({
-      where: { id: take.id },
-      data: { selectedTranscriptId: original.id },
-    });
-  }
 
   if (key) {
     await applyThoughtTitleFromTranscript(take.reelId, transcript, complete);

@@ -82,6 +82,26 @@ test("tests accept only local postgres", () => {
   );
 });
 
+test("VOCAL_UI_TEST_DB uses only local TEST_DATABASE_URL", () => {
+  const url = resolveAppDatabaseUrl({
+    NODE_ENV: "development",
+    VOCAL_UI_TEST_DB: "1",
+    TEST_DATABASE_URL: "postgresql://postgres:pass@127.0.0.1:5432/vocal_test",
+    DATABASE_URL: "postgresql://postgres:s3cret@db.zfbiyyhedhqdgrxxajrj.supabase.co:5432/postgres",
+  });
+  assert.equal(url, "postgresql://postgres:pass@127.0.0.1:5432/vocal_test");
+  assert.throws(
+    () =>
+      resolveAppDatabaseUrl({
+        NODE_ENV: "development",
+        VOCAL_UI_TEST_DB: "1",
+        TEST_DATABASE_URL:
+          "postgresql://postgres.zfbiyyhedhqdgrxxajrj@aws-0-eu-west-2.pooler.supabase.com:5432/postgres",
+      }),
+    DatabaseTargetError,
+  );
+});
+
 test("public health does not return prisma or connection text", () => {
   const src = readFileSync(new URL("../src/app/api/health/route.ts", import.meta.url), "utf8");
   assert.doesNotMatch(src, /postgresError/);

@@ -15,13 +15,12 @@ export const POST = withApiUser(async function POST(request: Request, context: {
     if (!body.messageId) {
       return NextResponse.json({ error: "Нужно предложение.", code: "PROPOSAL_REQUIRED" }, { status: 400 });
     }
-    const page = await transferDialogueProposal(id, body.messageId);
-    return NextResponse.json(page);
+    await transferDialogueProposal(id, body.messageId);
   } catch (error) {
     if (error instanceof ReelError || error instanceof DialogueError || error instanceof ScriptError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     }
     logApiError("thoughts/dialogue/transfer", error);
-    return NextResponse.json({ error: "Не удалось перенести предложение.", code: "INTERNAL" }, { status: 500 });
   }
+  return NextResponse.json({ error: "Перенос предложения из диалога закрыт.", code: "GONE" }, { status: 410 });
 });

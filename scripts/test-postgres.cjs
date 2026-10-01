@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 const { spawnSync } = require("node:child_process");
-const { randomBytes } = require("node:crypto");
+const { createHash, randomBytes } = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -64,6 +64,7 @@ const dbTests = [
   "tests/v04-save-profile.test.ts",
   "tests/v04-display-session.test.ts",
   "tests/v04-commit-session.test.ts",
+  "tests/v05-scenario-tab.test.ts",
   "tests/p10-p12-profile.test.ts",
   "tests/p17-e2e-matrix.test.ts",
   "tests/personal-mvp.test.ts",
@@ -128,6 +129,7 @@ const reelsTests = [
   "tests/v04-save-profile.test.ts",
   "tests/v04-display-session.test.ts",
   "tests/v04-commit-session.test.ts",
+  "tests/v05-scenario-tab.test.ts",
   "tests/p10-p12-profile.test.ts",
   "tests/legacy-routes.test.ts",
   "tests/mvp-release.test.ts",
@@ -145,6 +147,15 @@ function selectedTests() {
   if (process.argv.includes("--v01")) return ["tests/v01-working-take.test.ts"];
   if (process.argv.includes("--v02")) return ["tests/v02-thought-state.test.ts"];
   if (process.argv.includes("--v03")) return ["tests/v03-agent-actions.test.ts"];
+  if (process.argv.includes("--v05")) {
+    return [
+      "tests/v05-scenario-tab.test.ts",
+      "tests/scripts.test.ts",
+      "tests/thought-script-draft.test.ts",
+      "tests/thought-text-create.test.ts",
+      "tests/thought-media-create.test.ts",
+    ];
+  }
   if (process.argv.includes("--auth")) return authTests;
   if (process.argv.includes("--reels")) return reelsTests;
   return dbTests;
@@ -181,6 +192,78 @@ async function waitForReady() {
     await delay(500);
   }
   throw new Error(`${container} did not become ready`);
+}
+
+function repoRoot() {
+  return path.join(__dirname, "..");
+}
+
+function schemaHash(file) {
+  return createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+}
+
+function canonicalSchemaFingerprint(source) {
+  const text = String(source).replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "\n");
+  const blocks = [];
+  let current = [];
+  const flush = () => {
+    if (!current.length) return;
+    const header = current[0].replace(/\s+/g, " ").trim();
+    const rest = current
+      .slice(1)
+      .map((line) => line.replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .sort();
+    blocks.push([header, ...rest].join("\n"));
+    current = [];
+  };
+  for (const raw of text.split("\n")) {
+    const line = raw.replace(/\/\/.*$/, "").replace(/\s+/g, " ").trim();
+    if (!line) continue;
+    if (/^(generator|datasource|model|enum|view)\b/.test(line)) {
+      flush();
+      current = [line];
+      continue;
+    }
+    if (current.length) current.push(line);
+  }
+  flush();
+  blocks.sort();
+  return createHash("sha256").update(blocks.join("\n\n")).digest("hex");
+}
+
+function generatedClientMatchesSchema() {
+  const schema = path.join(repoRoot(), "prisma", "schema.prisma");
+  const generated = path.join(repoRoot(), "node_modules", ".prisma", "client", "schema.prisma");
+  if (!fs.existsSync(schema) || !fs.existsSync(generated)) return false;
+  if (schemaHash(schema) === schemaHash(generated)) return true;
+  return (
+    canonicalSchemaFingerprint(fs.readFileSync(schema, "utf8")) ===
+    canonicalSchemaFingerprint(fs.readFileSync(generated, "utf8"))
+  );
+}
+
+function runPrismaGenerate(env) {
+  if (env.VOCAL_SKIP_PRISMA_GENERATE === "1") {
+    if (!generatedClientMatchesSchema()) {
+      throw new Error(
+        "VOCAL_SKIP_PRISMA_GENERATE=1, но сгенерированный клиент не совпадает с prisma/schema.prisma",
+      );
+    }
+    const byteMatch =
+      schemaHash(path.join(repoRoot(), "prisma", "schema.prisma")) ===
+      schemaHash(path.join(repoRoot(), "node_modules", ".prisma", "client", "schema.prisma"));
+    console.error(
+      `vocal-test-time prisma_generate_skipped=${byteMatch ? "byte_hash" : "canonical_fingerprint"}`,
+    );
+    return;
+  }
+  const generate = run("npx", ["prisma", "generate"], { env });
+  if ((generate.status ?? 1) !== 0) {
+    throw new Error(
+      "prisma generate failed. Не пропускайте EPERM автоматически. Если клиент уже актуален, задайте VOCAL_SKIP_PRISMA_GENERATE=1 явно.",
+    );
+  }
 }
 
 function removeOwnContainer() {
@@ -227,8 +310,7 @@ async function main() {
       VOCAL_PRISMA_EXECUTE_FILE: executeCountFile,
     };
     const generateAt = Date.now();
-    const generate = run("npx", ["prisma", "generate"], { env });
-    if ((generate.status ?? 1) !== 0) throw new Error("prisma generate failed");
+    runPrismaGenerate(env);
     console.error(`vocal-test-time prisma_generate_ms=${Date.now() - generateAt}`);
     const migrateAt = Date.now();
     const migrate = run("npx", ["prisma", "migrate", "deploy"], { env });

@@ -6,24 +6,20 @@ export function ScriptDraftComposer({
   finalizing,
   status,
   expectedUpdatedAt,
-  helping,
   onBodyChange,
   onFinalize,
   onBackToReady,
   onDelete,
-  onHelp,
 }: {
   draftBody: string;
   saving: boolean;
   finalizing: boolean;
   status: string | null;
   expectedUpdatedAt: string | null;
-  helping: boolean;
   onBodyChange: (body: string) => void;
   onFinalize: () => void;
   onBackToReady: () => void;
   onDelete: () => void;
-  onHelp?: () => void;
 }) {
   const locked = saving || finalizing;
   return (
@@ -33,7 +29,7 @@ export function ScriptDraftComposer({
         value={draftBody}
         onChange={(event) => onBodyChange(event.target.value)}
         rows={16}
-        placeholder="Текст новой версии"
+        placeholder="Черновик сценария"
         className="vocal-input min-h-[22rem] resize-y font-[family-name:var(--font-display)] text-lg leading-relaxed"
       />
       <div className="flex flex-wrap gap-2">
@@ -50,9 +46,6 @@ export function ScriptDraftComposer({
         </button>
         <button type="button" className="vocal-btn text-sm" onClick={onDelete}>
           Удалить черновик
-        </button>
-        <button type="button" className="vocal-btn text-sm" disabled={helping} onClick={onHelp}>
-          {helping ? "Просим…" : "Помочь со сценарием"}
         </button>
       </div>
     </div>

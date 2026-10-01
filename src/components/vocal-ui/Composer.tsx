@@ -13,6 +13,7 @@ export function Composer({
   onMic,
   micLabel = "Записать голос",
   clearOnSend = true,
+  autoFocus = false,
 }: {
   placeholder?: string;
   disabled?: boolean;
@@ -23,6 +24,7 @@ export function Composer({
   onMic?: () => void;
   micLabel?: string;
   clearOnSend?: boolean;
+  autoFocus?: boolean;
 }) {
   const fieldId = useId();
   const [inner, setInner] = useState("");
@@ -52,6 +54,7 @@ export function Composer({
         placeholder={placeholder}
         value={text}
         disabled={disabled}
+        autoFocus={autoFocus}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {

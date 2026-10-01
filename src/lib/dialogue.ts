@@ -12,7 +12,6 @@ import { aiOperationKey, assertDailyTokenBudget, StateVersionError, withAiInflig
 import { pageDialogueItems, decodeDialogueCursor } from "@/lib/dialogue-cursor";
 import { getReelContext } from "@/lib/reel-context";
 import { ReelError } from "@/lib/reels";
-import { replaceScriptDraft } from "@/lib/scripts";
 import { listTranscriptBundle } from "@/lib/transcripts";
 import {
   commitDialogueReply,
@@ -919,63 +918,15 @@ export async function sendDialogueVoice(
 }
 
 export async function requestScriptHelp(
-  reelId: string,
-  input: { idempotencyKey: string },
-  complete: CompleteJsonFn = defaultCompleteJson,
-): Promise<DialoguePageDto> {
-  const key = `help:${input.idempotencyKey.trim()}`;
-  if (key === "help:") throw new DialogueError("Нужен ключ повтора.", "IDEMPOTENCY");
-  return sendDialogueMessage(
-    reelId,
-    { text: "Помоги собрать вариант прямой речи для сценария.", idempotencyKey: key },
-    complete,
-  );
+  _reelId: string,
+  _input: { idempotencyKey: string },
+): Promise<never> {
+  throw new DialogueError("Сбор сценария перенесён во вкладку «Сценарий».", "GONE", 410);
 }
 
-export async function transferDialogueProposal(reelId: string, messageId: string): Promise<DialoguePageDto> {
-  const thread = await ensureReelThread(reelId);
-  const message = await prisma.dialogueMessage.findFirst({
-    where: { id: messageId, threadId: thread.id, kind: "script_proposal" },
-  });
-  if (!message) throw new DialogueError("Предложение не найдено.", "PROPOSAL_NOT_FOUND", 404);
-  const existing = parsePayload(message.payloadJson);
-  if (message.claimKey && existing.transferred && existing.scriptVersionId) {
-    return listDialoguePage(reelId);
-  }
-
-  await prisma.$transaction(async (tx) => {
-    const claimed = await tx.dialogueMessage.updateMany({
-      where: { id: message.id, claimKey: null },
-      data: { claimKey: `transfer:${message.id}` },
-    });
-    if (claimed.count === 0) return;
-    const fresh = await tx.dialogueMessage.findUniqueOrThrow({ where: { id: message.id } });
-    const payload = parsePayload(fresh.payloadJson);
-    const body = (payload.script ?? fresh.body).trim();
-    const reel = await tx.reel.findUniqueOrThrow({ where: { id: reelId }, select: { selectedScriptId: true } });
-    const draft = await replaceScriptDraft(
-      reelId,
-      {
-        body,
-        sourceKind: "vocal",
-        baseVersionId: reel.selectedScriptId,
-        sources: [],
-      },
-      tx,
-    );
-    await tx.dialogueMessage.update({
-      where: { id: fresh.id },
-      data: {
-        payloadJson: JSON.stringify({
-          ...payload,
-          script: body,
-          transferred: true,
-          draftId: draft.id,
-          scriptVersionId: null,
-          versionLabel: "черновик",
-        }),
-      },
-    });
-  });
-  return listDialoguePage(reelId);
+export async function transferDialogueProposal(
+  _reelId: string,
+  _messageId: string,
+): Promise<never> {
+  throw new DialogueError("Перенос предложения из диалога закрыт. Соберите сценарий во вкладке «Сценарий».", "GONE", 410);
 }

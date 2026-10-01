@@ -7,7 +7,42 @@ export const SCRIPT_SOURCE_TYPES = ["transcript", "answer", "note", "script"] as
 export type ScriptSourceType = (typeof SCRIPT_SOURCE_TYPES)[number];
 
 export const SCRIPT_BODY_MAX = 20000;
-export const SCRIPT_PROMPT_VERSION = "script-v1";
+export const SCRIPT_PROMPT_VERSION = "script-v05";
+
+export const SCRIPT_TAB_PHASES = [
+  "empty",
+  "not_ready",
+  "ready_to_generate",
+  "generating",
+  "ready",
+  "stale",
+  "conflict",
+  "error",
+] as const;
+export type ScriptTabPhase = (typeof SCRIPT_TAB_PHASES)[number];
+
+export interface ScriptNextQuestionDto {
+  text: string;
+  gapId: string | null;
+}
+
+export interface V05WorldSnapshot {
+  thoughtStateRevision: number;
+  workingTakeId: string | null;
+  selectedTranscriptId: string | null;
+  lastUserMessageId: string | null;
+  lastCorrectionAcceptedAt: string | null;
+}
+
+export interface V05GenerateSnapshot extends V05WorldSnapshot {
+  ownerUserId: string;
+  reelId: string;
+  sourceKeys: string[];
+  idempotencyKey: string;
+  draftId: string | null;
+  draftSaveToken: number | null;
+  kept?: V05WorldSnapshot | null;
+}
 
 export interface RecordingCardDto {
   opening: string;
@@ -85,6 +120,11 @@ export interface ScriptWorkspaceDto {
   viewing: ScriptVersionDto | null;
   draft: ScriptDraftDto | null;
   sources: ScriptSourceOption[];
+  phase: ScriptTabPhase;
+  stale: boolean;
+  canGenerate: boolean;
+  blockReason: string | null;
+  nextQuestion: ScriptNextQuestionDto | null;
 }
 
 export function emptyRecording(): RecordingCardDto {

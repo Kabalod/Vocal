@@ -50,7 +50,7 @@ test("release routes: thought, dialogue, draft, finals, profile context, usage, 
 
   const { listReels, updateReel, getReel } = await import("../src/lib/reels");
   const { createThoughtFromText } = await import("../src/lib/thought-create");
-  const { listDialoguePage, sendDialogueMessage, sendDialogueVoice, transferDialogueProposal } =
+  const { listDialoguePage, sendDialogueMessage, sendDialogueVoice, transferDialogueProposal, DialogueError } =
     await import("../src/lib/dialogue");
   const { askQuestionJson, insertTestScriptProposal } = await import("./helpers/agent-action-json");
   const { patchScriptDraft, finalizeScriptDraft, setFinalScript, listScriptWorkspace } =
@@ -84,9 +84,12 @@ test("release routes: thought, dialogue, draft, finals, profile context, usage, 
   );
   const proposal = await insertTestScriptProposal(prisma, dialogue.threadId, "Говорю коротко про тихий вечер.");
   assert.ok(proposal);
-  const transferred = await transferDialogueProposal(reel.id, proposal.id);
-  assert.equal(transferred.messages.find((item) => item.id === proposal.id)?.proposal?.transferred, true);
-  const afterTransfer = await listScriptWorkspace(reel.id);
+  await assert.rejects(
+    () => transferDialogueProposal(reel.id, proposal.id),
+    (error: unknown) => error instanceof DialogueError && error.status === 410,
+  );
+  const { openScriptDraft } = await import("../src/lib/scripts");
+  const afterTransfer = await openScriptDraft(reel.id);
   assert.ok(afterTransfer.draft);
   assert.ok(afterTransfer.versions.every((row) => !("body" in row)));
 

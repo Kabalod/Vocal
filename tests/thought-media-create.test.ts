@@ -36,7 +36,7 @@ function fakePayload(transcript: string): AnalysisResultPayload {
   };
 }
 
-test("thought media create validates, is idempotent, and builds script after STT", async (t) => {
+test("thought media create validates, is idempotent, and does not mint a script after STT", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
     process.env.VOCAL_SKIP_JOB_ENQUEUE = "1";
     t.after(async () => {
@@ -173,8 +173,7 @@ test("thought media create validates, is idempotent, and builds script after STT
   const original = await prisma.transcriptRevision.findFirst({ where: { takeId: createdBody.take.id } });
   assert.equal(original?.text.trim(), "голос про смысл мысли");
   const scripts = await prisma.scriptVersion.findMany({ where: { reelId } });
-  assert.equal(scripts.length, 1);
-  assert.equal(scripts[0].body, "голос про смысл мысли");
+  assert.equal(scripts.length, 0);
   const reel = await prisma.reel.findUnique({ where: { id: reelId } });
   assert.equal(reel?.title, "Смысл мысли");
 
@@ -183,7 +182,7 @@ test("thought media create validates, is idempotent, and builds script after STT
   });
   const processingBody = await processing.json();
   assert.equal(processingBody.phase, "done");
-  assert.equal(processingBody.scriptReady, true);
+  assert.equal(processingBody.scriptReady, false);
 
   const titleReel = await prisma.reel.create({
     data: {

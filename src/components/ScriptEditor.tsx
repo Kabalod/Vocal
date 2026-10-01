@@ -36,24 +36,30 @@ function createDraftSession(reelIdRef: { current: string }) {
   });
 }
 
+function newGenerateKey() {
+  return `script-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function ScriptEditor({
   reelId,
   reloadToken = 0,
-  onHelpWithScript,
   thoughtCompleted = false,
   onChanged,
+  onAnswerQuestion,
 }: {
   reelId: string;
   reloadToken?: number;
-  onHelpWithScript?: () => Promise<void> | void;
   thoughtCompleted?: boolean;
   onChanged?: () => void;
+  onAnswerQuestion?: (question: { text: string; gapId: string | null }) => void;
 }) {
   const [workspace, setWorkspace] = useState<ScriptWorkspaceDto | null>(null);
   const [viewing, setViewing] = useState<ScriptVersionDto | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
-  const [helping, setHelping] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [generateFault, setGenerateFault] = useState<{ kind: "conflict" | "error"; message: string } | null>(null);
+  const generateKeyRef = useRef(newGenerateKey());
   const guardRef = useRef(new GenerationGuard());
   const skipAutosave = useRef(false);
   const reelIdRef = useRef(reelId);
@@ -135,6 +141,48 @@ export function ScriptEditor({
     session.enterDraft();
   }
 
+  async function generate(key = generateKeyRef.current) {
+    setLoadError(null);
+    setGenerateFault(null);
+    setGenerating(true);
+    try {
+      const res = await fetch(`/api/reels/${reelId}/scripts/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idempotencyKey: key }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 409) generateKeyRef.current = newGenerateKey();
+        const kind = res.status === 409 ? "conflict" : "error";
+        setGenerateFault({ kind, message: typeof data.error === "string" ? data.error : "Не удалось собрать сценарий." });
+        const fresh = await fetch(`/api/reels/${reelId}/scripts`, { cache: "no-store" });
+        if (fresh.ok) applyWorkspace((await fresh.json()) as ScriptWorkspaceDto, true);
+        return;
+      }
+      applyWorkspace(data as ScriptWorkspaceDto, false);
+      setViewingId((data as ScriptWorkspaceDto).headId);
+      setViewing((data as ScriptWorkspaceDto).viewing);
+      generateKeyRef.current = newGenerateKey();
+      onChanged?.();
+    } catch (err: unknown) {
+      setGenerateFault({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Не удалось собрать сценарий.",
+      });
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function keepCurrent() {
+    setLoadError(null);
+    const res = await fetch(`/api/reels/${reelId}/scripts/keep`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Не удалось оставить сценарий.");
+    applyWorkspace(data as ScriptWorkspaceDto, true);
+  }
+
   async function finalize() {
     await session.finalize(async (input) => {
       const res = await fetch(`/api/reels/${reelId}/scripts/draft/finalize`, {
@@ -181,23 +229,81 @@ export function ScriptEditor({
     ? ready.find((row) => row.id === workspace.draft?.baseVersionId)?.number
     : null;
   const error = loadError ?? snap.error;
+  const phase = generating ? "generating" : workspace?.phase ?? "empty";
+  const stale = Boolean(workspace?.stale);
+  const versionTitle = currentMeta?.number ? `Сценарий, версия ${currentMeta.number}` : "Черновик сценария";
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-4" data-script-phase={phase} data-script-generating={generating ? "1" : "0"}>
       <div>
         <h2 className="font-[family-name:var(--font-display)] text-2xl">
-          {snap.mode === "draft" ? "Черновик новой версии" : "Сценарий"}
+          {snap.mode === "draft" ? "Черновик сценария" : "Сценарий"}
         </h2>
         <p className="text-sm text-muted">
           {snap.mode === "draft"
             ? baseNumber
               ? `На основе версии ${baseNumber}`
               : "Новый черновик без номера"
-            : "Готовые версии только для чтения. Правка начинается отдельной командой."}
+            : "Сценарий собирается только кнопкой на этой вкладке. Открытие вкладки ничего не генерирует."}
         </p>
       </div>
       {error ? <ShellError message={error} onRetry={() => void load()} /> : null}
+      {generateFault?.kind === "conflict" ? (
+        <div className="vocal-card space-y-3 p-4" data-script-fault="conflict" role="alert">
+          <p className="text-sm">{generateFault.message} Черновик и готовые версии сохранены.</p>
+          <button
+            type="button"
+            className="vocal-btn vocal-btn-primary"
+            disabled={generating || thoughtCompleted}
+            onClick={() => void generate(newGenerateKey())}
+          >
+            Повторить сбор
+          </button>
+        </div>
+      ) : null}
+      {generateFault?.kind === "error" ? (
+        <div data-script-fault="error">
+          <ShellError message={generateFault.message} onRetry={() => void generate(newGenerateKey())} />
+        </div>
+      ) : null}
+      {generating ? <p className="text-sm text-muted">Собираем сценарий…</p> : null}
       {snap.status && !snap.saving ? <p className="text-sm text-muted">{snap.status}</p> : null}
+      {workspace && phase === "not_ready" && workspace.blockReason ? (
+        <div className="vocal-card space-y-3 p-4">
+          <p className="text-sm">{workspace.blockReason}</p>
+          {workspace.nextQuestion ? (
+            <button
+              type="button"
+              className="vocal-btn vocal-btn-primary"
+              onClick={() => onAnswerQuestion?.(workspace.nextQuestion!)}
+            >
+              Ответить на вопрос
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {workspace && stale ? (
+        <div className="vocal-card space-y-3 p-4">
+          <p className="text-sm">После создания сценария появились новые данные.</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="vocal-btn"
+              onClick={() => void keepCurrent().catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))}
+            >
+              Оставить
+            </button>
+            <button
+              type="button"
+              className="vocal-btn vocal-btn-primary"
+              disabled={generating || !workspace.canGenerate}
+              onClick={() => void generate(newGenerateKey()).catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))}
+            >
+              {generating ? "Собираем…" : "Обновить"}
+            </button>
+          </div>
+        </div>
+      ) : null}
       {workspace ? (
         <ScriptVersionTimeline
           versions={ready}
@@ -217,24 +323,18 @@ export function ScriptEditor({
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
+              className="vocal-btn vocal-btn-primary"
+              disabled={generating || thoughtCompleted || !workspace?.canGenerate}
+              onClick={() => void generate().catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))}
+            >
+              {generating ? "Собираем…" : workspace?.readyCount ? "Собрать новую версию" : "Собрать сценарий"}
+            </button>
+            <button
+              type="button"
               className="vocal-btn"
               onClick={() => void openDraft().catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))}
             >
               {workspace?.draft ? "Продолжить черновик" : "Редактировать"}
-            </button>
-            <button
-              type="button"
-              className="vocal-btn text-sm"
-              disabled={helping}
-              onClick={() => {
-                if (!onHelpWithScript) return;
-                setHelping(true);
-                void Promise.resolve(onHelpWithScript())
-                  .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))
-                  .finally(() => setHelping(false));
-              }}
-            >
-              {helping ? "Просим…" : "Помочь со сценарием"}
             </button>
             <CanonicalExportActions
               disabled={!viewing?.body || !isHeadKind(viewing.kind)}
@@ -242,7 +342,7 @@ export function ScriptEditor({
               text={
                 viewing?.body && isHeadKind(viewing.kind)
                   ? buildCanonicalExportTxt({
-                      title: currentMeta?.number ? `Версия ${currentMeta.number}` : "Сценарий",
+                      title: versionTitle,
                       scriptBody: viewing.body,
                     })
                   : ""
@@ -260,14 +360,14 @@ export function ScriptEditor({
           {viewing ? (
             <article className="vocal-card space-y-2 p-4">
               <p className="text-sm text-muted">
-                {currentMeta?.number ? `Версия ${currentMeta.number}` : "Версия"} · {currentMeta?.sourceLabel ?? viewing.kind}
+                {versionTitle} · {currentMeta?.sourceLabel ?? viewing.kind}
               </p>
               <p className="whitespace-pre-wrap font-[family-name:var(--font-display)] text-lg leading-relaxed">
                 {viewing.body}
               </p>
             </article>
           ) : workspace ? (
-            <ShellEmpty title="Нет готовой версии" description="Сохраните первую версию или откройте черновик." />
+            <ShellEmpty title="Нет готовой версии" description="Соберите сценарий кнопкой или напишите черновик вручную." />
           ) : null}
         </div>
       ) : (
@@ -277,21 +377,10 @@ export function ScriptEditor({
           finalizing={snap.finalizing}
           status={snap.status}
           expectedUpdatedAt={snap.expectedUpdatedAt}
-          helping={helping}
           onBodyChange={(body) => session.setBody(body)}
           onFinalize={() => void finalize()}
           onBackToReady={() => void session.backToReady()}
           onDelete={() => void removeDraft().catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))}
-          onHelp={
-            onHelpWithScript
-              ? () => {
-                  setHelping(true);
-                  void Promise.resolve(onHelpWithScript())
-                    .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))
-                    .finally(() => setHelping(false));
-                }
-              : undefined
-          }
         />
       )}
     </section>

@@ -32,12 +32,8 @@ import type { DialogueMessageDto, DialoguePageDto } from "@/types/dialogue";
 
 function MessageBubble({
   message,
-  onTransfer,
-  transferring,
 }: {
   message: DialogueMessageDto;
-  onTransfer: (id: string) => void;
-  transferring: boolean;
 }) {
   const mine = message.role === "user";
   return (
@@ -52,20 +48,8 @@ function MessageBubble({
           <p className="text-muted">Голосовой ответ · {message.voice.durationLabel}</p>
         ) : null}
         <p className="whitespace-pre-wrap">{message.body}</p>
-        {message.kind === "script_proposal" && message.proposal ? (
-          <div className="mt-3">
-            {message.proposal.transferred ? (
-              <p className="text-sm text-muted">Перенесено · {message.proposal.versionLabel ?? "сценарий"}</p>
-            ) : (
-              <ActionButton
-                variant="secondary"
-                disabled={transferring}
-                onClick={() => onTransfer(message.id)}
-              >
-                {transferring ? "Переносим…" : "Перенести в сценарий"}
-              </ActionButton>
-            )}
-          </div>
+        {message.kind === "script_proposal" ? (
+          <p className="mt-3 text-sm text-muted">Сохранено в переписке. Сбор сценария — во вкладке «Сценарий».</p>
         ) : null}
       </div>
     </article>
@@ -77,19 +61,19 @@ export function ThoughtDialogue({
   draft,
   onDraftChange,
   hasReadyScript = false,
-  onTransferred,
   onGoRecord,
   thoughtCompleted = false,
   onReopen,
+  autoFocusComposer = false,
 }: {
   reelId: string;
   draft: string;
   onDraftChange: (value: string) => void;
   hasReadyScript?: boolean;
-  onTransferred: () => void;
   onGoRecord: () => void;
   thoughtCompleted?: boolean;
   onReopen?: () => void;
+  autoFocusComposer?: boolean;
 }) {
   const [page, setPage] = useState<DialoguePageDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +84,6 @@ export function ThoughtDialogue({
   const [finalizing, setFinalizing] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [voiceError, setVoiceError] = useState(false);
-  const [transferringId, setTransferringId] = useState<string | null>(null);
   const [scriptPreview, setScriptPreview] = useState("");
   const scrollerRef = useRef<HTMLDivElement>(null);
   const stickBottom = useRef(true);
@@ -113,7 +96,6 @@ export function ThoughtDialogue({
   const textKeyRef = useRef<string | null>(null);
   const voiceKeyRef = useRef<string | null>(null);
   const lastVoiceRef = useRef<{ blob: Blob; duration: string } | null>(null);
-  const transferLockRef = useRef(false);
 
   useEffect(() => {
     if (!hasReadyScript) {
@@ -233,22 +215,6 @@ export function ThoughtDialogue({
       setError(err instanceof Error ? err.message : "Ошибка.");
     } finally {
       setSending(false);
-    }
-  }
-
-  async function transfer(messageId: string) {
-    if (transferLockRef.current) return;
-    transferLockRef.current = true;
-    setError(null);
-    setTransferringId(messageId);
-    try {
-      await postJson(`/api/thoughts/${reelId}/dialogue/transfer`, { messageId });
-      onTransferred();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка.");
-    } finally {
-      setTransferringId(null);
-      transferLockRef.current = false;
     }
   }
 
@@ -418,12 +384,7 @@ export function ThoughtDialogue({
           <EmptyState title="Пока нет переписки" description="Напишите или скажите мысль — Vocal ответит здесь." />
         ) : null}
         {messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            transferring={transferringId === message.id}
-            onTransfer={transfer}
-          />
+          <MessageBubble key={message.id} message={message} />
         ))}
         {page?.analyzing ? <ProcessingState label="Разбираю вашу мысль…" /> : null}
       </div>
@@ -506,6 +467,7 @@ export function ThoughtDialogue({
             onChange={onDraftChange}
             disabled={sending}
             clearOnSend={false}
+            autoFocus={autoFocusComposer}
             onSend={(text) => void sendText(text)}
             onMic={() => void startMic()}
             micLabel="Ответить голосом"

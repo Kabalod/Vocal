@@ -13,7 +13,6 @@ import { ThoughtDialogue } from "@/components/ThoughtDialogue";
 import { ThoughtStudioHeader } from "@/components/ThoughtStudioHeader";
 import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
 import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
-import { newDialogueIdempotencyKey } from "@/lib/dialogue-client";
 import { parseStudioTab, studioThoughtHref, writeStudioTab, type StudioMobileTab } from "@/components/reel-studio";
 import { resolveStudioRecordDeepLink, studioRecordGate } from "@/lib/recording-session";
 import { studioShouldSilentRefetch } from "@/lib/recovery-client";
@@ -40,6 +39,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
   const [watchJobId, setWatchJobId] = useState<string | null>(null);
   const [thoughtStatus, setThoughtStatus] = useState<ReelStatus>("idea");
   const [workspaceReady, setWorkspaceReady] = useState(false);
+  const [focusDialogue, setFocusDialogue] = useState(false);
   const recordBootstrapped = useRef(false);
 
   const refreshStudioAfterJob = useCallback((status: "done" | "error") => {
@@ -164,15 +164,8 @@ export function ReelStudio({ reelId }: { reelId: string }) {
     openRecording();
   }
 
-  async function helpWithScript() {
-    const res = await fetch(`/api/thoughts/${reelId}/dialogue/help`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idempotencyKey: newDialogueIdempotencyKey() }),
-    });
-    const data = (await res.json()) as { error?: string };
-    if (!res.ok) throw new Error(data.error ?? "Не удалось попросить помощь.");
-    setDialogTick((value) => value + 1);
+  function answerScriptQuestion() {
+    setFocusDialogue(true);
     changeTab("dialog");
   }
 
@@ -249,7 +242,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
               reelId={reelId}
               reloadToken={scriptTick}
               thoughtCompleted={thoughtStatus === "completed"}
-              onHelpWithScript={helpWithScript}
+              onAnswerQuestion={() => answerScriptQuestion()}
               onChanged={() => setScriptTick((value) => value + 1)}
             />
             ) : null
@@ -262,10 +255,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
               draft={draft}
               onDraftChange={setDraft}
               hasReadyScript={hasReadyScript}
-              onTransferred={() => {
-                setScriptTick((value) => value + 1);
-                changeTab("script");
-              }}
+              autoFocusComposer={focusDialogue}
               thoughtCompleted={thoughtStatus === "completed"}
               onGoRecord={requestRecording}
               onReopen={() => {

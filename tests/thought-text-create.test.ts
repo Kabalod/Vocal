@@ -72,14 +72,14 @@ test("text thought create is one transaction, idempotent, and keeps draft on err
   const againBody = await again.json();
   assert.equal(againBody.reel.id, reelId);
   assert.equal(await prisma.take.count(), 1);
-  assert.equal(await prisma.scriptVersion.count(), 1);
+  assert.equal(await prisma.scriptVersion.count(), 0);
 
   const reelRes = await getReel(new Request(`http://vocal.local/api/reels/${reelId}`), {
     params: Promise.resolve({ id: reelId }),
   });
   const reelJson = await reelRes.json();
   assert.equal(reelJson.reel.takeCount, 1);
-  assert.equal(reelJson.reel.hasScript, true);
+  assert.equal(reelJson.reel.hasScript, false);
   assert.equal(reelJson.reel.takes[0].number, 1);
   assert.equal(reelJson.reel.takes[0].inputType, "text");
   assert.equal(reelJson.reel.takes[0].bodyText, expected);
@@ -96,11 +96,9 @@ test("text thought create is one transaction, idempotent, and keeps draft on err
       params: Promise.resolve({ id: reelId }),
     })
   ).json();
-  assert.equal(scripts.versions.length, 1);
-  assert.equal("body" in scripts.versions[0], false);
-  assert.equal(scripts.viewing?.body, expected);
-  assert.equal(scripts.versions[0].kind, "manual");
-  assert.equal(scripts.selectedScriptId, scripts.versions[0].id);
+  assert.equal(scripts.versions.length, 0);
+  assert.equal(scripts.viewing, null);
+  assert.equal(scripts.selectedScriptId, null);
 
   const transcript = await (
     await getTranscript(new Request(`http://vocal.local/api/takes/${takes.takes[0].id}/transcript`), {
@@ -171,6 +169,6 @@ test("concurrent thought create with the same key returns one thought", async (t
   assert.equal(await prisma.reel.count(), before.reels + 1);
   assert.equal(await prisma.take.count(), before.takes + 1);
   assert.equal(await prisma.transcriptRevision.count(), before.transcripts + 1);
-  assert.equal(await prisma.scriptVersion.count(), before.scripts + 1);
+  assert.equal(await prisma.scriptVersion.count(), before.scripts);
   assert.equal(await prisma.thoughtCreateKey.count(), before.keys + 1);
 });

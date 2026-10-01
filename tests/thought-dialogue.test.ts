@@ -82,7 +82,7 @@ test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", asy
     data: { questionId: question.id, text: "Главное — ясность." },
   });
 
-  const { listDialoguePage, sendDialogueMessage, sendDialogueVoice, transferDialogueProposal } =
+  const { listDialoguePage, sendDialogueMessage, sendDialogueVoice, transferDialogueProposal, DialogueError } =
     await import("../src/lib/dialogue");
 
   const initial = await listDialoguePage(reel.id, { limit: 20 });
@@ -117,21 +117,14 @@ test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", asy
   assert.equal(first.messages.at(-1)?.id, second.messages.at(-1)?.id);
   const proposal = await insertTestScriptProposal(prisma, first.threadId, "Говорю коротко и по делу.");
   assert.ok(proposal);
-
-  const [transferred, parallel] = await Promise.all([
-    transferDialogueProposal(reel.id, proposal!.id),
-    transferDialogueProposal(reel.id, proposal!.id),
-  ]);
-  const again = await transferDialogueProposal(reel.id, proposal!.id);
-  const versions = await prisma.scriptVersion.findMany({ where: { reelId: reel.id, kind: "accepted_ai" } });
-  assert.equal(versions.length, 0);
-  const draft = await prisma.scriptDraft.findUnique({ where: { reelId: reel.id } });
-  assert.ok(draft);
-  assert.equal(
-    parallel.messages.find((item) => item.id === proposal!.id)?.proposal?.draftId,
-    transferred.messages.find((item) => item.id === proposal!.id)?.proposal?.draftId,
+  const listedProposal = (await listDialoguePage(reel.id)).messages.find((item) => item.id === proposal.id);
+  assert.equal(listedProposal?.kind, "script_proposal");
+  assert.equal(listedProposal?.body, "Говорю коротко и по делу.");
+  await assert.rejects(
+    () => transferDialogueProposal(reel.id, proposal.id),
+    (error: unknown) => error instanceof DialogueError && error.status === 410,
   );
-  assert.equal(transferred.messages.find((item) => item.id === proposal!.id)?.proposal?.draftId, draft.id);
+  assert.equal(await prisma.scriptDraft.count({ where: { reelId: reel.id } }), 0);
 
   let voiceComplete = 0;
   await assert.rejects(
@@ -166,9 +159,9 @@ test("legacy Q&A appears in dialogue; send is idempotent; transfer is once", asy
     /не распознана/i,
   );
   assert.equal(voiceComplete, 0);
-  const after = transferred.messages.find((item) => item.id === proposal!.id);
-  assert.equal(after?.proposal?.transferred, true);
-  assert.equal(again.messages.find((item) => item.id === proposal!.id)?.proposal?.draftId, after?.proposal?.draftId);
+  const after = (await listDialoguePage(reel.id)).messages.find((item) => item.id === proposal.id);
+  assert.equal(after?.kind, "script_proposal");
+  assert.equal(after?.proposal?.transferred, false);
 
   const stored = await prisma.dialogueMessage.count({ where: { threadId: first.threadId } });
   assert.ok(stored >= 3);
@@ -267,7 +260,8 @@ test("composer voice reply posts to dialogue, never takes, and abort is not an e
   assert.equal(ui.includes("/api/takes/"), false);
   assert.match(voice, /return sendDialogueMessage/);
   assert.equal(voice.includes("createTake"), false);
-  assert.match(studio, /tab === "dialog" && !recording/);
+  assert.equal(ui.includes("Перенести в сценарий"), false);
+  assert.equal(ui.includes("/api/thoughts/${reelId}/dialogue/transfer"), false);
   assert.equal(studio.includes("TakeComparison"), false);
   assert.equal(studio.includes("ReelContextForm"), false);
 });

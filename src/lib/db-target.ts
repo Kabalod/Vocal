@@ -14,6 +14,11 @@ export function isAppTestRuntime(env: Record<string, string | undefined> = proce
   return env.NODE_ENV === "test" || Boolean(env.NODE_TEST_CONTEXT);
 }
 
+/** Explicit local UI against TEST_DATABASE_URL. Never points at live Supabase. */
+export function isLocalUiTestRuntime(env: Record<string, string | undefined> = process.env) {
+  return env.VOCAL_UI_TEST_DB === "1";
+}
+
 function parsePostgresUrl(raw: string, label: string): URL {
   let parsed: URL;
   try {
@@ -71,7 +76,7 @@ export function assertTestDatabaseUrl(
 }
 
 export function resolveAppDatabaseUrl(env: Record<string, string | undefined> = process.env): string {
-  if (isAppTestRuntime(env)) {
+  if (isAppTestRuntime(env) || isLocalUiTestRuntime(env)) {
     const testUrl = env.TEST_DATABASE_URL?.trim();
     if (!testUrl) {
       throw new DatabaseTargetError("Нужен TEST_DATABASE_URL. Тесты не используют SQLite.");
@@ -96,7 +101,7 @@ export function resolveDirectDatabaseUrl(env: Record<string, string | undefined>
 }
 
 export function assertSupabasePublicTarget(env: Record<string, string | undefined> = process.env) {
-  if (isAppTestRuntime(env)) return;
+  if (isAppTestRuntime(env) || isLocalUiTestRuntime(env)) return;
   const url = env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "";
   const key = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() || "";
   if (!url || !key) {

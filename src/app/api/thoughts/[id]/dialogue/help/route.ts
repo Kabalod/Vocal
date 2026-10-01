@@ -19,6 +19,6 @@ export const POST = withApiUser(async function POST(request: Request, context: {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     }
     console.error(safeAiLog({ kind: "dialogue-help" }));
-    return NextResponse.json({ error: "Не удалось попросить помощь со сценарием." }, { status: 500 });
+    return NextResponse.json({ error: "Сбор сценария перенесён во вкладку «Сценарий».", code: "GONE" }, { status: 410 });
   }
 });

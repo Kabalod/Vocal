@@ -155,7 +155,11 @@ export async function listAvailableSources(reelId: string): Promise<ScriptSource
       options.push({
         type: "transcript",
         id: selected.id,
-        label: `Расшифровка дубля №${take.number}`,
+        label: take.inputType === "text"
+          ? take.number === 1
+            ? "Исходная мысль"
+            : `Дубль №${take.number}`
+          : `Точная расшифровка · Дубль №${take.number}`,
       });
     }
   }
@@ -325,7 +329,7 @@ export async function listScriptWorkspace(reelId: string, viewId?: string | null
       db: prisma,
     });
   }
-  return {
+  const workspace = {
     reelId,
     headId,
     selectedScriptId: reel.selectedScriptId,
@@ -335,7 +339,15 @@ export async function listScriptWorkspace(reelId: string, viewId?: string | null
     viewing: viewingRow ? toDto(viewingRow) : null,
     draft: draftDto,
     sources: await listAvailableSources(reelId),
+    phase: "empty" as const,
+    stale: Boolean(draftDto?.stale),
+    canGenerate: false,
+    blockReason: null as string | null,
+    nextQuestion: null as { text: string; gapId: string | null } | null,
   };
+  const { computeScriptTabState } = await import("@/lib/v05-script");
+  const tab = await computeScriptTabState(reelId, workspace);
+  return { ...workspace, ...tab };
 }
 
 async function withReelWriteLock<T>(
@@ -365,7 +377,6 @@ export async function replaceScriptDraft(
 ): Promise<ScriptDraftDto> {
   await assertReel(reelId);
   const body = input.body.trim();
-  if (!body) throw new ScriptError("Введите текст сценария.", "SCRIPT_REQUIRED");
   if (body.length > SCRIPT_BODY_MAX) {
     throw new ScriptError(`Сценарий короче ${SCRIPT_BODY_MAX} символов.`, "SCRIPT_TOO_LONG");
   }
@@ -401,7 +412,10 @@ export async function openScriptDraft(reelId: string, baseVersionId?: string | n
   const existing = await prisma.scriptDraft.findUnique({ where: { reelId } });
   if (existing) return listScriptWorkspace(reelId, baseVersionId);
   const targetId = baseVersionId ?? (await getScriptHeadId(reelId));
-  if (!targetId) throw new ScriptError("Нет версии, с которой можно начать черновик.", "SCRIPT_NOT_FOUND", 404);
+  if (!targetId) {
+    await replaceScriptDraft(reelId, { body: "", sourceKind: "manual", sources: [] });
+    return listScriptWorkspace(reelId);
+  }
   const source = await prisma.scriptVersion.findFirst({ where: { id: targetId, reelId } });
   if (!source) throw new ScriptError("Версия сценария не найдена.", "SCRIPT_NOT_FOUND", 404);
   await replaceScriptDraft(reelId, {
@@ -433,7 +447,6 @@ export async function patchScriptDraft(
 ): Promise<ScriptWorkspaceDto> {
   await assertReel(reelId);
   const body = input.body.trim();
-  if (!body) throw new ScriptError("Введите текст сценария.", "SCRIPT_REQUIRED");
   if (body.length > SCRIPT_BODY_MAX) {
     throw new ScriptError(`Сценарий короче ${SCRIPT_BODY_MAX} символов.`, "SCRIPT_TOO_LONG");
   }
@@ -690,7 +703,12 @@ export async function acceptScriptProposal(
 
 export async function createAcceptedScriptFromText(
   reelId: string,
-  input: { body: string; model?: string | null; inputSnapshotJson?: string | null },
+  input: {
+    body: string;
+    model?: string | null;
+    promptVersion?: string | null;
+    inputSnapshotJson?: string | null;
+  },
   db: ScriptDb = prisma,
 ): Promise<ScriptVersionDto> {
   return createVersion(
@@ -699,6 +717,7 @@ export async function createAcceptedScriptFromText(
       kind: "accepted_ai",
       body: input.body,
       model: input.model,
+      promptVersion: input.promptVersion,
       inputSnapshotJson: input.inputSnapshotJson,
     },
     db,
@@ -738,7 +757,7 @@ export async function loadSourceTexts(reelId: string, refs: ScriptSourceRef[]): 
       const row = await prisma.transcriptRevision.findFirst({
         where: { id: ref.id, take: { reelId } },
       });
-      if (row) out.push({ label: ref.label ?? "Расшифровка", text: row.text });
+      if (row) out.push({ label: ref.label ?? "Исходная мысль", text: row.text });
     } else if (ref.type === "answer") {
       const row = await prisma.answer.findFirst({
         where: { id: ref.id, question: { reelId } },
