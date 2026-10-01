@@ -141,13 +141,31 @@ export function replayV04Slice(input: {
   };
 }
 
-export function applyDirectSliceToFields(fields: ProfileFieldValue[], slice: V04Slice): ProfileFieldValue[] {
+export function derivedSliceText(slice: V04Slice): string {
+  return V04_DERIVED_CATEGORIES.filter((category) => slice[category])
+    .map((category) => `${category}: ${slice[category]}`)
+    .join("\n");
+}
+
+export function applySliceToFields(fields: ProfileFieldValue[], slice: V04Slice): ProfileFieldValue[] {
   return fields.map((field) => {
     for (const category of V04_DIRECT_CATEGORIES) {
       if (field.id !== V04_DIRECT_FIELD[category]) continue;
       const value = slice[category] ?? "";
       return { ...field, text: value };
     }
+    if (field.id === "speakingStyle") {
+      return { ...field, text: derivedSliceText(slice) };
+    }
     return field;
   });
+}
+
+export function displayedProfileFields(stored: { fields: ProfileFieldValue[]; v04Slice: V04Slice }): ProfileFieldValue[] {
+  if (Object.keys(stored.v04Slice).length === 0) return stored.fields;
+  return applySliceToFields(stored.fields, stored.v04Slice);
+}
+
+export function applyDirectSliceToFields(fields: ProfileFieldValue[], slice: V04Slice): ProfileFieldValue[] {
+  return applySliceToFields(fields, slice);
 }

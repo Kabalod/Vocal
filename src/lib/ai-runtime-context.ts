@@ -1,9 +1,10 @@
 import { emptyProfileFields, PROFILE_FIELD_IDS, type ProfileFieldId, type ProfileFieldValue } from "@/types/profile";
 import type { StoredProfilePayload } from "@/lib/profile-portrait";
+import { displayedProfileFields } from "@/lib/v04-slice";
 
 export function runtimePortraitFields(stored: StoredProfilePayload): ProfileFieldValue[] {
   if (!stored.portrait?.completed) return emptyProfileFields();
-  return stored.fields;
+  return displayedProfileFields(stored);
 }
 
 export function runtimePortraitRevisionId(

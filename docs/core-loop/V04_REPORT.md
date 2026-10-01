@@ -37,7 +37,8 @@ Live Supabase не менялся. Prisma не трогали. V04-06 снима
 4. **V04-04 (принят, `c0d8523e41455fef0281b6e8f62f44ae22cd3a58`):** не replay старых AiCall; не публиковать pending.
 5. **V04-05 (принят, `3fda3de1d5630f97fe83e46ae5b73c0ad5ce09e0`):** сериализация по профилю + повтор хода без второго event.
 6. **V04-06 (принят, `119ee44`):** снять confirm из API/UI; промпт — V04 union; новые ходы не пишут legacy `readyToConfirm`.
-7. **PUT / `saveProfile`:** 410 `SAVE_PROFILE_REMOVED`; тело не читается; поля портрета не пишутся. `persistProfilePayload` остаётся для skip/start и сидов тестов.
+7. **PUT / `saveProfile`:** 410 `SAVE_PROFILE_REMOVED`; тело не читается; поля портрета не пишутся. `persistProfilePayload` — сиды тестов; start/skip/supplement — `persistProfileSession`.
+8. **Стык отображения и служебных persist:** производные из `v04Slice` в fields/portrait/runtime; служебные действия не создают ревизию без смены среза и не затирают concurrent `apply_update`.
 
 После этого пункта: полный `test:postgres`, затем отдельная приёмка продукта V04. V05 и I01 не начинать.
 

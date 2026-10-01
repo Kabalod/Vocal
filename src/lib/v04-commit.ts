@@ -15,7 +15,7 @@ import {
 import { PROFILE_DIALOGUE_KIND } from "@/lib/ai/profile";
 import { buildPortrait, emptyStoredPayload, parseStoredPayload } from "@/lib/profile-portrait";
 import {
-  applyDirectSliceToFields,
+  applySliceToFields,
   replayV04Slice,
   sliceEqual,
   sliceFromPublishedFields,
@@ -292,7 +292,7 @@ export async function commitV04ProfileTurn(input: {
       sliceChanged = !sliceEqual(previousSlice, replayed.slice);
       let newRevisionId: string | null = null;
       if (sliceChanged) {
-        const fields = applyDirectSliceToFields(stored.fields, replayed.slice);
+        const fields = applySliceToFields(stored.fields, replayed.slice);
         const completed = stored.portrait?.completed === true || Object.keys(replayed.slice).length > 0;
         const nextStored = {
           ...stored,

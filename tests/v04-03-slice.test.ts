@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { replayV04Slice, sliceEqual } from "../src/lib/v04-slice";
+import { emptyProfileFields } from "../src/types/profile";
+import { applySliceToFields, replayV04Slice, sliceEqual } from "../src/lib/v04-slice";
 import type { V04JournalEvent } from "../src/lib/v04-slice";
 
 function observation(id: string, value = "high"): V04JournalEvent {
@@ -56,6 +57,13 @@ test("V04-03 counts two replace_explicit ids of the same direct value", () => {
   const replayed = replayV04Slice({ events, previous: {} });
   assert.equal(replayed.slice.blog_goal, "говорить своими словами");
   assert.equal(replayed.slotOf("blog_goal", "говорить своими словами").systemWeight, 2);
+});
+
+test("V04-03 projects derived slice into speakingStyle and clears it when removed", () => {
+  const published = applySliceToFields(emptyProfileFields(), { concreteness: "high" });
+  assert.match(published.find((field) => field.id === "speakingStyle")?.text ?? "", /concreteness: high/);
+  const removed = applySliceToFields(published, {});
+  assert.equal(removed.find((field) => field.id === "speakingStyle")?.text, "");
 });
 
 test("V04-03 keeps the current derived value on equal admitted weights", () => {

@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { portraitProfileId } from "@/lib/auth/session";
 import { buildPortrait, emptyStoredPayload, parseStoredPayload, type StoredProfilePayload } from "@/lib/profile-portrait";
+import { displayedProfileFields, sliceEqual } from "@/lib/v04-slice";
 import {
   PROFILE_FIELD_IDS,
   PROFILE_FIELD_LABELS,
@@ -12,6 +13,7 @@ import {
   type ProfileDto,
   type ProfileFieldId,
   type ProfileFieldValue,
+  type ProfilePendingChange,
   type ProfileRevisionDto,
   type ProfileUsage,
 } from "@/types/profile";
@@ -71,7 +73,7 @@ function toRevisionDto(id: string, createdAt: Date, payloadJson: string): Profil
   return {
     id,
     createdAt: createdAt.toISOString(),
-    fields: parsePayload(payloadJson),
+    fields: displayedProfileFields(parseStoredPayload(payloadJson)),
   };
 }
 
@@ -93,7 +95,7 @@ export async function getProfile(): Promise<ProfileDto> {
   return {
     id: profile.id,
     currentRevisionId: current?.id ?? null,
-    fields: current ? parsePayload(current.payloadJson) : emptyProfileFields(),
+    fields: current ? displayedProfileFields(parseStoredPayload(current.payloadJson)) : emptyProfileFields(),
     revisions: revisions.map((row) => ({ id: row.id, createdAt: row.createdAt.toISOString() })),
     updatedAt: profile.updatedAt.toISOString(),
   };
@@ -112,11 +114,11 @@ export { emptyStoredPayload };
 
 export function storedPayloadFromJson(payloadJson: string): StoredProfilePayload {
   const stored = parseStoredPayload(payloadJson);
-  return { ...stored, fields: parsePayload(payloadJson) };
+  return { ...stored, fields: displayedProfileFields(stored) };
 }
 
 export function serializeStoredPayload(input: StoredProfilePayload): string {
-  const fields = normalizeFields(input.fields);
+  const fields = displayedProfileFields({ ...input, fields: normalizeFields(input.fields) });
   const portrait = input.portrait
     ? { ...buildPortrait(fields, input.portrait.completed), completed: input.portrait.completed }
     : null;
@@ -151,18 +153,49 @@ export async function readStoredProfilePayload(): Promise<StoredProfilePayload> 
   return stored;
 }
 
+function displayedPortraitSignature(stored: StoredProfilePayload): string {
+  return JSON.stringify({
+    slice: stored.v04Slice ?? {},
+    completed: stored.portrait?.completed === true,
+    fields: displayedProfileFields(stored).map((field) => ({ id: field.id, text: field.text, usage: field.usage })),
+  });
+}
+
+export type ProfileSessionPatch = {
+  skipped?: boolean;
+  supplementing?: boolean;
+  dialogueSessionStartId?: string | null;
+  pending?: ProfilePendingChange | null;
+};
+
 export async function persistProfilePayloadTx(
   tx: Prisma.TransactionClient,
-  input: StoredProfilePayload,
+  input: StoredProfilePayload | ((latest: StoredProfilePayload) => StoredProfilePayload),
 ): Promise<string> {
+  const profileId = portraitProfileId();
+  await tx.$queryRaw`SELECT id FROM "CreatorProfile" WHERE id = ${profileId} FOR UPDATE`;
+  const { stored: latest, revisionId } = await readStoredProfilePayloadTx(tx);
+  const next = typeof input === "function" ? input(latest) : input;
+  const payloadJson = serializeStoredPayload(next);
+  if (revisionId) {
+    const current = await tx.profileRevision.findUnique({ where: { id: revisionId } });
+    if (current?.payloadJson === payloadJson) return revisionId;
+    if (sliceEqual(latest.v04Slice, next.v04Slice ?? {}) && displayedPortraitSignature(latest) === displayedPortraitSignature(next)) {
+      await tx.profileRevision.update({
+        where: { id: revisionId },
+        data: { payloadJson },
+      });
+      return revisionId;
+    }
+  }
   const revision = await tx.profileRevision.create({
     data: {
-      profileId: portraitProfileId(),
-      payloadJson: serializeStoredPayload(input),
+      profileId,
+      payloadJson,
     },
   });
   await tx.creatorProfile.update({
-    where: { id: portraitProfileId() },
+    where: { id: profileId },
     data: { currentRevisionId: revision.id },
   });
   return revision.id;
@@ -171,6 +204,21 @@ export async function persistProfilePayloadTx(
 export async function persistProfilePayload(input: StoredProfilePayload): Promise<ProfileDto> {
   await ensureLocalProfile();
   await prisma.$transaction(async (tx) => persistProfilePayloadTx(tx, input));
+  return getProfile();
+}
+
+export async function persistProfileSession(patch: ProfileSessionPatch): Promise<ProfileDto> {
+  await ensureLocalProfile();
+  await prisma.$transaction(async (tx) => {
+    await persistProfilePayloadTx(tx, (latest) => ({
+      ...latest,
+      skipped: patch.skipped ?? latest.skipped,
+      supplementing: patch.supplementing ?? latest.supplementing,
+      dialogueSessionStartId:
+        patch.dialogueSessionStartId !== undefined ? patch.dialogueSessionStartId : latest.dialogueSessionStartId,
+      pending: patch.pending !== undefined ? patch.pending : latest.pending,
+    }));
+  });
   return getProfile();
 }
 

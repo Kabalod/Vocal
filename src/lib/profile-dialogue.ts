@@ -13,10 +13,11 @@ import { decodeDialogueCursor, pageDialogueItems } from "@/lib/dialogue-cursor";
 import {
   ensureLocalProfile,
   getProfile,
-  persistProfilePayload,
+  persistProfileSession,
   readStoredProfilePayload,
 } from "@/lib/profile";
 import { buildPortrait } from "@/lib/profile-portrait";
+import { displayedProfileFields } from "@/lib/v04-slice";
 import { portraitProfileId, ownerUserId } from "@/lib/auth/session";
 import { V04ActionError, parseV04ModelReply } from "@/lib/v04-action";
 import { commitV04ProfileTurn } from "@/lib/v04-commit";
@@ -171,7 +172,7 @@ export async function getProfileWorkspace(input: { cursor?: string | null } = {}
   const dialogue = await listProfileDialoguePage(input);
   const lastAssistant = [...dialogue.messages].reverse().find((item) => item.role === "assistant");
   const lastQuestion = [...dialogue.messages].reverse().find((item) => item.role === "assistant" && item.kind === "question");
-  const published = stored.portrait?.completed ? buildPortrait(stored.fields, true) : null;
+  const published = stored.portrait?.completed ? buildPortrait(displayedProfileFields(stored), true) : null;
   const applyError =
     lastAssistant?.kind === "error" && !isTechnicalErrorBody(lastAssistant.body) && (!published || stored.supplementing)
       ? lastAssistant.body
@@ -244,16 +245,14 @@ export async function startProfileDialogue(): Promise<ProfileWorkspaceDto & { di
     return supplementProfileDialogue();
   }
   if (stored.dialogueSessionStartId) {
-    await persistProfilePayload({
-      ...stored,
+    await persistProfileSession({
       skipped: false,
       supplementing: false,
     });
     return getProfileWorkspace();
   }
   const dialogueSessionStartId = await startDialogueSession(FIRST_QUESTION);
-  await persistProfilePayload({
-    ...stored,
+  await persistProfileSession({
     skipped: false,
     supplementing: false,
     dialogueSessionStartId,
@@ -264,16 +263,14 @@ export async function startProfileDialogue(): Promise<ProfileWorkspaceDto & { di
 export async function skipProfileDialogue(): Promise<ProfileWorkspaceDto & { dialogue: DialoguePageDto }> {
   const stored = await readStoredProfilePayload();
   if (stored.portrait?.completed) {
-    await persistProfilePayload({
-      ...stored,
+    await persistProfileSession({
       skipped: false,
       supplementing: false,
       pending: null,
     });
     return getProfileWorkspace();
   }
-  await persistProfilePayload({
-    ...stored,
+  await persistProfileSession({
     skipped: true,
     supplementing: false,
   });
@@ -287,8 +284,7 @@ export async function confirmProfilePortrait(): Promise<ProfileWorkspaceDto & { 
 export async function supplementProfileDialogue(): Promise<ProfileWorkspaceDto & { dialogue: DialoguePageDto }> {
   const stored = await readStoredProfilePayload();
   if (stored.dialogueSessionStartId && (stored.pending?.mode === "amend" || stored.supplementing)) {
-    await persistProfilePayload({
-      ...stored,
+    await persistProfileSession({
       skipped: false,
       supplementing: true,
     });
@@ -296,20 +292,20 @@ export async function supplementProfileDialogue(): Promise<ProfileWorkspaceDto &
   }
   const seedBody = stored.pending?.openQuestions[0]?.trim() || SUPPLEMENT_PROMPT;
   const dialogueSessionStartId = await startDialogueSession(seedBody);
-  await persistProfilePayload({
-    ...stored,
+  await persistProfileSession({
     skipped: false,
     supplementing: true,
     dialogueSessionStartId,
-    pending: stored.pending?.mode === "amend"
-      ? stored.pending
-          : {
-              mode: "amend",
-              understood: stored.pending?.understood ?? "",
-              openQuestions: stored.pending?.openQuestions ?? [],
-              draftFields: stored.pending?.draftFields ?? stored.fields,
-              readyToConfirm: stored.pending?.readyToConfirm === true,
-            },
+    pending:
+      stored.pending?.mode === "amend"
+        ? stored.pending
+        : {
+            mode: "amend",
+            understood: stored.pending?.understood ?? "",
+            openQuestions: stored.pending?.openQuestions ?? [],
+            draftFields: stored.pending?.draftFields ?? stored.fields,
+            readyToConfirm: stored.pending?.readyToConfirm === true,
+          },
   });
   return getProfileWorkspace();
 }
