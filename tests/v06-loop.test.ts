@@ -369,32 +369,51 @@ test("V06 applyThoughtMediaFromTranscript keeps edit and frozen selected revisio
     body: "MEDIA_ORIGIN",
     idempotencyKey: "v06-media-apply",
   });
-  const originId = reel.workingTakeId!;
   const take = await createTake(reel.id, { inputType: "audio", bodyText: "", originalName: "m.webm" });
   await saveOriginalIfAbsent(take.id, { text: "SPOKEN_ORIGINAL", source: "stt" });
   const edited = await createEditedRevision(take.id, "SPOKEN_EDIT");
   await applyThoughtMediaFromTranscript(take.id, "SPOKEN_ORIGINAL");
-  const afterEdit = await listTranscriptBundle(take.id);
-  assert.equal(afterEdit.selectedId, edited.selectedId);
-  assert.equal(afterEdit.revisions.find((row) => row.id === afterEdit.selectedId)?.text, "SPOKEN_EDIT");
+  const afterEdit = await prisma.take.findUniqueOrThrow({
+    where: { id: take.id },
+    select: { selectedTranscriptId: true },
+  });
+  assert.equal(afterEdit.selectedTranscriptId, edited.selectedId);
 
   await updateReel(reel.id, { finalTakeId: take.id, workingTakeId: take.id });
   await updateReel(reel.id, { status: "completed" });
   await applyThoughtMediaFromTranscript(take.id, "SPOKEN_ORIGINAL");
-  const frozen = await listTranscriptBundle(take.id);
-  assert.equal(frozen.selectedId, edited.selectedId);
+  const frozen = await prisma.take.findUniqueOrThrow({
+    where: { id: take.id },
+    select: { selectedTranscriptId: true },
+  });
+  assert.equal(frozen.selectedTranscriptId, edited.selectedId);
   assert.equal((await getReel(reel.id))?.status, "completed");
+  assert.equal((await getReel(reel.id))?.workingTakeId, take.id);
 
-  const first = await createTake(reel.id, { inputType: "audio", bodyText: "", originalName: "first.webm" });
-  await prisma.transcriptRevision.create({
+  const fresh = await createThoughtFromText({
+    title: "V06 first original",
+    body: "FIRST_ORIGIN_TEXT",
+    idempotencyKey: "v06-first-original",
+  });
+  const originWorking = fresh.reel.workingTakeId!;
+  const first = await createTake(fresh.reel.id, { inputType: "audio", bodyText: "", originalName: "first.webm" });
+  const original = await prisma.transcriptRevision.create({
     data: { takeId: first.id, kind: "original", source: "stt", text: "FIRST_ORIGINAL" },
   });
+  assert.equal((await prisma.take.findUniqueOrThrow({ where: { id: first.id } })).selectedTranscriptId, null);
+  assert.equal((await getReel(fresh.reel.id))?.workingTakeId, originWorking);
   await applyThoughtMediaFromTranscript(first.id, "FIRST_ORIGINAL");
-  const firstBundle = await listTranscriptBundle(first.id);
-  assert.ok(firstBundle.selectedId);
-  assert.equal(firstBundle.revisions.find((row) => row.id === firstBundle.selectedId)?.kind, "original");
-  assert.equal((await getReel(reel.id))?.workingTakeId, take.id);
-  assert.equal((await getReel(reel.id))?.status, "completed");
+  const selected = await prisma.take.findUniqueOrThrow({
+    where: { id: first.id },
+    select: { selectedTranscriptId: true },
+  });
+  assert.equal(selected.selectedTranscriptId, original.id);
+  assert.equal((await getReel(fresh.reel.id))?.workingTakeId, first.id);
+  const firstCas = await prisma.aiCall.findFirst({
+    where: { takeId: first.id, kind: V06_AUTO_WORK_KIND },
+  });
+  assert.equal(firstCas?.status, "done");
+  assert.equal(JSON.parse(firstCas?.resultJson ?? "{}").promoted, true);
 });
 
 test("V06 completed export and archive preview use only selected revision", async (t) => {

@@ -34,9 +34,9 @@ V06_BASE_SHA: `f741eb8d9e6c5881afcdd43d3f4cff9a8ccbd2fd`.
 
 **Исправление.** Условный `selectOriginalIfUnsetInTx` после lock: keep / frozen / select. Автоперевод — `promoteWorkingTakeInTx` в той же tx.
 
-**Тест.** edit сохраняется при повторном apply; completed final+edit неизменен; первая original выбирается (на completed указатель не прыгает).
+**Тест.** edit сохраняется при повторном apply (проверка `Take.selectedTranscriptId` в БД); completed final+edit неизменен; первая original на незавершённой мысли выбирается и автоперевод ставит working на этот дубль (`v06_auto_work` done, promoted).
 
-**Факт.** Три сценария apply в `v06-loop` прошли; thought-media-create/cleanup без регрессии.
+**Факт.** 26/26 адресных postgres: первая original пишется в `selectedTranscriptId`, working переходит на этот дубль, `v06_auto_work.promoted=true`. Edit и completed final не затираются.
 
 ### 4. Источник итогового текста нестрогий
 
