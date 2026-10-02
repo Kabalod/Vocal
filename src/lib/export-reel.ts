@@ -16,7 +16,8 @@ import {
 import { listComparisons } from "@/lib/compare";
 import { listScriptBundle } from "@/lib/scripts";
 import { listTranscriptBundle } from "@/lib/transcripts";
-import { TAKE_INPUT_TYPE_LABELS } from "@/types/reel";
+import { readStrictFinalThoughtText } from "@/lib/v06-working-take";
+import { normalizeReelStatus } from "@/types/reel";
 import { isHeadKind } from "@/types/script";
 
 export interface ReelExportDto {
@@ -214,67 +215,53 @@ export async function exportCanonicalTxt(
   const row = await prisma.reel.findFirst({ where: { id: reelId, ownerUserId: ownerUserId() } });
   if (!row) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
 
-  if (!input.scriptId?.trim()) {
-    const take = reel.takes.find((item) => item.id === row.finalTakeId) ?? null;
-    if (take) {
-      const bundle = await listTranscriptBundle(take.id);
-      const finalText = (
-        bundle.revisions.find((item) => item.id === bundle.selectedId)?.text ??
-        take.bodyText ??
-        ""
-      ).trim();
-      if (finalText) {
-        const text = buildCanonicalExportTxt({
-          title: reel.title,
-          finalTextLabel: "Итоговый текст",
-          finalText,
-        });
-        if (!canonicalExportLooksSafe(text)) {
-          throw new ExportError("Экспорт содержит служебные данные и не сохранён.", "EXPORT_LEAK");
-        }
-        return { filename: sanitizeExportFilename(reel.title), text, scriptId: "" };
-      }
+  if (input.scriptId?.trim()) {
+    const scripts = await listScriptBundle(reelId);
+    const scriptId = resolveCanonicalExportScriptId({
+      requestedId: input.scriptId,
+      finalScriptId: row.finalScriptId,
+      selectedScriptId: row.selectedScriptId,
+    });
+    if (!scriptId) {
+      throw new ExportError("Нет готового сценария для экспорта.", "EXPORT_EMPTY");
     }
+    const version = scripts.versions.find((item) => item.id === scriptId);
+    if (!version || version.reelId !== reelId) {
+      throw new ExportError("Версия сценария не найдена в этой мысли.", "EXPORT_NOT_IN_REEL", 404);
+    }
+    assertCanonicalScriptExportable(version.kind);
+    const text = buildCanonicalExportTxt({
+      title: reel.title,
+      scriptLabel: isHeadKind(version.kind) ? "Сценарий" : null,
+      scriptBody: version.body,
+    });
+    if (!canonicalExportLooksSafe(text)) {
+      throw new ExportError("Экспорт содержит служебные данные и не сохранён.", "EXPORT_LEAK");
+    }
+    return { filename: sanitizeExportFilename(reel.title), text, scriptId };
   }
 
-  const scripts = await listScriptBundle(reelId);
-  const scriptId = resolveCanonicalExportScriptId({
-    requestedId: input.scriptId,
-    finalScriptId: row.finalScriptId,
-    selectedScriptId: row.selectedScriptId,
+  const finalText = await readStrictFinalThoughtText(prisma, {
+    reelId,
+    finalTakeId: row.finalTakeId,
   });
-  if (!scriptId) {
-    throw new ExportError("Нет итогового текста для экспорта.", "EXPORT_EMPTY");
+  if (!finalText) {
+    throw new ExportError(
+      normalizeReelStatus(row.status) === "completed"
+        ? "Нет выбранной расшифровки итогового дубля."
+        : "Нет итогового текста для экспорта.",
+      "EXPORT_EMPTY",
+    );
   }
-  const version = scripts.versions.find((item) => item.id === scriptId);
-  if (!version || version.reelId !== reelId) {
-    throw new ExportError("Версия сценария не найдена в этой мысли.", "EXPORT_NOT_IN_REEL", 404);
-  }
-  assertCanonicalScriptExportable(version.kind);
-
-  const take = reel.takes.find((item) => item.id === row.finalTakeId) ?? null;
-  let takeText = take?.bodyText?.trim() || "";
-  if (take && !takeText) {
-    const bundle = await listTranscriptBundle(take.id);
-    takeText =
-      bundle.revisions.find((item) => item.id === bundle.selectedId)?.text ??
-      bundle.revisions[0]?.text ??
-      "";
-  }
-
   const text = buildCanonicalExportTxt({
     title: reel.title,
-    scriptLabel: isHeadKind(version.kind) ? "Сценарий" : null,
-    scriptBody: version.body,
-    takeLabel: take
-      ? `Итоговый дубль №${take.number} · ${TAKE_INPUT_TYPE_LABELS[take.inputType]}`
-      : null,
-    takeText,
+    finalTextLabel: "Итоговый текст",
+    finalText,
   });
   if (!canonicalExportLooksSafe(text)) {
     throw new ExportError("Экспорт содержит служебные данные и не сохранён.", "EXPORT_LEAK");
   }
-  return { filename: sanitizeExportFilename(reel.title), text, scriptId };
+  return { filename: sanitizeExportFilename(reel.title), text, scriptId: "" };
 }
 
 export function assertExportSafe(payload: unknown) {

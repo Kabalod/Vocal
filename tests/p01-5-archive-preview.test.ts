@@ -204,6 +204,8 @@ test("P01.5 preview endpoint returns summary without N+1 list fields", async (t)
     })
   ).json();
   assert.equal(donePreview.completed, true);
+  assert.equal(donePreview.acceptedScript, null);
+  assert.match(donePreview.noScriptHint ?? "", /Итоговый текст недоступен/);
 
   const missing = await GET(new Request("http://vocal.local/api/reels/missing/archive-preview"), {
     params: Promise.resolve({ id: "missing" }),

@@ -8,7 +8,12 @@ import { toJobDto } from "@/lib/serialize";
 import { saveUploadedTake } from "@/lib/takes";
 import { DEFAULT_THOUGHT_TITLE } from "@/lib/thought-create";
 import { applyThoughtTitleFromTranscript } from "@/lib/thought-title";
-import { maybePromoteWorkingTakeFromSelectedTranscript } from "@/lib/v06-working-take";
+import {
+  lockVocalReel,
+  promoteWorkingTakeInTx,
+  selectOriginalIfUnsetInTx,
+  v06TestSeams,
+} from "@/lib/v06-working-take";
 import {
   ALLOWED_AUDIO_EXTENSIONS,
   ALLOWED_EXTENSIONS,
@@ -179,11 +184,18 @@ export async function applyThoughtMediaFromTranscript(
   });
   if (!original) return;
 
-  await prisma.take.update({
-    where: { id: take.id },
-    data: { selectedTranscriptId: original.id },
+  await v06TestSeams.beforeAutoPromoteLock?.();
+  await prisma.$transaction(async (tx) => {
+    const locked = await lockVocalReel(tx, take.reelId);
+    if (!locked) return;
+    await v06TestSeams.afterAutoPromoteLocked?.();
+    await selectOriginalIfUnsetInTx(tx, {
+      takeId: take.id,
+      originalId: original.id,
+      originalText: original.text,
+    });
+    await promoteWorkingTakeInTx(tx, take.id);
   });
-  await maybePromoteWorkingTakeFromSelectedTranscript(take.id);
 
   if (key) {
     await applyThoughtTitleFromTranscript(take.reelId, transcript, complete);

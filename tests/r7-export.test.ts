@@ -102,9 +102,12 @@ test("canonical txt export is idempotent and does not include another thought", 
   assert.equal(first.text.includes(thoughtB.id), false);
   assert.equal(canonicalExportLooksSafe(first.text, [thoughtB.id]), true);
 
-  const res = await getExport(new Request(`http://vocal.local/api/reels/${thoughtA.id}/export?format=txt`), {
-    params: Promise.resolve({ id: thoughtA.id }),
-  });
+  const res = await getExport(
+    new Request(`http://vocal.local/api/reels/${thoughtA.id}/export?format=txt&scriptId=${scriptA.headId}`),
+    {
+      params: Promise.resolve({ id: thoughtA.id }),
+    },
+  );
   assert.equal(res.status, 200);
   assert.match(res.headers.get("content-type") ?? "", /text\/plain/);
   const body = await res.text();
@@ -112,6 +115,10 @@ test("canonical txt export is idempotent and does not include another thought", 
   assert.equal(body.includes("GROQ_API_KEY"), false);
   assert.equal(body.includes(thoughtB.id), false);
 
+  await assert.rejects(
+    () => exportCanonicalTxt(thoughtA.id),
+    (error: unknown) => error instanceof ExportError && error.code === "EXPORT_EMPTY",
+  );
   await assert.rejects(
     () => exportCanonicalTxt(thoughtA.id, { scriptId: "missing" }),
     (error: unknown) => error instanceof ExportError && error.code === "EXPORT_NOT_IN_REEL",

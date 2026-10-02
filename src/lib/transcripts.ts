@@ -1,9 +1,12 @@
 import { prisma } from "@/lib/db";
 import { ReelError } from "@/lib/reels";
 import { TAKE_TEXT_MAX } from "@/types/reel";
+import { normalizeReelStatus } from "@/types/reel";
 import {
-  assertCompletedFinalRevisionFrozen,
-  maybePromoteWorkingTakeFromSelectedTranscript,
+  lockVocalReel,
+  promoteWorkingTakeInTx,
+  selectOriginalIfUnsetInTx,
+  v06TestSeams,
 } from "@/lib/v06-working-take";
 import type {
   TranscriptBundleDto,
@@ -76,6 +79,25 @@ export async function findOriginalRevision(takeId: string) {
   });
 }
 
+async function throwIfCompletedFinalTake(
+  tx: Parameters<typeof lockVocalReel>[0],
+  takeId: string,
+) {
+  const take = await tx.take.findFirst({
+    where: { id: takeId },
+    select: { id: true, reelId: true },
+  });
+  if (!take) throw new ReelError("Дубль не найден.", "TAKE_NOT_FOUND", 404);
+  const reel = await tx.reel.findFirst({
+    where: { id: take.reelId },
+    select: { status: true, finalTakeId: true },
+  });
+  if (!reel) return;
+  if (normalizeReelStatus(reel.status) === "completed" && reel.finalTakeId === takeId) {
+    throw new ReelError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
+  }
+}
+
 export async function saveOriginalIfAbsent(
   takeId: string,
   input: {
@@ -89,30 +111,36 @@ export async function saveOriginalIfAbsent(
   const text = input.text.trim();
   if (!text) return findOriginalRevision(takeId);
 
-  const existing = await findOriginalRevision(takeId);
-  if (existing) return existing;
-
-  const created = await prisma.transcriptRevision.create({
-    data: {
-      takeId,
-      kind: "original",
-      source: input.source,
-      text,
-      segmentsJson: input.segments && input.segments.length > 0 ? JSON.stringify(input.segments) : null,
-      language: input.language ?? null,
-      sttModel: input.sttModel ?? null,
-    },
-  });
-
-  const take = await prisma.take.findUnique({ where: { id: takeId } });
-  if (take && !take.selectedTranscriptId) {
-    await prisma.take.update({
-      where: { id: takeId },
-      data: { selectedTranscriptId: created.id, bodyText: take.bodyText || text },
+  let original = await findOriginalRevision(takeId);
+  if (!original) {
+    original = await prisma.transcriptRevision.create({
+      data: {
+        takeId,
+        kind: "original",
+        source: input.source,
+        text,
+        segmentsJson: input.segments && input.segments.length > 0 ? JSON.stringify(input.segments) : null,
+        language: input.language ?? null,
+        sttModel: input.sttModel ?? null,
+      },
     });
-    await maybePromoteWorkingTakeFromSelectedTranscript(takeId);
   }
-  return created;
+
+  const peek = await prisma.take.findUnique({ where: { id: takeId }, select: { reelId: true } });
+  if (!peek) return original;
+  await v06TestSeams.beforeAutoPromoteLock?.();
+  await prisma.$transaction(async (tx) => {
+    const locked = await lockVocalReel(tx, peek.reelId);
+    if (!locked) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+    await v06TestSeams.afterAutoPromoteLocked?.();
+    await selectOriginalIfUnsetInTx(tx, {
+      takeId,
+      originalId: original.id,
+      originalText: original.text,
+    });
+    await promoteWorkingTakeInTx(tx, takeId);
+  });
+  return original;
 }
 
 export async function ensureOriginalFromText(takeId: string, text: string) {
@@ -179,8 +207,6 @@ export async function listTranscriptBundle(takeId: string): Promise<TranscriptBu
 }
 
 export async function createEditedRevision(takeId: string, textRaw: string) {
-  await assertCompletedFinalRevisionFrozen(prisma, takeId);
-  const take = await takeOrThrow(takeId);
   const text = textRaw.trim();
   if (!text) throw new ReelError("Введите текст расшифровки.", "TEXT_REQUIRED");
   if (text.length > TAKE_TEXT_MAX) {
@@ -188,42 +214,53 @@ export async function createEditedRevision(takeId: string, textRaw: string) {
   }
 
   await importMissingOriginalsForTake(takeId);
+  const peek = await takeOrThrow(takeId);
   const original = await findOriginalRevision(takeId);
-  const parentId = take.selectedTranscriptId ?? original?.id ?? null;
-
-  const created = await prisma.transcriptRevision.create({
-    data: {
-      takeId,
-      kind: "edit" satisfies TranscriptKind,
-      source: "manual",
-      text,
-      segmentsJson: null,
-      parentId,
-    },
+  await v06TestSeams.beforeRevisionWriteLock?.();
+  await prisma.$transaction(async (tx) => {
+    const locked = await lockVocalReel(tx, peek.reelId);
+    if (!locked) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+    await v06TestSeams.afterRevisionWriteLocked?.();
+    await throwIfCompletedFinalTake(tx, takeId);
+    const take = await tx.take.findUniqueOrThrow({ where: { id: takeId } });
+    const parentId = take.selectedTranscriptId ?? original?.id ?? null;
+    const created = await tx.transcriptRevision.create({
+      data: {
+        takeId,
+        kind: "edit" satisfies TranscriptKind,
+        source: "manual",
+        text,
+        segmentsJson: null,
+        parentId,
+      },
+    });
+    await tx.take.update({
+      where: { id: takeId },
+      data: { selectedTranscriptId: created.id, bodyText: text },
+    });
+    await promoteWorkingTakeInTx(tx, takeId);
   });
-
-  await prisma.take.update({
-    where: { id: takeId },
-    data: { selectedTranscriptId: created.id, bodyText: text },
-  });
-  await maybePromoteWorkingTakeFromSelectedTranscript(takeId);
-
   return listTranscriptBundle(takeId);
 }
 
 export async function selectTranscriptRevision(takeId: string, revisionId: string) {
-  await assertCompletedFinalRevisionFrozen(prisma, takeId);
-  await takeOrThrow(takeId);
-  const revision = await prisma.transcriptRevision.findFirst({
-    where: { id: revisionId, takeId },
+  const peek = await takeOrThrow(takeId);
+  await v06TestSeams.beforeRevisionWriteLock?.();
+  await prisma.$transaction(async (tx) => {
+    const locked = await lockVocalReel(tx, peek.reelId);
+    if (!locked) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+    await v06TestSeams.afterRevisionWriteLocked?.();
+    await throwIfCompletedFinalTake(tx, takeId);
+    const revision = await tx.transcriptRevision.findFirst({
+      where: { id: revisionId, takeId },
+    });
+    if (!revision) throw new ReelError("Версия расшифровки не найдена.", "REVISION_NOT_FOUND", 404);
+    await tx.take.update({
+      where: { id: takeId },
+      data: { selectedTranscriptId: revision.id, bodyText: revision.text },
+    });
+    await promoteWorkingTakeInTx(tx, takeId);
   });
-  if (!revision) throw new ReelError("Версия расшифровки не найдена.", "REVISION_NOT_FOUND", 404);
-
-  await prisma.take.update({
-    where: { id: takeId },
-    data: { selectedTranscriptId: revision.id, bodyText: revision.text },
-  });
-  await maybePromoteWorkingTakeFromSelectedTranscript(takeId);
   return listTranscriptBundle(takeId);
 }
 

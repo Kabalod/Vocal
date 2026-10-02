@@ -56,9 +56,8 @@ export async function updateTake(id: string, input: UpdateTakeInput): Promise<Ta
     }
     data.authorNote = note;
   }
+  let nextBodyText: string | undefined;
   if (input.bodyText !== undefined) {
-    const { assertCompletedFinalRevisionFrozen } = await import("@/lib/v06-working-take");
-    await assertCompletedFinalRevisionFrozen(prisma, id);
     if (existing.inputType !== "text") {
       throw new ReelError("Текст можно править только у текстовой попытки.", "NOT_TEXT_TAKE");
     }
@@ -67,7 +66,7 @@ export async function updateTake(id: string, input: UpdateTakeInput): Promise<Ta
       throw new ReelError(`Текст короче ${TAKE_TEXT_MAX} символов.`, "TEXT_TOO_LONG");
     }
     if (!text.trim()) throw new ReelError("Введите текст попытки.", "TEXT_REQUIRED");
-    data.bodyText = text;
+    nextBodyText = text;
   }
   if (input.scriptVersionId !== undefined) {
     if (input.scriptVersionId === null || input.scriptVersionId === "") {
@@ -84,21 +83,23 @@ export async function updateTake(id: string, input: UpdateTakeInput): Promise<Ta
       data.scriptVersionId = input.scriptVersionId;
     }
   }
-  if (Object.keys(data).length === 0) {
+  if (Object.keys(data).length === 0 && nextBodyText === undefined) {
     throw new ReelError("Нет полей для сохранения.", "EMPTY_PATCH");
   }
 
-  await prisma.take.update({ where: { id }, data });
-  if (data.bodyText) {
+  if (Object.keys(data).length > 0) {
+    await prisma.take.update({ where: { id }, data });
+  }
+  if (nextBodyText !== undefined) {
     const existingOriginal = await prisma.transcriptRevision.findFirst({
       where: { takeId: id, kind: "original" },
     });
     if (existingOriginal) {
       const { createEditedRevision } = await import("@/lib/transcripts");
-      await createEditedRevision(id, data.bodyText);
+      await createEditedRevision(id, nextBodyText);
     } else {
       const { ensureOriginalFromText } = await import("@/lib/transcripts");
-      await ensureOriginalFromText(id, data.bodyText);
+      await ensureOriginalFromText(id, nextBodyText);
     }
   }
   const row = await prisma.take.findUnique({ where: { id }, include: takeInclude });

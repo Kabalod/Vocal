@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
 import { ReelError } from "@/lib/reels";
 import { thoughtProcessingPhase } from "@/lib/thought-media";
+import { readStrictFinalThoughtText } from "@/lib/v06-working-take";
 import { thoughtUserStatus } from "@/lib/thought-preview";
 import {
   normalizeReelStatus,
@@ -134,23 +135,16 @@ export async function getArchiveThoughtPreview(reelId: string): Promise<ArchiveT
     finalScriptId: reel.finalScriptId,
     versions: reel.scripts,
   });
-  if (status === "completed" && reel.finalTakeId) {
-    const take = await prisma.take.findFirst({
-      where: { id: reel.finalTakeId, reelId },
-      select: { id: true, selectedTranscriptId: true, bodyText: true },
+  let missingFinalTextHint: string | null = null;
+  if (status === "completed") {
+    const text = await readStrictFinalThoughtText(prisma, {
+      reelId,
+      finalTakeId: reel.finalTakeId,
     });
-    if (take) {
-      const revision = take.selectedTranscriptId
-        ? await prisma.transcriptRevision.findFirst({
-            where: { id: take.selectedTranscriptId, takeId: take.id },
-            select: { text: true },
-          })
-        : null;
-      const text = (revision?.text ?? take.bodyText).trim();
-      if (text) {
-        accepted = { id: take.id, kind: "ready", body: text, createdAt: new Date(0) };
-      }
-    }
+    accepted = text
+      ? { id: reel.finalTakeId ?? reel.id, kind: "ready", body: text, createdAt: new Date(0) }
+      : null;
+    if (!accepted) missingFinalTextHint = "Итоговый текст недоступен.";
   }
   const honesty = archivePreviewHonesty(job);
   const acceptedScript = accepted
@@ -172,6 +166,6 @@ export async function getArchiveThoughtPreview(reelId: string): Promise<ArchiveT
     honesty: honesty.honesty,
     honestyMessage: honesty.message,
     acceptedScript,
-    noScriptHint: acceptedScript ? null : ARCHIVE_NO_SCRIPT_HINT,
+    noScriptHint: acceptedScript ? null : missingFinalTextHint ?? ARCHIVE_NO_SCRIPT_HINT,
   };
 }

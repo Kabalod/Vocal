@@ -76,7 +76,7 @@ export function CompletionSummary({
   if (!reel) return null;
 
   const take = reel.takes.find((row) => row.id === reel.finalTakeId) ?? null;
-  const hasFinalText = Boolean(exportText.trim() || take?.bodyText?.trim());
+  const hasFinalText = Boolean(exportText.trim());
   const gate = thoughtCompletionGate({
     finalTakeId: reel.finalTakeId,
     hasFinalText: reel.finalTakeId ? hasFinalText : undefined,
