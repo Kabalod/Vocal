@@ -221,3 +221,189 @@ test("V05 fact correction excludes only the corrected source, not later takes or
   const superUnchanged = await prisma.transcriptRevision.findUniqueOrThrow({ where: { id: superTranscript.id } });
   assert.equal(superUnchanged.text, supersedeOld);
 });
+
+test("V05 initial_note correction excludes creation take original, not later takes or later edits", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
+  await resetPrismaClient();
+  resetAiInflightForTests();
+  resetV05TestSeams();
+  t.after(async () => {
+    resetV05TestSeams();
+    resetAiInflightForTests();
+    await prisma.$disconnect();
+    await resetPrismaClient();
+  });
+
+  const { createThoughtFromText } = await import("../src/lib/thought-create");
+  const { applyThoughtState, getThoughtState } = await import("../src/lib/thought-state");
+  const { collectV05SourceTexts, generateV05Script } = await import("../src/lib/v05-script");
+  const { sendDialogueMessage } = await import("../src/lib/dialogue");
+  const { createTake } = await import("../src/lib/reels");
+  const { createEditedRevision, ensureOriginalFromText } = await import("../src/lib/transcripts");
+
+  const noteMeaning = "Снятый смысл initial_note: я украл чужой отпуск в Сочи.";
+  const { reel } = await createThoughtFromText({
+    title: "Scope initial note",
+    body: noteMeaning,
+    idempotencyKey: "v05-scope-initial-note",
+  });
+  const take1 = await prisma.take.findFirstOrThrow({ where: { reelId: reel.id, number: 1, inputType: "text" } });
+  const original = await prisma.transcriptRevision.findFirstOrThrow({
+    where: { takeId: take1.id, kind: "original" },
+    orderBy: { createdAt: "asc" },
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: {
+      facts: [
+        {
+          id: "fact_note",
+          text: noteMeaning,
+          sourceType: "initial_note",
+          sourceId: reel.id,
+        },
+      ],
+    },
+  });
+
+  await sendDialogueMessage(
+    reel.id,
+    { text: "Это сказал оператор, не я.", idempotencyKey: "v05-scope-retract-note" },
+    async () => {
+      const user = await prisma.dialogueMessage.findFirstOrThrow({
+        where: { thread: { reelId: reel.id }, role: "user", body: "Это сказал оператор, не я." },
+        orderBy: { createdAt: "desc" },
+      });
+      const state = await getThoughtState(reel.id);
+      return {
+        text: askQuestionJson(
+          "Что тогда ваше?",
+          undefined,
+          c00SignalFor("wrong_speaker", "correct_thought", user.id, state.revision, {
+            targetKind: "fact",
+            targetId: "fact_note",
+            operation: "clear_slot",
+          }),
+        ),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+    },
+  );
+
+  const afterRetract = await getThoughtState(reel.id);
+  assert.equal(afterRetract.facts.some((fact) => fact.id === "fact_note"), false);
+  const afterNote = await collectV05SourceTexts(reel.id);
+  assert.equal(afterNote.texts.some((item) => item.text.includes(noteMeaning)), false);
+  assert.equal(afterNote.keys.includes(`transcript:${original.id}`), false);
+  assert.equal(afterNote.keys.includes(`take:${take1.id}`), false);
+
+  const editMeaning = "Отдельная правка take 1: только свой утренний чай.";
+  await createEditedRevision(take1.id, editMeaning);
+  const edit = await prisma.transcriptRevision.findFirstOrThrow({
+    where: { takeId: take1.id, kind: "edit" },
+    orderBy: { createdAt: "desc" },
+  });
+  const afterEdit = await collectV05SourceTexts(reel.id);
+  assert.equal(afterEdit.texts.some((item) => item.text.includes(noteMeaning)), false);
+  assert.equal(afterEdit.texts.some((item) => item.text.includes(editMeaning)), true);
+  assert.equal(afterEdit.keys.includes(`transcript:${edit.id}`), true);
+  assert.equal(afterEdit.keys.includes(`transcript:${original.id}`), false);
+
+  const t2Meaning = "Независимый дубль T2 после initial_note: вечером гуляю.";
+  const take2 = await createTake(reel.id, {
+    inputType: "text",
+    bodyText: t2Meaning,
+    idempotencyKey: "v05-scope-note-t2",
+  });
+  const transcript2 = await ensureOriginalFromText(take2.id, t2Meaning);
+  assert.ok(transcript2);
+  await prisma.reel.update({ where: { id: reel.id }, data: { workingTakeId: take2.id } });
+  await prisma.take.update({
+    where: { id: take2.id },
+    data: { selectedTranscriptId: transcript2.id, bodyText: t2Meaning },
+  });
+  const afterT2 = await collectV05SourceTexts(reel.id);
+  assert.equal(afterT2.texts.some((item) => item.text.includes(noteMeaning)), false);
+  assert.equal(afterT2.texts.some((item) => item.text.includes(t2Meaning)), true);
+  let seenT2 = "";
+  await generateV05Script(reel.id, { idempotencyKey: "v05-scope-note-t2-gen" }, async (req) => {
+    seenT2 = req.user;
+    return { text: JSON.stringify({ script: "Только T2." }) };
+  });
+  assert.match(seenT2, /Независимый дубль T2 после initial_note/);
+  assert.equal(seenT2.includes(noteMeaning), false);
+
+  const supersedeOld = "Старый initial_note для supersede: украл чужой отпуск.";
+  const supersedeNew = "исправленный факт: только свой чай";
+  const superReel = await createThoughtFromText({
+    title: "Scope initial supersede",
+    body: supersedeOld,
+    idempotencyKey: "v05-scope-initial-supersede",
+  });
+  const superTake = await prisma.take.findFirstOrThrow({
+    where: { reelId: superReel.reel.id, number: 1, inputType: "text" },
+  });
+  const superOriginal = await prisma.transcriptRevision.findFirstOrThrow({
+    where: { takeId: superTake.id, kind: "original" },
+  });
+  await applyThoughtState({
+    reelId: superReel.reel.id,
+    expectedRevision: 0,
+    patch: {
+      facts: [
+        {
+          id: "fact_note_super",
+          text: supersedeOld,
+          sourceType: "initial_note",
+          sourceId: superReel.reel.id,
+        },
+      ],
+    },
+  });
+  await sendDialogueMessage(
+    superReel.reel.id,
+    { text: supersedeNew, idempotencyKey: "v05-scope-initial-supersede-1" },
+    async () => {
+      const user = await prisma.dialogueMessage.findFirstOrThrow({
+        where: { thread: { reelId: superReel.reel.id }, role: "user", body: supersedeNew },
+        orderBy: { createdAt: "desc" },
+      });
+      const state = await getThoughtState(superReel.reel.id);
+      return {
+        text: askQuestionJson(
+          "Зафиксировал.",
+          {
+            fact: { text: supersedeNew, sourceType: "dialogue_message", sourceId: user.id },
+            closeGapIds: [],
+          },
+          c00SignalFor("local_correction", "correct_thought", user.id, state.revision, {
+            targetKind: "fact",
+            targetId: "fact_note_super",
+            operation: "supersede",
+          }),
+        ),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+    },
+  );
+  const afterSuper = await getThoughtState(superReel.reel.id);
+  assert.equal(afterSuper.facts.some((fact) => fact.id === "fact_note_super" && fact.text === supersedeNew), true);
+  const superSources = await collectV05SourceTexts(superReel.reel.id);
+  assert.equal(superSources.texts.some((item) => item.text.includes(supersedeNew)), true);
+  assert.equal(superSources.texts.some((item) => item.text.includes(supersedeOld)), false);
+  assert.equal(superSources.keys.includes(`transcript:${superOriginal.id}`), false);
+  let seenSuper = "";
+  await generateV05Script(superReel.reel.id, { idempotencyKey: "v05-scope-initial-supersede-gen" }, async (req) => {
+    seenSuper = req.user;
+    return { text: JSON.stringify({ script: "Только новый факт." }) };
+  });
+  assert.match(seenSuper, /исправленный факт: только свой чай/);
+  assert.equal(seenSuper.includes(supersedeOld), false);
+
+  const originalUnchanged = await prisma.transcriptRevision.findUniqueOrThrow({ where: { id: original.id } });
+  assert.equal(originalUnchanged.text, noteMeaning);
+  const superOriginalUnchanged = await prisma.transcriptRevision.findUniqueOrThrow({ where: { id: superOriginal.id } });
+  assert.equal(superOriginalUnchanged.text, supersedeOld);
+});

@@ -265,23 +265,52 @@ function rawSourceKey(sourceType: ThoughtFactSourceType | "take", sourceId: stri
 type ExcludedRawSources = {
   exact: Set<string>;
   conservativeTranscriptIds: Set<string>;
+  creationTakeIds: Set<string>;
+  creationOriginalRevisionIds: Set<string>;
 };
+
+async function loadCreationTextOrigin(reelId: string, db: ScriptDb) {
+  const take = await db.take.findFirst({
+    where: { reelId, number: 1, inputType: "text" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true },
+  });
+  if (!take) return null;
+  const original = await db.transcriptRevision.findFirst({
+    where: { takeId: take.id, kind: "original" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true },
+  });
+  return { takeId: take.id, originalRevisionId: original?.id ?? null };
+}
 
 async function loadExcludedRawSources(reelId: string, db: ScriptDb): Promise<ExcludedRawSources> {
   const exact = new Set<string>();
   const conservativeTranscriptIds = new Set<string>();
+  const creationTakeIds = new Set<string>();
+  const creationOriginalRevisionIds = new Set<string>();
   const corrections = await loadFactCorrections(reelId, db);
   for (const row of corrections) {
     const facts = thoughtFactsFromDialogueCall(row);
     const target = facts?.find((fact) => fact.id === row.correction.targetId);
     if (target) {
       exact.add(rawSourceKey(target.sourceType, target.sourceId));
+      if (target.sourceType === "initial_note" && target.sourceId === reelId) {
+        const origin = await loadCreationTextOrigin(reelId, db);
+        if (origin) {
+          creationTakeIds.add(origin.takeId);
+          if (origin.originalRevisionId) {
+            creationOriginalRevisionIds.add(origin.originalRevisionId);
+            exact.add(rawSourceKey("transcript_revision", origin.originalRevisionId));
+          }
+        }
+      }
       continue;
     }
     const freezeTranscriptId = snapshotTranscriptRevisionId(row.inputSnapshotJson);
     if (freezeTranscriptId) conservativeTranscriptIds.add(freezeTranscriptId);
   }
-  return { exact, conservativeTranscriptIds };
+  return { exact, conservativeTranscriptIds, creationTakeIds, creationOriginalRevisionIds };
 }
 
 function omitWorkingRaw(input: {
@@ -290,12 +319,15 @@ function omitWorkingRaw(input: {
   citedTranscriptIds: Set<string>;
   excluded: ExcludedRawSources;
 }) {
-  if (input.selectedTranscriptId && input.citedTranscriptIds.has(input.selectedTranscriptId)) return true;
-  if (input.selectedTranscriptId && input.excluded.exact.has(rawSourceKey("transcript_revision", input.selectedTranscriptId))) {
-    return true;
+  const selected = input.selectedTranscriptId;
+  if (selected && input.citedTranscriptIds.has(selected)) return true;
+  if (selected && input.excluded.exact.has(rawSourceKey("transcript_revision", selected))) return true;
+  if (selected && input.excluded.creationOriginalRevisionIds.has(selected)) return true;
+  if (selected && input.excluded.conservativeTranscriptIds.has(selected)) return true;
+  if (input.workingTakeId && input.excluded.exact.has(rawSourceKey("take", input.workingTakeId))) {
+    if (!selected || input.excluded.creationOriginalRevisionIds.has(selected)) return true;
   }
-  if (input.workingTakeId && input.excluded.exact.has(rawSourceKey("take", input.workingTakeId))) return true;
-  if (input.selectedTranscriptId && input.excluded.conservativeTranscriptIds.has(input.selectedTranscriptId)) return true;
+  if (!selected && input.workingTakeId && input.excluded.creationTakeIds.has(input.workingTakeId)) return true;
   return false;
 }
 
