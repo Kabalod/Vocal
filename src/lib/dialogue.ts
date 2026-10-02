@@ -481,7 +481,7 @@ async function freezeThoughtPrompt(
   ]
     .filter(Boolean)
     .join("\n\n");
-  return { prompt, material };
+  return { prompt, material, thoughtFacts: thought.facts };
 }
 
 export async function buildThoughtMaterialContext(reelId: string): Promise<string> {
@@ -715,7 +715,7 @@ export async function runDialogueTurn(
       userMessageId: userMessage.id,
       complete,
     });
-    const { prompt: userPrompt, material } = await freezeThoughtPrompt(reelId, thread.id, text, {
+    const { prompt: userPrompt, material, thoughtFacts } = await freezeThoughtPrompt(reelId, thread.id, text, {
       userMessageId: userMessage.id,
     });
     await prisma.aiCall.update({
@@ -733,6 +733,7 @@ export async function runDialogueTurn(
           reelUpdatedAt: material.reelUpdatedAt,
           dialogueVersion: material.dialogueVersion,
           thoughtStateRevision: material.thoughtStateRevision,
+          thoughtFacts,
         }),
       },
     });

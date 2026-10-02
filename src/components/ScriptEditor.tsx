@@ -81,6 +81,9 @@ export function ScriptEditor({
   const session = sessionRef.current;
   const snap = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
 
+  const viewingIdRef = useRef<string | null>(null);
+  viewingIdRef.current = viewingId;
+
   const applyWorkspace = useCallback((next: ScriptWorkspaceDto, keepDraftText: boolean) => {
     setWorkspace(next);
     if (next.viewing) {
@@ -97,7 +100,8 @@ export function ScriptEditor({
 
   const load = useCallback(
     async (view?: string | null) => {
-      const query = view ? `?view=${encodeURIComponent(view)}` : "";
+      const selected = view !== undefined ? view : viewingIdRef.current;
+      const query = selected ? `?view=${encodeURIComponent(selected)}` : "";
       const res = await fetch(`/api/reels/${reelId}/scripts${query}`, { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить сценарий.");

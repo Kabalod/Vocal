@@ -132,14 +132,14 @@ export class ScriptDraftSaveSession {
   }
 
   applyPatchAck(draft: { body: string; updatedAt: string; saveToken: number }, sent: { body: string; localEditVersion: number }) {
-    this.savedBody = sent.body;
+    this.savedBody = draft.body;
     this.expectedUpdatedAt = draft.updatedAt;
     this.expectedSaveToken = draft.saveToken;
     if (this.localEditVersion > sent.localEditVersion) {
       this.emit();
       return;
     }
-    this.body = sent.body;
+    this.body = draft.body;
     this.hydratedEditVersion = sent.localEditVersion;
     this.emit();
   }
@@ -172,33 +172,22 @@ export class ScriptDraftSaveSession {
   save() {
     const sentBody = this.body;
     const sentEditVersion = this.localEditVersion;
-    const expectedUpdatedAt = this.expectedUpdatedAt;
-    const expectedSaveToken = this.expectedSaveToken;
-    if (expectedUpdatedAt != null && expectedSaveToken != null && this.savedBody !== sentBody) {
+    if (this.expectedUpdatedAt != null && this.expectedSaveToken != null && this.savedBody !== sentBody) {
       this.beginSave();
     }
-    return this.enqueue(() =>
-      this.saveNow({
-        sentBody,
-        sentEditVersion,
-        expectedUpdatedAt,
-        expectedSaveToken,
-      }),
-    );
+    return this.enqueue(() => this.saveNow({ sentBody, sentEditVersion }));
   }
 
   private async saveNow(sent?: {
     sentBody: string;
     sentEditVersion: number;
-    expectedUpdatedAt: string | null;
-    expectedSaveToken: number | null;
   }): Promise<ScriptDraftPatchOk | null> {
-    const expectedUpdatedAt = sent?.expectedUpdatedAt ?? this.expectedUpdatedAt;
-    const expectedSaveToken = sent?.expectedSaveToken ?? this.expectedSaveToken;
     const sentBody = sent?.sentBody ?? this.body;
     const sentEditVersion = sent?.sentEditVersion ?? this.localEditVersion;
+    const expectedUpdatedAt = this.expectedUpdatedAt;
+    const expectedSaveToken = this.expectedSaveToken;
     if (expectedUpdatedAt == null || expectedSaveToken == null) return null;
-    if (this.savedBody === sentBody && this.localEditVersion === sentEditVersion) {
+    if (this.savedBody === sentBody) {
       return {
         draft: {
           body: sentBody,

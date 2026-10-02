@@ -11,8 +11,10 @@ import { createAcceptedScriptFromText, listScriptWorkspace, ScriptError } from "
 import {
   isNonContentUtterance,
   normalizeDialogueUtterance,
+  parseFacts,
   parseThoughtStateLists,
   type ThoughtFact,
+  type ThoughtFactSourceType,
   type ThoughtGap,
 } from "@/lib/thought-state";
 import { v05TestSeams } from "@/lib/v05-test-seams";
@@ -169,19 +171,132 @@ async function loadThought(reelId: string, db: ScriptDb): Promise<LoadedThought 
 async function loadFactCorrections(reelId: string, db: ScriptDb) {
   const rows = await db.aiCall.findMany({
     where: { reelId, kind: "dialogue", status: "done" },
-    select: { id: true, resultJson: true },
+    select: { id: true, resultJson: true, promptText: true, inputSnapshotJson: true },
   });
-  return listAcceptedC00Corrections(rows).filter((row) => row.correction.targetKind === "fact");
+  return listAcceptedC00Corrections(rows)
+    .filter((row) => row.correction.targetKind === "fact")
+    .map((row) => {
+      const call = rows.find((item) => item.id === row.aiCallId);
+      return {
+        ...row,
+        promptText: call?.promptText ?? null,
+        inputSnapshotJson: call?.inputSnapshotJson ?? null,
+      };
+    });
 }
 
-function workingRawSourceTainted(input: {
+function parseJsonObjectAfterLabel(text: string, label: string): Record<string, unknown> | null {
+  const idx = text.indexOf(label);
+  if (idx < 0) return null;
+  const start = text.indexOf("{", idx + label.length);
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{") depth += 1;
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          const parsed = JSON.parse(text.slice(start, i + 1)) as unknown;
+          return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function thoughtFactsFromDialogueCall(input: { promptText: string | null; inputSnapshotJson: string | null }): ThoughtFact[] | null {
+  if (input.inputSnapshotJson?.trim()) {
+    try {
+      const snap = JSON.parse(input.inputSnapshotJson) as { thoughtFacts?: unknown };
+      if (snap.thoughtFacts !== undefined) return parseFacts(snap.thoughtFacts);
+    } catch {
+      /* journal snapshot without structured facts */
+    }
+  }
+  if (!input.promptText) return null;
+  const thought = parseJsonObjectAfterLabel(input.promptText, "Состояние мысли:");
+  if (!thought || thought.facts === undefined) return null;
+  try {
+    return parseFacts(thought.facts);
+  } catch {
+    return null;
+  }
+}
+
+function snapshotTranscriptRevisionId(raw: string | null): string | null {
+  if (!raw?.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw) as { transcriptRevisionId?: unknown };
+    return typeof parsed.transcriptRevisionId === "string" && parsed.transcriptRevisionId.trim()
+      ? parsed.transcriptRevisionId
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function rawSourceKey(sourceType: ThoughtFactSourceType | "take", sourceId: string) {
+  return `${sourceType}:${sourceId}`;
+}
+
+type ExcludedRawSources = {
+  exact: Set<string>;
+  conservativeTranscriptIds: Set<string>;
+};
+
+async function loadExcludedRawSources(reelId: string, db: ScriptDb): Promise<ExcludedRawSources> {
+  const exact = new Set<string>();
+  const conservativeTranscriptIds = new Set<string>();
+  const corrections = await loadFactCorrections(reelId, db);
+  for (const row of corrections) {
+    const facts = thoughtFactsFromDialogueCall(row);
+    const target = facts?.find((fact) => fact.id === row.correction.targetId);
+    if (target) {
+      exact.add(rawSourceKey(target.sourceType, target.sourceId));
+      continue;
+    }
+    const freezeTranscriptId = snapshotTranscriptRevisionId(row.inputSnapshotJson);
+    if (freezeTranscriptId) conservativeTranscriptIds.add(freezeTranscriptId);
+  }
+  return { exact, conservativeTranscriptIds };
+}
+
+function omitWorkingRaw(input: {
   selectedTranscriptId: string | null;
+  workingTakeId: string | null;
   citedTranscriptIds: Set<string>;
-  factCorrections: Array<{ correction: { targetId: string; operation: string } }>;
-  remainingFacts: ThoughtFact[];
+  excluded: ExcludedRawSources;
 }) {
   if (input.selectedTranscriptId && input.citedTranscriptIds.has(input.selectedTranscriptId)) return true;
-  return input.factCorrections.length > 0;
+  if (input.selectedTranscriptId && input.excluded.exact.has(rawSourceKey("transcript_revision", input.selectedTranscriptId))) {
+    return true;
+  }
+  if (input.workingTakeId && input.excluded.exact.has(rawSourceKey("take", input.workingTakeId))) return true;
+  if (input.selectedTranscriptId && input.excluded.conservativeTranscriptIds.has(input.selectedTranscriptId)) return true;
+  return false;
 }
 
 export function isCraftInstruction(text: string) {
@@ -221,12 +336,12 @@ async function collectFromLoaded(reelId: string, material: Omit<V05Material, "ke
   const citedTranscriptIds = new Set(
     (thought?.facts ?? []).filter((fact) => fact.sourceType === "transcript_revision").map((fact) => fact.sourceId),
   );
-  const factCorrections = await loadFactCorrections(reelId, db);
-  const rawWorkingTainted = workingRawSourceTainted({
+  const excluded = await loadExcludedRawSources(reelId, db);
+  const rawWorkingTainted = omitWorkingRaw({
     selectedTranscriptId: material.selectedTranscript?.id ?? null,
+    workingTakeId: material.workingTake?.id ?? null,
     citedTranscriptIds,
-    factCorrections,
-    remainingFacts: thought?.facts ?? [],
+    excluded,
   });
   if (!rawWorkingTainted && material.workingTake?.inputType === "text") {
     const label = takeMaterialLabel("text", material.workingTake.number);

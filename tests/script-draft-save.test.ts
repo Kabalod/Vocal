@@ -66,6 +66,43 @@ test("generate hydrate keeps unsaved local textarea edits", () => {
   assert.equal(session.hasUnsavedLocalEdits(), true);
 });
 
+test("queued save(B) uses token after PATCH A ack, not the enqueue-time token", async () => {
+  let releaseA!: () => void;
+  const holdA = new Promise<void>((resolve) => {
+    releaseA = resolve;
+  });
+  const sentTokens: number[] = [];
+  const session = new ScriptDraftSaveSession({
+    patch: async (input) => {
+      sentTokens.push(input.expectedSaveToken);
+      if (input.body === "A") await holdA;
+      return {
+        draft: {
+          body: input.body,
+          updatedAt: `t${input.expectedSaveToken}`,
+          saveToken: input.expectedSaveToken + 1,
+        },
+      };
+    },
+  });
+  session.hydrate({ body: "init", updatedAt: "t0", saveToken: 1 }, false);
+  session.setBody("A");
+  const saveA = session.save();
+  await Promise.resolve();
+  await Promise.resolve();
+  session.setBody("B");
+  const saveB = session.save();
+  releaseA();
+  await saveA;
+  await saveB;
+  assert.deepEqual(sentTokens, [1, 2]);
+  assert.equal(session.body, "B");
+  assert.equal(session.savedBody, "B");
+  assert.equal(session.expectedSaveToken, 3);
+  assert.equal(session.error, null);
+  assert.equal(session.hasUnsavedLocalEdits(), false);
+});
+
 test("PATCH ack keeps newer local body unsaved after sent A", async () => {
   let release!: () => void;
   const hold = new Promise<void>((resolve) => {
