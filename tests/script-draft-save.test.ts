@@ -25,6 +25,32 @@ function composerMarkup(session: ScriptDraftSaveSession, handlers: { onFinalize?
   );
 }
 
+test("new session hydrates nonempty server draft into the textarea", () => {
+  const session = new ScriptDraftSaveSession({
+    patch: async (input) => ({
+      draft: { body: input.body, updatedAt: "t1", saveToken: input.expectedSaveToken + 1 },
+    }),
+  });
+  assert.equal(session.body, "");
+  session.hydrate({ body: "серверный черновик", updatedAt: "t0", saveToken: 1 }, false);
+  assert.equal(session.body, "серверный черновик");
+  assert.equal(session.savedBody, "серверный черновик");
+  assert.equal(session.hasUnsavedLocalEdits(), false);
+});
+
+test("clean session replaces textarea with a newer server draft", () => {
+  const session = new ScriptDraftSaveSession({
+    patch: async (input) => ({
+      draft: { body: input.body, updatedAt: "t2", saveToken: input.expectedSaveToken + 1 },
+    }),
+  });
+  session.hydrate({ body: "первый сервер", updatedAt: "t0", saveToken: 1 }, false);
+  session.hydrate({ body: "второй сервер", updatedAt: "t1", saveToken: 2 }, false);
+  assert.equal(session.body, "второй сервер");
+  assert.equal(session.savedBody, "второй сервер");
+  assert.equal(session.hasUnsavedLocalEdits(), false);
+});
+
 test("generate hydrate keeps unsaved local textarea edits", () => {
   const session = new ScriptDraftSaveSession({
     patch: async (input) => ({
@@ -34,9 +60,34 @@ test("generate hydrate keeps unsaved local textarea edits", () => {
   session.hydrate({ body: "сервер до генерации", updatedAt: "t0", saveToken: 1 }, false);
   session.setBody("пользователь меняет textarea");
   assert.equal(session.hasUnsavedLocalEdits(), true);
-  session.hydrate({ body: "новая версия с сервера", updatedAt: "t2", saveToken: 2 }, session.hasUnsavedLocalEdits());
+  session.hydrate({ body: "новая версия с сервера", updatedAt: "t2", saveToken: 2 }, false);
   assert.equal(session.body, "пользователь меняет textarea");
   assert.equal(session.savedBody, "новая версия с сервера");
+  assert.equal(session.hasUnsavedLocalEdits(), true);
+});
+
+test("PATCH ack keeps newer local body unsaved after sent A", async () => {
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const session = new ScriptDraftSaveSession({
+    patch: async (input) => {
+      await hold;
+      return { draft: { body: input.body, updatedAt: "t1", saveToken: input.expectedSaveToken + 1 } };
+    },
+  });
+  session.hydrate({ body: "init", updatedAt: "t0", saveToken: 1 }, false);
+  session.setBody("A");
+  const pending = session.save();
+  await Promise.resolve();
+  session.setBody("B");
+  release();
+  await pending;
+  assert.equal(session.body, "B");
+  assert.equal(session.savedBody, "A");
+  assert.equal(session.expectedSaveToken, 2);
+  assert.equal(session.hasUnsavedLocalEdits(), true);
 });
 
 test("ScriptEditor binds composer to session snapshot, not a late finally", () => {

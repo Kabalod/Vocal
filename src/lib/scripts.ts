@@ -345,6 +345,8 @@ export async function listScriptWorkspace(reelId: string, viewId?: string | null
     sources: await listAvailableSources(reelId),
     phase: "empty" as const,
     stale: Boolean(draftDto?.stale),
+    viewingStale: false,
+    draftStale: Boolean(draftDto?.stale),
     canGenerate: false,
     blockReason: null as string | null,
     nextQuestion: null as { text: string; gapId: string | null } | null,

@@ -13,14 +13,23 @@ export const POST = withApiUser(async function POST(_request: Request, context: 
     const { id } = await context.params;
     let versionId: string | null | undefined;
     let draft = false;
+    let draftId: string | undefined;
+    let expectedSaveToken: number | undefined;
     try {
-      const body = (await _request.json()) as { versionId?: unknown; draft?: unknown };
+      const body = (await _request.json()) as {
+        versionId?: unknown;
+        draft?: unknown;
+        draftId?: unknown;
+        expectedSaveToken?: unknown;
+      };
       if (typeof body.versionId === "string") versionId = body.versionId;
       if (body.draft === true) draft = true;
+      if (typeof body.draftId === "string") draftId = body.draftId;
+      if (typeof body.expectedSaveToken === "number") expectedSaveToken = body.expectedSaveToken;
     } catch {
       versionId = undefined;
     }
-    const workspace = await keepCurrentScript(id, { versionId, draft });
+    const workspace = await keepCurrentScript(id, { versionId, draft, draftId, expectedSaveToken });
     return NextResponse.json(workspace);
   } catch (error) {
     if (error instanceof ReelError || error instanceof ScriptError) {

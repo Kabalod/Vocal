@@ -9,6 +9,14 @@ import { GenerationGuard } from "@/lib/generation-guard";
 import { DraftSaveError, ScriptDraftSaveSession } from "@/lib/script-draft-save";
 import { isHeadKind, type ScriptVersionDto, type ScriptWorkspaceDto } from "@/types/script";
 import { buildCanonicalExportTxt, sanitizeExportFilename } from "@/lib/canonical-export";
+import {
+  applyScriptGenerateResult,
+  beginScriptGeneratePost,
+  newScriptGenerateKey,
+  retryScriptGenerateKey,
+  type ScriptGenerateFaultKind,
+  type ScriptGenerateKeyState,
+} from "@/lib/v05-generate-keys";
 
 function readyVersions(workspace: ScriptWorkspaceDto) {
   return workspace.versions.filter((row) => isHeadKind(row.kind));
@@ -37,7 +45,7 @@ function createDraftSession(reelIdRef: { current: string }) {
 }
 
 function newGenerateKey() {
-  return `script-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return newScriptGenerateKey();
 }
 
 export function ScriptEditor({
@@ -58,8 +66,12 @@ export function ScriptEditor({
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [generateFault, setGenerateFault] = useState<{ kind: "conflict" | "error"; message: string } | null>(null);
-  const generateKeyRef = useRef(newGenerateKey());
+  const [generateFault, setGenerateFault] = useState<{ kind: ScriptGenerateFaultKind; message: string } | null>(null);
+  const initialKey = useRef(newGenerateKey());
+  const keyStateRef = useRef<ScriptGenerateKeyState>({
+    postedKey: initialKey.current,
+    nextExplicitKey: initialKey.current,
+  });
   const guardRef = useRef(new GenerationGuard());
   const skipAutosave = useRef(false);
   const reelIdRef = useRef(reelId);
@@ -71,12 +83,16 @@ export function ScriptEditor({
 
   const applyWorkspace = useCallback((next: ScriptWorkspaceDto, keepDraftText: boolean) => {
     setWorkspace(next);
-    const nextViewId = next.viewing?.id ?? next.headId ?? next.versions.find((row) => isHeadKind(row.kind))?.id ?? null;
-    setViewingId((current) => current ?? nextViewId);
-    if (next.viewing) setViewing(next.viewing);
-    const preserve = keepDraftText || session.hasUnsavedLocalEdits();
-    session.hydrate(next.draft, preserve);
-    if (next.draft && !preserve) skipAutosave.current = true;
+    if (next.viewing) {
+      setViewingId(next.viewing.id);
+      setViewing(next.viewing);
+    } else {
+      const fallback = next.headId ?? next.versions.find((row) => isHeadKind(row.kind))?.id ?? null;
+      setViewingId(fallback);
+      setViewing(null);
+    }
+    session.hydrate(next.draft, keepDraftText);
+    if (next.draft && !keepDraftText && !session.hasUnsavedLocalEdits()) skipAutosave.current = true;
   }, [session]);
 
   const load = useCallback(
@@ -99,22 +115,21 @@ export function ScriptEditor({
       .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."));
   }, [load, reloadToken, session]);
 
-  useEffect(() => {
-    if (!viewingId) return;
-    if (viewing?.id === viewingId) return;
+  async function selectVersion(id: string) {
+    setViewingId(id);
+    setLoadError(null);
     const token = guardRef.current.begin();
-    void fetch(`/api/reels/${reelId}/scripts/${viewingId}`, { cache: "no-store" })
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить версию.");
-        if (!token.isCurrent()) return;
-        setViewing(data as ScriptVersionDto);
-      })
-      .catch((err: unknown) => {
-        if (!token.isCurrent()) return;
-        setLoadError(err instanceof Error ? err.message : "Ошибка.");
-      });
-  }, [reelId, viewing, viewingId]);
+    try {
+      const res = await fetch(`/api/reels/${reelId}/scripts?view=${encodeURIComponent(id)}`, { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить версию.");
+      if (!token.isCurrent()) return;
+      applyWorkspace(data as ScriptWorkspaceDto, false);
+    } catch (err: unknown) {
+      if (!token.isCurrent()) return;
+      setLoadError(err instanceof Error ? err.message : "Ошибка.");
+    }
+  }
 
   useEffect(() => {
     if (snap.mode !== "draft" || snap.expectedSaveToken == null || !workspace?.draft) return;
@@ -142,31 +157,46 @@ export function ScriptEditor({
     session.enterDraft();
   }
 
-  async function generate(key = generateKeyRef.current) {
+  async function generate(explicitKey?: string) {
     setLoadError(null);
     setGenerateFault(null);
     setGenerating(true);
+    keyStateRef.current = beginScriptGeneratePost(keyStateRef.current, explicitKey);
+    const key = keyStateRef.current.postedKey;
     try {
       const res = await fetch(`/api/reels/${reelId}/scripts/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idempotencyKey: key }),
       });
-      const data = await res.json();
+      const data = await res.json() as ScriptWorkspaceDto & { error?: string; code?: string };
+      const applied = applyScriptGenerateResult(keyStateRef.current, {
+        ok: res.ok,
+        code: typeof data.code === "string" ? data.code : null,
+        makeKey: newGenerateKey,
+      });
+      keyStateRef.current = applied.state;
       if (!res.ok) {
-        if (res.status === 409) generateKeyRef.current = newGenerateKey();
-        const kind = res.status === 409 ? "conflict" : "error";
-        setGenerateFault({ kind, message: typeof data.error === "string" ? data.error : "Не удалось собрать сценарий." });
+        const message =
+          applied.fault === "inflight"
+            ? "Сбор сценария уже выполняется. Подождите или повторите тот же запрос."
+            : typeof data.error === "string"
+              ? data.error
+              : "Не удалось собрать сценарий.";
+        setGenerateFault({ kind: applied.fault ?? "error", message });
         const fresh = await fetch(`/api/reels/${reelId}/scripts`, { cache: "no-store" });
         if (fresh.ok) applyWorkspace((await fresh.json()) as ScriptWorkspaceDto, true);
         return;
       }
-      applyWorkspace(data as ScriptWorkspaceDto, session.hasUnsavedLocalEdits());
-      setViewingId((data as ScriptWorkspaceDto).headId);
-      setViewing((data as ScriptWorkspaceDto).viewing);
-      generateKeyRef.current = newGenerateKey();
+      applyWorkspace(data, false);
       onChanged?.();
     } catch (err: unknown) {
+      const applied = applyScriptGenerateResult(keyStateRef.current, {
+        ok: false,
+        networkError: true,
+        makeKey: newGenerateKey,
+      });
+      keyStateRef.current = applied.state;
       setGenerateFault({
         kind: "error",
         message: err instanceof Error ? err.message : "Не удалось собрать сценарий.",
@@ -178,13 +208,14 @@ export function ScriptEditor({
 
   async function keepCurrent() {
     setLoadError(null);
+    const payload =
+      snap.mode === "draft" && workspace?.draft
+        ? { draftId: workspace.draft.id, expectedSaveToken: snap.expectedSaveToken ?? workspace.draft.saveToken }
+        : { versionId: viewingId };
     const res = await fetch(`/api/reels/${reelId}/scripts/keep`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        versionId: viewingId,
-        draft: snap.mode === "draft" || (!viewingId && Boolean(workspace?.draft)),
-      }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Не удалось оставить сценарий.");
@@ -238,11 +269,14 @@ export function ScriptEditor({
     : null;
   const error = loadError ?? snap.error;
   const phase = generating ? "generating" : workspace?.phase ?? "empty";
-  const stale = Boolean(workspace?.stale);
+  const viewingStale = Boolean(workspace?.viewingStale);
+  const draftStale = Boolean(workspace?.draftStale);
+  const bannerStale = snap.mode === "draft" ? draftStale : viewingStale;
+  const staleTarget = snap.mode === "draft" ? "draft" : "viewing";
   const versionTitle = currentMeta?.number ? `Сценарий, версия ${currentMeta.number}` : "Черновик сценария";
 
   return (
-    <section className="space-y-4" data-script-phase={phase} data-script-generating={generating ? "1" : "0"}>
+    <section className="space-y-4" data-script-phase={phase} data-script-generating={generating ? "1" : "0"} data-script-stale-target={staleTarget}>
       <div>
         <h2 className="font-[family-name:var(--font-display)] text-2xl">
           {snap.mode === "draft" ? "Черновик сценария" : "Сценарий"}
@@ -263,15 +297,18 @@ export function ScriptEditor({
             type="button"
             className="vocal-btn vocal-btn-primary"
             disabled={generating || thoughtCompleted}
-            onClick={() => void generate(newGenerateKey())}
+            onClick={() => void generate(retryScriptGenerateKey(keyStateRef.current, "conflict"))}
           >
             Повторить сбор
           </button>
         </div>
       ) : null}
-      {generateFault?.kind === "error" ? (
-        <div data-script-fault="error">
-          <ShellError message={generateFault.message} onRetry={() => void generate()} />
+      {generateFault?.kind === "error" || generateFault?.kind === "inflight" ? (
+        <div data-script-fault={generateFault.kind}>
+          <ShellError
+            message={generateFault.message}
+            onRetry={() => void generate(retryScriptGenerateKey(keyStateRef.current, generateFault.kind))}
+          />
         </div>
       ) : null}
       {generating ? <p className="text-sm text-muted">Собираем сценарий…</p> : null}
@@ -290,8 +327,8 @@ export function ScriptEditor({
           ) : null}
         </div>
       ) : null}
-      {workspace && stale ? (
-        <div className="vocal-card space-y-3 p-4">
+      {workspace && bannerStale ? (
+        <div className="vocal-card space-y-3 p-4" data-script-stale-banner={staleTarget}>
           <p className="text-sm">После создания сценария появились новые данные.</p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -305,7 +342,7 @@ export function ScriptEditor({
               type="button"
               className="vocal-btn vocal-btn-primary"
               disabled={generating || !workspace.canGenerate}
-              onClick={() => void generate(newGenerateKey()).catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))}
+              onClick={() => void generate(keyStateRef.current.nextExplicitKey).catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))}
             >
               {generating ? "Собираем…" : "Обновить"}
             </button>
@@ -319,8 +356,7 @@ export function ScriptEditor({
           headId={workspace.headId}
           finalScriptId={workspace.finalScriptId}
           onView={(id) => {
-            setViewingId(id);
-            if (snap.mode === "ready") setViewing(null);
+            void selectVersion(id);
           }}
         />
       ) : (
@@ -333,7 +369,7 @@ export function ScriptEditor({
               type="button"
               className="vocal-btn vocal-btn-primary"
               disabled={generating || thoughtCompleted || !workspace?.canGenerate}
-              onClick={() => void generate().catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))}
+              onClick={() => void generate(keyStateRef.current.nextExplicitKey).catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))}
             >
               {generating ? "Собираем…" : workspace?.readyCount ? "Собрать новую версию" : "Собрать сценарий"}
             </button>

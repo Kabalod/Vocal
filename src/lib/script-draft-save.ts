@@ -100,12 +100,16 @@ export class ScriptDraftSaveSession {
   }
 
   hasUnsavedLocalEdits() {
-    return this.localEditVersion > this.hydratedEditVersion || this.body !== (this.savedBody ?? this.body);
+    return this.localEditVersion > this.hydratedEditVersion || (this.savedBody !== null && this.body !== this.savedBody);
   }
 
   enterDraft() {
     this.mode = "draft";
     this.emit();
+  }
+
+  private hasLocalEditsBeforeServerAssign() {
+    return this.localEditVersion > this.hydratedEditVersion || (this.savedBody !== null && this.body !== this.savedBody);
   }
 
   hydrate(draft: { body: string; updatedAt: string; saveToken: number } | null, keepBody: boolean) {
@@ -116,12 +120,27 @@ export class ScriptDraftSaveSession {
       this.emit();
       return;
     }
+    const dirty = keepBody || this.hasLocalEditsBeforeServerAssign();
     this.savedBody = draft.body;
     this.expectedUpdatedAt = draft.updatedAt;
     this.expectedSaveToken = draft.saveToken;
-    const preserve = keepBody || this.hasUnsavedLocalEdits();
-    if (!preserve) this.body = draft.body;
-    this.hydratedEditVersion = this.localEditVersion;
+    if (!dirty) {
+      this.body = draft.body;
+      this.hydratedEditVersion = this.localEditVersion;
+    }
+    this.emit();
+  }
+
+  applyPatchAck(draft: { body: string; updatedAt: string; saveToken: number }, sent: { body: string; localEditVersion: number }) {
+    this.savedBody = sent.body;
+    this.expectedUpdatedAt = draft.updatedAt;
+    this.expectedSaveToken = draft.saveToken;
+    if (this.localEditVersion > sent.localEditVersion) {
+      this.emit();
+      return;
+    }
+    this.body = sent.body;
+    this.hydratedEditVersion = sent.localEditVersion;
     this.emit();
   }
 
@@ -151,33 +170,53 @@ export class ScriptDraftSaveSession {
   }
 
   save() {
-    if (this.expectedUpdatedAt != null && this.expectedSaveToken != null && this.savedBody !== this.body) {
+    const sentBody = this.body;
+    const sentEditVersion = this.localEditVersion;
+    const expectedUpdatedAt = this.expectedUpdatedAt;
+    const expectedSaveToken = this.expectedSaveToken;
+    if (expectedUpdatedAt != null && expectedSaveToken != null && this.savedBody !== sentBody) {
       this.beginSave();
     }
-    return this.enqueue(() => this.saveNow());
+    return this.enqueue(() =>
+      this.saveNow({
+        sentBody,
+        sentEditVersion,
+        expectedUpdatedAt,
+        expectedSaveToken,
+      }),
+    );
   }
 
-  private async saveNow(): Promise<ScriptDraftPatchOk | null> {
-    if (this.expectedUpdatedAt == null || this.expectedSaveToken == null) return null;
-    if (this.savedBody === this.body) {
+  private async saveNow(sent?: {
+    sentBody: string;
+    sentEditVersion: number;
+    expectedUpdatedAt: string | null;
+    expectedSaveToken: number | null;
+  }): Promise<ScriptDraftPatchOk | null> {
+    const expectedUpdatedAt = sent?.expectedUpdatedAt ?? this.expectedUpdatedAt;
+    const expectedSaveToken = sent?.expectedSaveToken ?? this.expectedSaveToken;
+    const sentBody = sent?.sentBody ?? this.body;
+    const sentEditVersion = sent?.sentEditVersion ?? this.localEditVersion;
+    if (expectedUpdatedAt == null || expectedSaveToken == null) return null;
+    if (this.savedBody === sentBody && this.localEditVersion === sentEditVersion) {
       return {
         draft: {
-          body: this.body,
-          updatedAt: this.expectedUpdatedAt,
-          saveToken: this.expectedSaveToken,
+          body: sentBody,
+          updatedAt: expectedUpdatedAt,
+          saveToken: expectedSaveToken,
         },
       };
     }
     this.beginSave();
     try {
       const next = await this.deps.patch({
-        body: this.body,
-        expectedUpdatedAt: this.expectedUpdatedAt,
-        expectedSaveToken: this.expectedSaveToken,
+        body: sentBody,
+        expectedUpdatedAt,
+        expectedSaveToken,
       });
-      this.hydrate(next.draft, true);
+      this.applyPatchAck(next.draft, { body: sentBody, localEditVersion: sentEditVersion });
       this.error = null;
-      this.status = "Сохранено";
+      this.status = this.localEditVersion > sentEditVersion ? null : "Сохранено";
       this.emit();
       return next;
     } catch (err) {

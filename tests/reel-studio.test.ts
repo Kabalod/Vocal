@@ -58,7 +58,10 @@ test("thought studio shell loads by id with back, tabs and honest missing/error"
   assert.match(editor, /data-script-fault="conflict"/);
   assert.match(editor, /data-script-phase/);
   assert.match(editor, /hasUnsavedLocalEdits/);
-  assert.match(editor, /onRetry=\{\(\) => void generate\(\)\}/);
+  assert.match(editor, /scripts\?view=/);
+  assert.match(editor, /beginScriptGeneratePost/);
+  assert.match(editor, /data-script-stale-banner/);
+  assert.match(editor, /AI_INFLIGHT|inflight/);
   assert.equal(studio.includes("onTransferred"), false);
   assert.equal(frame.includes("hidden={tab"), false);
 });

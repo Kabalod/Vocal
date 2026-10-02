@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
 import { aiOperationKey, AiInflightError, assertDailyTokenBudget, withAiInflight } from "@/lib/ai/usage-guard";
+import { listAcceptedC00Corrections } from "@/lib/c00-envelope";
 import { loadAcceptedCorrectionTimes } from "@/lib/c00-stale";
 import { getReelContext } from "@/lib/reel-context";
 import { ReelError } from "@/lib/reels";
@@ -165,6 +166,35 @@ async function loadThought(reelId: string, db: ScriptDb): Promise<LoadedThought 
   return { ...parseThoughtStateLists(row), revision: row.revision, intent: row.intent, position: row.position, takeTask: row.takeTask, updatedAt: row.updatedAt };
 }
 
+async function loadFactCorrections(reelId: string, db: ScriptDb) {
+  const rows = await db.aiCall.findMany({
+    where: { reelId, kind: "dialogue", status: "done" },
+    select: { id: true, resultJson: true },
+  });
+  return listAcceptedC00Corrections(rows).filter((row) => row.correction.targetKind === "fact");
+}
+
+function workingRawSourceTainted(input: {
+  selectedTranscriptId: string | null;
+  citedTranscriptIds: Set<string>;
+  factCorrections: Array<{ correction: { targetId: string; operation: string } }>;
+  remainingFacts: ThoughtFact[];
+}) {
+  if (input.selectedTranscriptId && input.citedTranscriptIds.has(input.selectedTranscriptId)) return true;
+  return input.factCorrections.length > 0;
+}
+
+export function isCraftInstruction(text: string) {
+  const normalized = normalizeDialogueUtterance(text);
+  return (
+    normalized === "говорить короче" ||
+    normalized === "снять дубль" ||
+    normalized === "сними дубль" ||
+    normalized === "запиши дубль" ||
+    normalized === "короче"
+  );
+}
+
 function pushSource(keys: string[], texts: { label: string; text: string }[], key: string, label: string, text: string) {
   const body = text.trim();
   if (!body || keys.includes(key)) return;
@@ -191,13 +221,20 @@ async function collectFromLoaded(reelId: string, material: Omit<V05Material, "ke
   const citedTranscriptIds = new Set(
     (thought?.facts ?? []).filter((fact) => fact.sourceType === "transcript_revision").map((fact) => fact.sourceId),
   );
-  if (material.workingTake?.inputType === "text") {
+  const factCorrections = await loadFactCorrections(reelId, db);
+  const rawWorkingTainted = workingRawSourceTainted({
+    selectedTranscriptId: material.selectedTranscript?.id ?? null,
+    citedTranscriptIds,
+    factCorrections,
+    remainingFacts: thought?.facts ?? [],
+  });
+  if (!rawWorkingTainted && material.workingTake?.inputType === "text") {
     const label = takeMaterialLabel("text", material.workingTake.number);
     const body = material.selectedTranscript?.text.trim() || material.workingTake.bodyText.trim();
     if (body && !(material.selectedTranscript && citedTranscriptIds.has(material.selectedTranscript.id))) {
       pushSource(keys, texts, material.selectedTranscript ? `transcript:${material.selectedTranscript.id}` : `take:${material.workingTake.id}`, label, body);
     }
-  } else if (material.selectedTranscript && !citedTranscriptIds.has(material.selectedTranscript.id)) {
+  } else if (!rawWorkingTainted && material.selectedTranscript && !citedTranscriptIds.has(material.selectedTranscript.id)) {
     const label = material.workingTake
       ? `Точная расшифровка · ${takeMaterialLabel(material.workingTake.inputType, material.workingTake.number)}`
       : "Точная расшифровка";
@@ -296,13 +333,16 @@ function evaluateReadiness(material: V05Material): {
       nextQuestion: { text: gap.text, gapId: gap.id },
     };
   }
+  const authorTexts = material.texts.filter((item) => {
+    if (item.label === "Задача дубля") return false;
+    return !isCraftInstruction(item.text);
+  });
   const structured = Boolean(
     material.thought.position.trim() ||
-      material.thought.intent.trim() ||
-      material.thought.takeTask.trim() ||
-      material.thought.facts.length > 0 ||
-      material.thought.decisions.some((item) => item.trim()) ||
-      material.texts.length > 0,
+      (material.thought.intent.trim() && !isCraftInstruction(material.thought.intent)) ||
+      material.thought.facts.some((fact) => fact.text.trim()) ||
+      material.thought.decisions.some((item) => item.trim() && !isCraftInstruction(item)) ||
+      authorTexts.length > 0,
   );
   if (structured) {
     return { ready: true, blockReason: null, nextQuestion: null };
@@ -384,6 +424,37 @@ async function staleEvidence(reelId: string, current: V05WorldSnapshot, db: Scri
   };
 }
 
+export function versionKeepApplicable(snap: V05GenerateSnapshot | null, current: V05WorldSnapshot) {
+  return Boolean(snap?.kept && worldFingerprint(snap.kept) === worldFingerprint(current));
+}
+
+export function draftKeepApplicable(
+  keep: V05GenerateSnapshot | null,
+  draft: { id: string; saveToken?: number },
+  current: V05WorldSnapshot,
+) {
+  if (!keep?.kept || keep.draftId !== draft.id) return false;
+  if (typeof keep.draftSaveToken === "number" && typeof draft.saveToken === "number" && keep.draftSaveToken !== draft.saveToken) {
+    return false;
+  }
+  if (typeof keep.draftSaveToken === "number" && typeof draft.saveToken !== "number") return false;
+  return worldFingerprint(keep.kept) === worldFingerprint(current);
+}
+
+async function originObjectStale(input: {
+  reelId: string;
+  snapshotJson: string | null | undefined;
+  createdAt: Date;
+  current: V05WorldSnapshot;
+  db: ScriptDb;
+}): Promise<boolean> {
+  const snap = parseV05GenerateSnapshot(input.snapshotJson);
+  const origin = originWorld(snap);
+  if (origin) return worldFingerprint(origin) !== worldFingerprint(input.current);
+  const evidence = await staleEvidence(input.reelId, input.current, input.db);
+  return heuristicStale({ createdAt: input.createdAt, current: input.current, ...evidence });
+}
+
 export async function isSnapshotObjectStale(input: {
   reelId: string;
   snapshotJson: string | null | undefined;
@@ -393,11 +464,9 @@ export async function isSnapshotObjectStale(input: {
 }): Promise<boolean> {
   const db = input.db ?? prisma;
   const snap = parseV05GenerateSnapshot(input.snapshotJson);
-  if (snap?.kept && worldFingerprint(snap.kept) === worldFingerprint(input.current)) return false;
-  const origin = originWorld(snap);
-  if (origin) return isV05WorldStale(origin, input.current, snap?.kept);
-  const evidence = await staleEvidence(input.reelId, input.current, db);
-  return heuristicStale({ createdAt: input.createdAt, current: input.current, ...evidence });
+  const originStale = await originObjectStale({ ...input, db });
+  if (versionKeepApplicable(snap, input.current)) return false;
+  return originStale;
 }
 
 async function loadDraftKeepSnapshot(reelId: string, db: ScriptDb): Promise<V05GenerateSnapshot | null> {
@@ -408,55 +477,68 @@ async function loadDraftKeepSnapshot(reelId: string, db: ScriptDb): Promise<V05G
   return parseV05GenerateSnapshot(row?.inputSnapshotJson);
 }
 
-export async function computeViewedStale(reelId: string, input: {
-  viewingId: string | null;
-  viewingCreatedAt?: string | null;
-  draft: { id: string; updatedAt: string; stale?: boolean; baseVersionId: string | null } | null;
-}): Promise<boolean> {
-  const current = await readV05World(reelId);
-  let stale = Boolean(input.draft?.stale);
-  if (input.viewingId) {
-    const version = await prisma.scriptVersion.findFirst({
-      where: { id: input.viewingId, reelId },
+export async function computeViewingStale(reelId: string, viewingId: string | null, current: V05WorldSnapshot, db: ScriptDb = prisma) {
+  if (!viewingId) return false;
+  const version = await db.scriptVersion.findFirst({
+    where: { id: viewingId, reelId },
+    select: { createdAt: true, inputSnapshotJson: true },
+  });
+  if (!version) return false;
+  return isSnapshotObjectStale({
+    reelId,
+    snapshotJson: version.inputSnapshotJson,
+    createdAt: version.createdAt,
+    current,
+    db,
+  });
+}
+
+export async function computeDraftStale(
+  reelId: string,
+  draft: { id: string; updatedAt: string; stale?: boolean; baseVersionId: string | null; saveToken?: number } | null,
+  current: V05WorldSnapshot,
+  db: ScriptDb = prisma,
+) {
+  if (!draft) return false;
+  const c00 = Boolean(draft.stale);
+  let originStale = false;
+  if (draft.baseVersionId) {
+    const base = await db.scriptVersion.findFirst({
+      where: { id: draft.baseVersionId, reelId },
       select: { createdAt: true, inputSnapshotJson: true },
     });
-    if (version && await isSnapshotObjectStale({
-      reelId,
-      snapshotJson: version.inputSnapshotJson,
-      createdAt: version.createdAt,
-      current,
-    })) {
-      stale = true;
-    }
-  }
-  if (input.draft) {
-    const kept = await loadDraftKeepSnapshot(reelId, prisma);
-    if (kept?.kept && worldFingerprint(kept.kept) === worldFingerprint(current)) {
-      return stale;
-    }
-    if (input.draft.baseVersionId) {
-      const base = await prisma.scriptVersion.findFirst({
-        where: { id: input.draft.baseVersionId, reelId },
-        select: { createdAt: true, inputSnapshotJson: true },
-      });
-      if (base && await isSnapshotObjectStale({
+    if (base) {
+      originStale = await originObjectStale({
         reelId,
         snapshotJson: base.inputSnapshotJson,
         createdAt: base.createdAt,
         current,
-      })) {
-        return true;
-      }
-    } else if (await isSnapshotObjectStale({
-      reelId,
-      snapshotJson: kept ? JSON.stringify(kept) : null,
-      createdAt: new Date(input.draft.updatedAt),
-      current,
-    })) {
-      return true;
+        db,
+      });
     }
+  } else {
+    originStale = await originObjectStale({
+      reelId,
+      snapshotJson: null,
+      createdAt: new Date(draft.updatedAt),
+      current,
+      db,
+    });
   }
-  return stale;
+  const objective = c00 || originStale;
+  const keep = await loadDraftKeepSnapshot(reelId, db);
+  if (draftKeepApplicable(keep, { id: draft.id, saveToken: draft.saveToken }, current)) return false;
+  return objective;
+}
+
+export async function computeViewedStale(reelId: string, input: {
+  viewingId: string | null;
+  viewingCreatedAt?: string | null;
+  draft: { id: string; updatedAt: string; stale?: boolean; baseVersionId: string | null; saveToken?: number } | null;
+}): Promise<boolean> {
+  const current = await readV05World(reelId);
+  if (input.viewingId) return computeViewingStale(reelId, input.viewingId, current);
+  return computeDraftStale(reelId, input.draft, current);
 }
 
 export async function computeV05Stale(reelId: string): Promise<boolean> {
@@ -476,12 +558,14 @@ export async function computeV05Stale(reelId: string): Promise<boolean> {
 
 export async function computeScriptTabState(reelId: string, workspace: {
   readyCount: number;
-  draft: { id: string; body: string; updatedAt: string; stale?: boolean; baseVersionId: string | null } | null;
+  draft: { id: string; body: string; updatedAt: string; stale?: boolean; baseVersionId: string | null; saveToken?: number } | null;
   viewing: { id: string; createdAt: string } | null;
   versions: { id: string }[];
 }): Promise<{
   phase: ScriptWorkspaceDto["phase"];
   stale: boolean;
+  viewingStale: boolean;
+  draftStale: boolean;
   canGenerate: boolean;
   blockReason: string | null;
   nextQuestion: { text: string; gapId: string | null } | null;
@@ -494,31 +578,32 @@ export async function computeScriptTabState(reelId: string, workspace: {
     }),
   );
   const hasScript = workspace.readyCount > 0 || Boolean(workspace.draft?.body.trim());
-  const stale = await computeViewedStale(reelId, {
-    viewingId: workspace.viewing?.id ?? null,
-    viewingCreatedAt: workspace.viewing?.createdAt,
-    draft: workspace.draft,
-  });
+  const current = await readV05World(reelId);
+  const viewingStale = await computeViewingStale(reelId, workspace.viewing?.id ?? null, current);
+  const draftStale = await computeDraftStale(reelId, workspace.draft, current);
+  const stale = workspace.viewing ? viewingStale : draftStale;
   const phase = v05TabPhase({ ready: readiness.ready, hasScript, stale, generating });
   return {
     phase,
     stale,
+    viewingStale,
+    draftStale,
     canGenerate: readiness.ready && !generating,
     blockReason: readiness.ready ? null : readiness.blockReason,
     nextQuestion: readiness.ready ? null : readiness.nextQuestion,
   };
 }
 
-async function persistKeepSnapshot(input: { reelId: string; snapshotJson: string; turnKey: string }) {
-  const existing = await prisma.aiCall.findUnique({ where: { turnKey: input.turnKey }, select: { id: true } });
+async function persistKeepSnapshot(input: { reelId: string; snapshotJson: string; turnKey: string }, db: ScriptDb = prisma) {
+  const existing = await db.aiCall.findUnique({ where: { turnKey: input.turnKey }, select: { id: true } });
   if (existing) {
-    await prisma.aiCall.update({
+    await db.aiCall.update({
       where: { id: existing.id },
       data: { status: "done", inputSnapshotJson: input.snapshotJson, resultJson: JSON.stringify({ keep: true }) },
     });
     return;
   }
-  await prisma.aiCall.create({
+  await db.aiCall.create({
     data: {
       kind: "script",
       reelId: input.reelId,
@@ -533,7 +618,7 @@ async function persistKeepSnapshot(input: { reelId: string; snapshotJson: string
   });
 }
 
-function keepRecord(reelId: string, origin: V05GenerateSnapshot | null, current: V05WorldSnapshot): string {
+function keepVersionRecord(reelId: string, origin: V05GenerateSnapshot | null, current: V05WorldSnapshot): string {
   const base: Record<string, unknown> = {
     ownerUserId: origin?.ownerUserId ?? ownerUserId(),
     reelId: origin?.reelId ?? reelId,
@@ -553,51 +638,62 @@ function keepRecord(reelId: string, origin: V05GenerateSnapshot | null, current:
   return JSON.stringify(base);
 }
 
+function keepDraftRecord(reelId: string, draft: { id: string; saveToken: number }, current: V05WorldSnapshot): string {
+  return JSON.stringify({
+    ownerUserId: ownerUserId(),
+    reelId,
+    draftId: draft.id,
+    draftSaveToken: draft.saveToken,
+    kept: current,
+  });
+}
+
 export async function keepCurrentScript(
   reelId: string,
-  target: { versionId?: string | null; draft?: boolean } = {},
+  target: { versionId?: string | null; draftId?: string; expectedSaveToken?: number; draft?: boolean } = {},
 ): Promise<ScriptWorkspaceDto> {
-  const owned = await prisma.reel.findFirst({
-    where: { id: reelId, ownerUserId: ownerUserId() },
-    select: { id: true },
-  });
-  if (!owned) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
-  const current = await readV05World(reelId);
-  const draft = await prisma.scriptDraft.findUnique({ where: { reelId } });
-
-  if (target.draft) {
-    if (!draft) throw new ScriptError("Нет черновика, который можно оставить.", "SCRIPT_NOT_FOUND", 404);
-    await persistKeepSnapshot({
-      reelId,
-      turnKey: draftKeepTurnKey(reelId),
-      snapshotJson: keepRecord(reelId, await loadDraftKeepSnapshot(reelId, prisma), current),
+  const viewId = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Reel" WHERE id = ${reelId} FOR UPDATE`;
+    const owned = await tx.reel.findFirst({
+      where: { id: reelId, ownerUserId: ownerUserId() },
+      select: { id: true },
     });
-    return listScriptWorkspace(reelId);
-  }
-
-  const version = target.versionId
-    ? await prisma.scriptVersion.findFirst({ where: { id: target.versionId, reelId } })
-    : await prisma.scriptVersion.findFirst({
-        where: { reelId, kind: { in: ["manual", "restore", "accepted_ai"] } },
-        orderBy: { createdAt: "desc" },
-      });
-  if (!version) {
-    if (draft) {
+    if (!owned) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+    const current = await readV05World(reelId, tx);
+    if (target.draftId || target.draft) {
+      const draft = await tx.scriptDraft.findUnique({ where: { reelId } });
+      if (!draft) throw new ScriptError("Нет черновика, который можно оставить.", "SCRIPT_NOT_FOUND", 404);
+      if (target.draftId && draft.id !== target.draftId) {
+        throw new ScriptError("Черновик уже изменился. Обновите и повторите.", "KEEP_TARGET_CHANGED", 409);
+      }
+      if (typeof target.expectedSaveToken === "number" && draft.saveToken !== target.expectedSaveToken) {
+        throw new ScriptError("Черновик уже изменился. Обновите и повторите.", "KEEP_TARGET_CHANGED", 409);
+      }
       await persistKeepSnapshot({
         reelId,
         turnKey: draftKeepTurnKey(reelId),
-        snapshotJson: keepRecord(reelId, await loadDraftKeepSnapshot(reelId, prisma), current),
-      });
-      return listScriptWorkspace(reelId);
+        snapshotJson: keepDraftRecord(reelId, draft, current),
+      }, tx);
+      return null;
     }
-    throw new ScriptError("Нет версии сценария, которую можно оставить.", "SCRIPT_NOT_FOUND", 404);
-  }
-  const origin = parseV05GenerateSnapshot(version.inputSnapshotJson);
-  await prisma.scriptVersion.update({
-    where: { id: version.id },
-    data: { inputSnapshotJson: keepRecord(reelId, origin, current) },
+    const version = target.versionId
+      ? await tx.scriptVersion.findFirst({ where: { id: target.versionId, reelId } })
+      : await tx.scriptVersion.findFirst({
+          where: { reelId, kind: { in: ["manual", "restore", "accepted_ai"] } },
+          orderBy: { createdAt: "desc" },
+        });
+    if (!version) throw new ScriptError("Нет версии сценария, которую можно оставить.", "SCRIPT_NOT_FOUND", 404);
+    if (target.versionId && version.id !== target.versionId) {
+      throw new ScriptError("Версия сценария уже изменилась. Обновите и повторите.", "KEEP_TARGET_CHANGED", 409);
+    }
+    const origin = parseV05GenerateSnapshot(version.inputSnapshotJson);
+    await tx.scriptVersion.update({
+      where: { id: version.id },
+      data: { inputSnapshotJson: keepVersionRecord(reelId, origin, current) },
+    });
+    return version.id;
   });
-  return listScriptWorkspace(reelId, version.id);
+  return listScriptWorkspace(reelId, viewId);
 }
 
 async function replayGenerated(reelId: string, turnKey: string): Promise<ScriptWorkspaceDto | null> {

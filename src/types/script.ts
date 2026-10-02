@@ -122,6 +122,8 @@ export interface ScriptWorkspaceDto {
   sources: ScriptSourceOption[];
   phase: ScriptTabPhase;
   stale: boolean;
+  viewingStale: boolean;
+  draftStale: boolean;
   canGenerate: boolean;
   blockReason: string | null;
   nextQuestion: ScriptNextQuestionDto | null;
