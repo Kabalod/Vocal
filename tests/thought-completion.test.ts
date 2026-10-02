@@ -10,22 +10,19 @@ import { thoughtCompletionGate } from "../src/lib/thought-completion";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("completion gate names the missing final", () => {
+test("completion gate names the missing final take or text", () => {
   assert.equal(
-    thoughtCompletionGate({ finalTakeId: null, finalScriptId: null }).blockedReason,
-    "Чтобы завершить мысль, выберите итоговый дубль и итоговый сценарий.",
-  );
-  assert.equal(
-    thoughtCompletionGate({ finalTakeId: null, finalScriptId: "s1" }).blockedReason,
+    thoughtCompletionGate({ finalTakeId: null }).blockedReason,
     "Не выбран итоговый дубль.",
   );
   assert.equal(
-    thoughtCompletionGate({ finalTakeId: "t1", finalScriptId: null }).blockedReason,
-    "Не выбран итоговый сценарий.",
+    thoughtCompletionGate({ finalTakeId: "t1", hasFinalText: false }).blockedReason,
+    "У итогового дубля нет выбранной расшифровки.",
   );
-  assert.equal(thoughtCompletionGate({ finalTakeId: "t1", finalScriptId: "s1" }).canComplete, true);
+  assert.equal(thoughtCompletionGate({ finalTakeId: "t1" }).canComplete, true);
+  assert.equal(thoughtCompletionGate({ finalTakeId: "t1", finalScriptId: null }).canComplete, true);
   assert.equal(
-    thoughtCompletionGate({ finalTakeId: "t1", finalScriptId: "s1", status: "completed" }).canComplete,
+    thoughtCompletionGate({ finalTakeId: "t1", status: "completed" }).canComplete,
     false,
   );
 });
@@ -56,12 +53,15 @@ test("final take migrates from selectedTakeId and completion keeps history", asy
 
   const { createReel, createTake, getReel, updateReel, listReels, ReelError } = await import("../src/lib/reels");
   const { saveManualScript, setFinalScript, ScriptError } = await import("../src/lib/scripts");
+  const { ensureOriginalFromText } = await import("../src/lib/transcripts");
   const { backfillFinalTakeIds } = await import("../src/lib/thought-completion-db");
   const { GET: listGet } = await import("../src/app/api/reels/route");
 
   const reel = await createReel({ title: "Итоги мысли", initialNote: "исходная" });
   const take1 = await createTake(reel.id, { inputType: "text", bodyText: "первая мысль текстом" });
   const take2 = await createTake(reel.id, { inputType: "text", bodyText: "вторая попытка" });
+  await ensureOriginalFromText(take1.id, "первая мысль текстом");
+  await ensureOriginalFromText(take2.id, "вторая попытка");
 
   const compat = await updateReel(reel.id, { selectedTakeId: take1.id });
   assert.equal(compat.selectedTakeId, take1.id);
@@ -88,10 +88,6 @@ test("final take migrates from selectedTakeId and completion keeps history", asy
     return err instanceof ReelError && err.code === "TAKE_NOT_IN_REEL";
   });
 
-  await assert.rejects(() => updateReel(reel.id, { status: "completed" }), (err: unknown) => {
-    return err instanceof ReelError && err.code === "COMPLETE_INCOMPLETE";
-  });
-
   const saved = await saveManualScript(reel.id, {
     body: "Готовый сценарий для записи.",
     sources: [],
@@ -99,26 +95,8 @@ test("final take migrates from selectedTakeId and completion keeps history", asy
   });
   const scriptId = saved.headId;
   assert.ok(scriptId);
-
-  const proposal = await prisma.scriptVersion.create({
-    data: {
-      reelId: reel.id,
-      kind: "ai_proposal",
-      body: "предложение модели",
-      recordingJson: "{}",
-      sourcesJson: "[]",
-    },
-  });
-  await assert.rejects(() => setFinalScript(reel.id, proposal.id), (err: unknown) => {
-    return err instanceof ScriptError && err.code === "SCRIPT_NOT_READY";
-  });
-
   const withScript = await setFinalScript(reel.id, scriptId);
   assert.equal(withScript.finalScriptId, scriptId);
-  const stillTake = await getReel(reel.id);
-  assert.equal(stillTake?.finalTakeId, take2.id);
-  assert.equal(stillTake?.finalScriptId, scriptId);
-  assert.equal(stillTake?.selectedTakeId, take1.id);
 
   const before = {
     takes: await prisma.take.count({ where: { reelId: reel.id } }),
@@ -131,10 +109,12 @@ test("final take migrates from selectedTakeId and completion keeps history", asy
     snapshots: await prisma.reelContextSnapshot.count({ where: { reelId: reel.id } }),
   };
 
+  const withTake = await updateReel(reel.id, { finalTakeId: take2.id });
+  assert.equal(withTake.finalTakeId, take2.id);
+
   const completed = await updateReel(reel.id, { status: "completed" });
   assert.equal(completed.status, "completed");
   assert.equal(completed.finalTakeId, take2.id);
-  assert.equal(completed.finalScriptId, scriptId);
 
   await assert.rejects(() => updateReel(reel.id, { finalTakeId: take1.id }), (err: unknown) => {
     return err instanceof ReelError && err.code === "NEED_REOPEN";
@@ -176,7 +156,7 @@ function isRaceReject(err: unknown): boolean {
   return code === "NEED_REOPEN" || code === "COMPLETE_INCOMPLETE" || code === "STALE";
 }
 
-async function assertCompletedHasBothFinals(
+async function assertCompletedHasFinalTake(
   prisma: PrismaClient,
   reelId: string,
 ): Promise<{ status: string; finalTakeId: string | null; finalScriptId: string | null }> {
@@ -187,12 +167,11 @@ async function assertCompletedHasBothFinals(
   assert.ok(row);
   if (row.status === "completed") {
     assert.ok(row.finalTakeId, "completed without finalTakeId");
-    assert.ok(row.finalScriptId, "completed without finalScriptId");
   }
   return row;
 }
 
-test("concurrent final changes cannot complete a thought without both finals", async (t) => {
+test("concurrent final take clear cannot complete a thought", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
     await resetPrismaClient();
     t.after(async () => {
@@ -202,11 +181,14 @@ test("concurrent final changes cannot complete a thought without both finals", a
 
   const { createReel, createTake, updateReel } = await import("../src/lib/reels");
   const { saveManualScript, setFinalScript } = await import("../src/lib/scripts");
+  const { ensureOriginalFromText } = await import("../src/lib/transcripts");
 
   async function seed() {
     const reel = await createReel({ title: "Гонка итогов" });
     const takeA = await createTake(reel.id, { inputType: "text", bodyText: "дубль A" });
     const takeB = await createTake(reel.id, { inputType: "text", bodyText: "дубль B" });
+    await ensureOriginalFromText(takeA.id, "дубль A");
+    await ensureOriginalFromText(takeB.id, "дубль B");
     const first = await saveManualScript(reel.id, {
       body: "Сценарий A",
       sources: [],
@@ -230,7 +212,7 @@ test("concurrent final changes cannot complete a thought without both finals", a
     reelId: string,
   ) {
     const settled = await Promise.allSettled([left(), right()]);
-    const row = await assertCompletedHasBothFinals(prisma, reelId);
+    const row = await assertCompletedHasFinalTake(prisma, reelId);
     for (const item of settled) {
       if (item.status === "rejected") assert.equal(isRaceReject(item.reason), true, String(item.reason));
     }

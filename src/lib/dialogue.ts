@@ -364,12 +364,7 @@ async function freezeThoughtPrompt(
 ) {
   const { reel, take } = await requireWorkingTake(reelId);
   if (v01TestSeams.afterWorkingTakeRead) await v01TestSeams.afterWorkingTakeRead();
-  const [scripts, transcript, dialogueVersion, recent, live] = await Promise.all([
-    prisma.scriptVersion.findMany({
-      where: { reelId },
-      orderBy: { createdAt: "desc" },
-      take: 4,
-    }),
+  const [transcript, dialogueVersion, recent, live] = await Promise.all([
     listTranscriptBundle(take.id),
     readDialogueVersion(threadId),
     recentStoredText(threadId),
@@ -377,9 +372,6 @@ async function freezeThoughtPrompt(
   ]);
   const revisionId = take.selectedTranscriptId ?? transcript.selectedId;
   const selectedText = transcript.revisions.find((row) => row.id === revisionId)?.text;
-  const script =
-    scripts.find((row) => row.id === reel.selectedScriptId) ??
-    scripts.find((row) => row.kind !== "ai_proposal" && row.kind !== "draft");
   const thought = await getThoughtState(reelId);
   const material = snapshotFromLoaded(
     reel,
@@ -439,7 +431,8 @@ async function freezeThoughtPrompt(
     "Верни ровно одно действие: ask_question, suggest_take, content_sufficient или redirect_to_task. update_thought не является действием. Изменение мысли передавай только через thoughtUpdate и c00Signal.",
     "Для ask_question обязательны непустые question и whyUnknown, а также gapId или clarificationReason. evidenceRefs в вопросе не нужен.",
     "Для suggest_take обязательны непустые mainIdea, takeTask и evidenceRefs с id существующих фактов этой мысли. Если задача дубля ещё неясна, задай вопрос. Не заполняй поля пустыми строками или выдуманными id.",
-    "content_sufficient требует checkedInTranscript и whyNoGaps. Не выбирай content_sufficient для исправления факта и не комбинируй его с c00Signal.",
+    "content_sufficient требует checkedInTranscript и whyNoGaps. Не выбирай content_sufficient для исправления факта и не комбинируй его с c00Signal. content_sufficient допустим только после audio/video дубля с непустой выбранной расшифровкой.",
+    "После обработанного дубля основной результат — один вопрос или content_sufficient. redirect_to_task — только если автор ушёл от задачи мысли. Не используй текст сценария как произнесённый материал.",
     "thoughtUpdate.fact равен null, если нет нового проверенного факта из текущего сообщения автора. Никогда не возвращай fact с пустым text; не закрывай gap без принятого факта.",
     "Если автор явно исправляет факт текущей мысли, сначала верни c00Signal, затем ask_question про позицию автора. Не подменяй исправление вопросом про цель ролика, аудиторию или общий смысл, пока слот не помечен сигналом.",
     "c00Signal: evidenceUserMessageIds = id текущего сообщения; thoughtStateRevisionSeen = текущая revision; targetId = id исправляемого факта из состояния мысли. Для «это сказал X, не я» / чужой говорящий — wrong_speaker. Для «я этого не говорил» — author_negation. Одной фразы «это неправда» недостаточно. operation для снятия ошибочного факта — clear_slot. Если автор ничего не исправляет, не выдумывай correction.",
@@ -457,8 +450,7 @@ async function freezeThoughtPrompt(
     `Название: ${reel.title ?? ""}`,
     `Рабочий дубль: ${take.id}`,
     revisionId ? `Ревизия: ${revisionId}` : "",
-    selectedText ? `Материал:\n${selectedText.slice(0, 4000)}` : "Материала пока нет.",
-    script?.body ? `Сценарий:\n${script.body.slice(0, 2000)}` : "",
+    selectedText?.trim() ? `Материал:\n${selectedText.slice(0, 4000)}` : "Выбранной расшифровки рабочего дубля пока нет. Не анализируй неизвестный текст нового дубля и не считай сценарий произнесённым материалом.",
     `Цель ролика: ${live.live.reelGoal || "не указана"}`,
     `Аудитория ролика: ${live.live.reelAudience || "не указана"}`,
     `Отображаемый портрет (можно в текст): ${JSON.stringify(live.live.publicForScript)}`,

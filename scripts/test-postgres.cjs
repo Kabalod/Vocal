@@ -67,6 +67,7 @@ const dbTests = [
   "tests/v05-scenario-tab.test.ts",
   "tests/v05-review-fixes.test.ts",
   "tests/v05-correction-source-scope.test.ts",
+  "tests/v06-loop.test.ts",
   "tests/p10-p12-profile.test.ts",
   "tests/p17-e2e-matrix.test.ts",
   "tests/personal-mvp.test.ts",
@@ -134,6 +135,7 @@ const reelsTests = [
   "tests/v05-scenario-tab.test.ts",
   "tests/v05-review-fixes.test.ts",
   "tests/v05-correction-source-scope.test.ts",
+  "tests/v06-loop.test.ts",
   "tests/p10-p12-profile.test.ts",
   "tests/legacy-routes.test.ts",
   "tests/mvp-release.test.ts",
@@ -161,6 +163,9 @@ function selectedTests() {
       "tests/thought-text-create.test.ts",
       "tests/thought-media-create.test.ts",
     ];
+  }
+  if (process.argv.includes("--v06")) {
+    return ["tests/v06-loop.test.ts", "tests/thought-completion.test.ts", "tests/v03-agent-actions.test.ts"];
   }
   if (process.argv.includes("--auth")) return authTests;
   if (process.argv.includes("--reels")) return reelsTests;

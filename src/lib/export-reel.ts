@@ -213,6 +213,30 @@ export async function exportCanonicalTxt(
   if (!reel) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
   const row = await prisma.reel.findFirst({ where: { id: reelId, ownerUserId: ownerUserId() } });
   if (!row) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
+
+  if (!input.scriptId?.trim()) {
+    const take = reel.takes.find((item) => item.id === row.finalTakeId) ?? null;
+    if (take) {
+      const bundle = await listTranscriptBundle(take.id);
+      const finalText = (
+        bundle.revisions.find((item) => item.id === bundle.selectedId)?.text ??
+        take.bodyText ??
+        ""
+      ).trim();
+      if (finalText) {
+        const text = buildCanonicalExportTxt({
+          title: reel.title,
+          finalTextLabel: "Итоговый текст",
+          finalText,
+        });
+        if (!canonicalExportLooksSafe(text)) {
+          throw new ExportError("Экспорт содержит служебные данные и не сохранён.", "EXPORT_LEAK");
+        }
+        return { filename: sanitizeExportFilename(reel.title), text, scriptId: "" };
+      }
+    }
+  }
+
   const scripts = await listScriptBundle(reelId);
   const scriptId = resolveCanonicalExportScriptId({
     requestedId: input.scriptId,
@@ -220,7 +244,7 @@ export async function exportCanonicalTxt(
     selectedScriptId: row.selectedScriptId,
   });
   if (!scriptId) {
-    throw new ExportError("Нет готового сценария для экспорта.", "EXPORT_EMPTY");
+    throw new ExportError("Нет итогового текста для экспорта.", "EXPORT_EMPTY");
   }
   const version = scripts.versions.find((item) => item.id === scriptId);
   if (!version || version.reelId !== reelId) {

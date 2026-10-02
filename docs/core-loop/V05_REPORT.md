@@ -4,7 +4,7 @@ Status: **продукт V05 принят** 02.10.2026. Внешний ревь�
 V05_HEAD: `5fa13657b38996ba8f3a416a22fb03b7647843b9`.
 V05_BASE_SHA: `abd6670f65269b081d20762f49945a3628db52fb`.
 V03_HEAD: `b5278f468666330bc30bb6cd9378f2f02f858264`.
-V04: продукт **не принят**.
+V04: продукт **принят** на `e8985243e85c73d181083428f80c8445fed29756`.
 Ветка: `fix/c00-live-action-shape`.
 Спека: [`V05_SCENARIO_TAB_SPEC.md`](./V05_SCENARIO_TAB_SPEC.md). Общий маршрут: [`../ROADMAP.md`](../ROADMAP.md).
 

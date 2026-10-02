@@ -120,7 +120,9 @@ test("R2 retries do not duplicate thought, take, message, finals or export rows"
   const extraScript = await getReel(extra.reel.id);
   assert.ok(extraScript?.finalScriptId === extraA.headId || extraScript?.finalScriptId === extraB.headId);
 
+  const { ensureOriginalFromText } = await import("../src/lib/transcripts");
   const takeA = await createTake(reelId, { inputType: "text", bodyText: "финал A", idempotencyKey: "final-a" });
+  await ensureOriginalFromText(takeA.id, "финал A");
   const scriptA = await saveManualScript(reelId, { body: "Сценарий A для записи", sources: [] });
   const scriptB = await saveManualScript(reelId, {
     body: "Сценарий B для записи",

@@ -71,9 +71,11 @@ export function ArchiveThoughtPreview({
             </p>
           ) : null}
           {data.acceptedScript ? (
-            <section className="space-y-2" aria-label="Последний принятый сценарий">
+            <section className="space-y-2" aria-label={data.completed ? "Итоговый текст" : "Последний принятый сценарий"}>
               <p className="text-sm text-muted">
-                Последний принятый сценарий · версия {data.acceptedScript.versionNumber}
+                {data.completed
+                  ? "Итоговый текст"
+                  : `Последний принятый сценарий · версия ${data.acceptedScript.versionNumber}`}
               </p>
               <p className="font-content text-sm text-text">{data.acceptedScript.excerpt}</p>
             </section>

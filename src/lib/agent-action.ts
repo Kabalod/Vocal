@@ -125,17 +125,37 @@ export function parseAgentAction(raw: unknown): AgentAction {
   return parseAgentReply(raw).action;
 }
 
-export function hasProcessedWorkingTake(take: { inputType: string; selectedTranscriptId: string | null }) {
-  return (take.inputType === "audio" || take.inputType === "video") && Boolean(take.selectedTranscriptId);
+export function hasProcessedWorkingTake(take: {
+  inputType: string;
+  selectedTranscriptId: string | null;
+  selectedText?: string | null;
+}) {
+  const text = take.selectedText?.trim() ?? "";
+  return (
+    (take.inputType === "audio" || take.inputType === "video") &&
+    Boolean(take.selectedTranscriptId) &&
+    (take.selectedText === undefined || Boolean(text))
+  );
 }
 
 export async function assertAgentActionAllowed(
   tx: Prisma.TransactionClient,
   reelId: string,
   action: AgentAction,
-  take: { inputType: string; selectedTranscriptId: string | null },
+  take: { id?: string; inputType: string; selectedTranscriptId: string | null },
 ) {
-  if (action.action === "content_sufficient" && !hasProcessedWorkingTake(take)) {
+  let selectedText: string | undefined;
+  if (action.action === "content_sufficient" && take.selectedTranscriptId && take.id) {
+    const revision = await tx.transcriptRevision.findFirst({
+      where: { id: take.selectedTranscriptId, takeId: take.id },
+      select: { text: true },
+    });
+    selectedText = revision?.text ?? "";
+  }
+  if (
+    action.action === "content_sufficient" &&
+    !hasProcessedWorkingTake({ ...take, selectedText: selectedText ?? "" })
+  ) {
     throw new AgentActionError(
       "Достаточность можно объявить только после обработанного дубля.",
       "ACTION_NOT_ALLOWED",

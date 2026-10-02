@@ -9,8 +9,9 @@ BASE_SHA (старт V01): `34abcd78c70b2fa31bd717aeff56acc31577c0d1`.
 V01: **accepted**. V01_HEAD: `d34e8dee2243ae109f2e535a439784117cef3aff`. Документы этапа: [`V01_REPORT.md`](./V01_REPORT.md), [`V01_ADR.md`](./V01_ADR.md), [`V01_FILE_MAP.md`](./V01_FILE_MAP.md), [`V01_SCENARIOS.md`](./V01_SCENARIOS.md).
 V02: **accepted**. V02_HEAD: `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`. V02_BASE_SHA: `4223599e6ddb9e6be0d1a09d9c6b433d84912779`. Документы этапа: [`V02_REPORT.md`](./V02_REPORT.md), [`V02_ADR.md`](./V02_ADR.md), [`V02_FILE_MAP.md`](./V02_FILE_MAP.md), [`V02_SCENARIOS.md`](./V02_SCENARIOS.md).
 V03: **accepted**. V03_HEAD: `b5278f468666330bc30bb6cd9378f2f02f858264`. V03_BASE_SHA: `66cbcc0c3fc68a5b0786a4e9036a13d523ac3083`. Документы этапа: [`V03_REPORT.md`](./V03_REPORT.md), [`V03_ADR.md`](./V03_ADR.md), [`V03_FILE_MAP.md`](./V03_FILE_MAP.md), [`V03_SCENARIOS.md`](./V03_SCENARIOS.md).
-V04: **V04-01 принят** (`4411b22c716d44a92a8d7d762c64d1f22184f0e1`). **V04-02 принят** (`bc413e0df0e09348256319f10af884f8ef6727b4`). **V04-03 принят** (`5dfa595cc08f938bb9859aca3b1b3a585c6ba565`). **V04-04 принят** (`c0d8523e41455fef0281b6e8f62f44ae22cd3a58`). **V04-05 принят** (`3fda3de1d5630f97fe83e46ae5b73c0ad5ce09e0`). **V04-06 принят** (`119ee44`). `PUT /api/profile` / `saveProfile` закрыты (410). Продукт V04 **не принят**. V04_BASE_SHA: `564c9cf8534392501e125dda7ecc747c235a5c0d`. Документы V04-00: [`V04_REPORT.md`](./V04_REPORT.md), [`V04_ADR.md`](./V04_ADR.md), [`V04_FILE_MAP.md`](./V04_FILE_MAP.md), [`V04_SCENARIOS.md`](./V04_SCENARIOS.md). Confirm снят в V04-06.
-V05: **продукт V05 принят** 02.10.2026. V05_HEAD: `5fa13657b38996ba8f3a416a22fb03b7647843b9`. V05_BASE_SHA: `abd6670f65269b081d20762f49945a3628db52fb`. Документы: [`V05_SCENARIO_TAB_SPEC.md`](./V05_SCENARIO_TAB_SPEC.md), [`V05_REPORT.md`](./V05_REPORT.md). V06 не начат.
+V04: **продукт V04 принят** (`e8985243e85c73d181083428f80c8445fed29756`). V04_BASE_SHA: `564c9cf8534392501e125dda7ecc747c235a5c0d`. Документы V04-00: [`V04_REPORT.md`](./V04_REPORT.md), [`V04_ADR.md`](./V04_ADR.md), [`V04_FILE_MAP.md`](./V04_FILE_MAP.md), [`V04_SCENARIOS.md`](./V04_SCENARIOS.md).
+V05: **продукт V05 принят** 02.10.2026. V05_HEAD: `5fa13657b38996ba8f3a416a22fb03b7647843b9`. V05_BASE_SHA: `abd6670f65269b081d20762f49945a3628db52fb`. Документы: [`V05_SCENARIO_TAB_SPEC.md`](./V05_SCENARIO_TAB_SPEC.md), [`V05_REPORT.md`](./V05_REPORT.md).
+V06: **в работе**, не принят. V06_BASE_SHA: `f741eb8d9e6c5881afcdd43d3f4cff9a8ccbd2fd`. План: [`V06_PLAN.md`](./V06_PLAN.md). Кандидат: [`V06_REPORT.md`](./V06_REPORT.md).
 AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 
 | Этап | Содержание |
@@ -21,13 +22,13 @@ AUDITED_APP_SHA: `f971a7fb43c2fdd9df6b1824620491500972736a`.
 | V03 | Четыре действия агента и решение о готовности. |
 | V04 | Портрет и персонализация вопросов. |
 | V05 | Отдельная вкладка «Сценарий»: readiness gate, генерация только по кнопке, версионирование черновиков, защита от устаревшего результата (`stale` / 409), переход к записи без автозапуска камеры. **продукт V05 принят** 02.10.2026 (`5fa13657b38996ba8f3a416a22fb03b7647843b9`). Спека: [`V05_SCENARIO_TAB_SPEC.md`](./V05_SCENARIO_TAB_SPEC.md). |
-| V06 | Разбор следующего дубля и завершение. |
+| V06 | Разбор следующего дубля и завершение. В работе; не принят. План: [`V06_PLAN.md`](./V06_PLAN.md). V06_BASE_SHA: `f741eb8d9e6c5881afcdd43d3f4cff9a8ccbd2fd`. |
 | V07 | Библиотека приёмов и полный цикл. |
 
 Путь процесса — в [`CONTRACT.md`](./CONTRACT.md). Действия агента (`ask_question`, `suggest_take`, `content_sufficient`, `redirect_to_task`) не являются статусами мысли. Сценарий не является пятым действием V03 и не генерируется в диалоге.
 
-Продукт V04: **V04-01–V04-04 приняты**, **V04-05 принят**, **V04-06 принят** (`119ee44`), `saveProfile` закрыт, продукт **не принят**. V04-00 — документы. **продукт V05 принят** 02.10.2026 на `5fa13657b38996ba8f3a416a22fb03b7647843b9`. V06 не начат.
+Продукт V04 **принят** (`e8985243e85c73d181083428f80c8445fed29756`). **продукт V05 принят** 02.10.2026 на `5fa13657b38996ba8f3a416a22fb03b7647843b9`. V06 в работе, не принят.
 
-C00: документы **приняты**. C00-01–C00-05 и **продукт C00 приняты** (`e268c40`). Auth **принят** (`51d6033`). Live-схема **принята** 29.09.2026. [`../ROADMAP.md`](../ROADMAP.md) **принят** как порядок работ (29.09.2026). V04-01 **принят** (`4411b22c716d44a92a8d7d762c64d1f22184f0e1`). V04-02 **принят** (`bc413e0df0e09348256319f10af884f8ef6727b4`). V04-03 **принят** (`5dfa595cc08f938bb9859aca3b1b3a585c6ba565`). V04-04 **принят** (`c0d8523e41455fef0281b6e8f62f44ae22cd3a58`). V04-05 **принят** (`3fda3de1d5630f97fe83e46ae5b73c0ad5ce09e0`); V04-06 **принят** (`119ee44`); `saveProfile` закрыт; V04 **не принят**. Не стартовать V06 и I01 без явного старта.
+C00: документы **приняты**. C00-01–C00-05 и **продукт C00 приняты** (`e268c40`). Auth **принят** (`51d6033`). Live-схема **принята** 29.09.2026. [`../ROADMAP.md`](../ROADMAP.md) **принят** как порядок работ (29.09.2026). Не стартовать I01 без явного старта.
 
 V00 принят. V01 принят на `V01_HEAD`. V02 принят на `V02_HEAD`. V03 принят на `V03_HEAD`. Baseline, миграции 8–9 и `migrate resolve` на live Supabase не применять.

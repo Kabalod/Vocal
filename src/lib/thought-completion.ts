@@ -1,23 +1,22 @@
-export type CompletionMissing = "take" | "script";
+export type CompletionMissing = "take" | "text";
 
 export function thoughtCompletionGate(input: {
   finalTakeId: string | null | undefined;
-  finalScriptId: string | null | undefined;
+  finalScriptId?: string | null | undefined;
+  hasFinalText?: boolean;
   status?: string;
 }) {
   const missing: CompletionMissing[] = [];
   if (!input.finalTakeId) missing.push("take");
-  if (!input.finalScriptId) missing.push("script");
+  else if (input.hasFinalText === false) missing.push("text");
   const isCompleted = input.status === "completed";
   let blockedReason = "";
   if (isCompleted) {
     blockedReason = "Мысль уже завершена.";
-  } else if (missing.length === 2) {
-    blockedReason = "Чтобы завершить мысль, выберите итоговый дубль и итоговый сценарий.";
   } else if (missing[0] === "take") {
     blockedReason = "Не выбран итоговый дубль.";
-  } else if (missing[0] === "script") {
-    blockedReason = "Не выбран итоговый сценарий.";
+  } else if (missing[0] === "text") {
+    blockedReason = "У итогового дубля нет выбранной расшифровки.";
   }
   return {
     canComplete: missing.length === 0 && !isCompleted,

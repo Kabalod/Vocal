@@ -40,6 +40,7 @@ import { enqueueByKey } from "@/lib/write-queue";
 import { ownerUserId } from "@/lib/auth/session";
 import { isHeadKind } from "@/types/script";
 import { ensureThoughtState, syncThoughtStateWorkingTake } from "@/lib/thought-state";
+import { recordAutoWorkingTakeCas, selectedRevisionText, supersedeAutoWorkingTakeCas } from "@/lib/v06-working-take";
 
 const reelInclude = {
   takes: {
@@ -393,7 +394,6 @@ async function applyReelUpdate(id: string, input: UpdateReelInput): Promise<Reel
   if (!current) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
 
   const nextFinalTake = input.finalTakeId !== undefined ? input.finalTakeId : current.finalTakeId;
-  const nextFinalScript = current.finalScriptId;
   const currentStatus = normalizeReelStatus(current.status);
   const nextStatus = input.status !== undefined ? input.status : currentStatus;
   const becomingCompleted = input.status === "completed" && currentStatus !== "completed";
@@ -406,14 +406,12 @@ async function applyReelUpdate(id: string, input: UpdateReelInput): Promise<Reel
   if (becomingCompleted) {
     const gate = thoughtCompletionGate({
       finalTakeId: nextFinalTake,
-      finalScriptId: nextFinalScript,
       status: "idea",
     });
     if (!gate.canComplete) {
-      throw new ReelError(gate.blockedReason || "Нельзя завершить мысль без обоих итогов.", "COMPLETE_INCOMPLETE");
+      throw new ReelError(gate.blockedReason || "Нельзя завершить мысль без итогового дубля.", "COMPLETE_INCOMPLETE");
     }
     if (nextFinalTake) await assertFinalTakeBelongs(id, nextFinalTake);
-    if (nextFinalScript) await assertFinalScriptReady(id, nextFinalScript);
   }
 
   const data: Prisma.ReelUncheckedUpdateManyInput = {};
@@ -509,7 +507,6 @@ async function applyReelUpdate(id: string, input: UpdateReelInput): Promise<Reel
   }
   if (becomingCompleted) {
     where.status = { not: "completed" };
-    where.finalScriptId = { not: null };
     if (input.finalTakeId === undefined) where.finalTakeId = { not: null };
   }
 
@@ -518,23 +515,31 @@ async function applyReelUpdate(id: string, input: UpdateReelInput): Promise<Reel
       const fresh = await tx.reel.findUnique({ where: { id } });
       if (!fresh) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
       const freshStatus = normalizeReelStatus(fresh.status);
-      const takeId = input.finalTakeId !== undefined ? input.finalTakeId : fresh.finalTakeId;
-      const scriptId = fresh.finalScriptId;
       if (changingFinalTake && freshStatus === "completed" && nextStatus === "completed") {
         throw new ReelError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
       }
       if (becomingCompleted) {
+        const takeId = input.finalTakeId !== undefined ? input.finalTakeId : fresh.finalTakeId;
+        const take = takeId
+          ? await tx.take.findFirst({
+              where: { id: takeId, reelId: id },
+              select: { id: true, selectedTranscriptId: true },
+            })
+          : null;
+        const hasFinalText = take ? Boolean(await selectedRevisionText(tx, take)) : false;
         const gate = thoughtCompletionGate({
           finalTakeId: takeId,
-          finalScriptId: scriptId,
+          hasFinalText,
           status: "idea",
         });
         if (!gate.canComplete) {
-          throw new ReelError(gate.blockedReason || "Нельзя завершить мысль без обоих итогов.", "COMPLETE_INCOMPLETE");
+          throw new ReelError(gate.blockedReason || "Нельзя завершить мысль без итогового дубля.", "COMPLETE_INCOMPLETE");
         }
         if (takeId) await assertFinalTakeBelongs(id, takeId);
-        if (scriptId) await assertFinalScriptReady(id, scriptId);
       }
+    }
+    if (input.workingTakeId) {
+      await supersedeAutoWorkingTakeCas(tx, id);
     }
     const updated = await tx.reel.updateMany({ where, data });
     if (updated.count === 1 && input.workingTakeId) {
@@ -559,13 +564,19 @@ async function applyReelUpdate(id: string, input: UpdateReelInput): Promise<Reel
       throw new ReelError("Сначала верните мысль в работу, чтобы сменить итог.", "NEED_REOPEN", 409);
     }
     if (becomingCompleted) {
+      const take = exists.finalTakeId
+        ? await prisma.take.findFirst({
+            where: { id: exists.finalTakeId, reelId: id },
+            select: { id: true, selectedTranscriptId: true },
+          })
+        : null;
       const gate = thoughtCompletionGate({
         finalTakeId: exists.finalTakeId,
-        finalScriptId: exists.finalScriptId,
+        hasFinalText: take ? Boolean(await selectedRevisionText(prisma, take)) : false,
         status: "idea",
       });
       if (!gate.canComplete) {
-        throw new ReelError(gate.blockedReason || "Нельзя завершить мысль без обоих итогов.", "COMPLETE_INCOMPLETE");
+        throw new ReelError(gate.blockedReason || "Нельзя завершить мысль без итогового дубля.", "COMPLETE_INCOMPLETE");
       }
     }
     throw new ReelError("Карточка уже изменилась. Обновите данные и повторите.", "STALE", 409);
@@ -654,6 +665,12 @@ export async function createTake(reelId: string, input: CreateTakeInput): Promis
         const pointer = await tx.reel.findUnique({
           where: { id: reelId },
           select: { workingTakeId: true },
+        });
+        await recordAutoWorkingTakeCas(tx, {
+          reelId,
+          takeId: take.id,
+          inputType: input.inputType,
+          predecessorWorkingTakeId: pointer?.workingTakeId ?? null,
         });
         if (!pointer?.workingTakeId) {
           await tx.reel.update({

@@ -57,6 +57,8 @@ export async function updateTake(id: string, input: UpdateTakeInput): Promise<Ta
     data.authorNote = note;
   }
   if (input.bodyText !== undefined) {
+    const { assertCompletedFinalRevisionFrozen } = await import("@/lib/v06-working-take");
+    await assertCompletedFinalRevisionFrozen(prisma, id);
     if (existing.inputType !== "text") {
       throw new ReelError("Текст можно править только у текстовой попытки.", "NOT_TEXT_TAKE");
     }

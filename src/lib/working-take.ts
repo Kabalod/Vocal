@@ -261,7 +261,7 @@ export async function commitDialogueReply(input: {
 
     const take = await tx.take.findFirst({
       where: { id: input.snapshot.workingTakeId, reelId: input.reelId },
-      select: { inputType: true, selectedTranscriptId: true },
+      select: { id: true, inputType: true, selectedTranscriptId: true },
     });
     if (!take) throw new ReelError("Рабочий дубль должен принадлежать этой карточке.", "TAKE_NOT_IN_REEL");
 

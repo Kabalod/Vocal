@@ -8,6 +8,7 @@ import { toJobDto } from "@/lib/serialize";
 import { saveUploadedTake } from "@/lib/takes";
 import { DEFAULT_THOUGHT_TITLE } from "@/lib/thought-create";
 import { applyThoughtTitleFromTranscript } from "@/lib/thought-title";
+import { maybePromoteWorkingTakeFromSelectedTranscript } from "@/lib/v06-working-take";
 import {
   ALLOWED_AUDIO_EXTENSIONS,
   ALLOWED_EXTENSIONS,
@@ -182,6 +183,7 @@ export async function applyThoughtMediaFromTranscript(
     where: { id: take.id },
     data: { selectedTranscriptId: original.id },
   });
+  await maybePromoteWorkingTakeFromSelectedTranscript(take.id);
 
   if (key) {
     await applyThoughtTitleFromTranscript(take.reelId, transcript, complete);

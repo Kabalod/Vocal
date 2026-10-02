@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/db";
 import { ReelError } from "@/lib/reels";
 import { TAKE_TEXT_MAX } from "@/types/reel";
+import {
+  assertCompletedFinalRevisionFrozen,
+  maybePromoteWorkingTakeFromSelectedTranscript,
+} from "@/lib/v06-working-take";
 import type {
   TranscriptBundleDto,
   TranscriptKind,
@@ -106,6 +110,7 @@ export async function saveOriginalIfAbsent(
       where: { id: takeId },
       data: { selectedTranscriptId: created.id, bodyText: take.bodyText || text },
     });
+    await maybePromoteWorkingTakeFromSelectedTranscript(takeId);
   }
   return created;
 }
@@ -174,6 +179,7 @@ export async function listTranscriptBundle(takeId: string): Promise<TranscriptBu
 }
 
 export async function createEditedRevision(takeId: string, textRaw: string) {
+  await assertCompletedFinalRevisionFrozen(prisma, takeId);
   const take = await takeOrThrow(takeId);
   const text = textRaw.trim();
   if (!text) throw new ReelError("Введите текст расшифровки.", "TEXT_REQUIRED");
@@ -200,11 +206,13 @@ export async function createEditedRevision(takeId: string, textRaw: string) {
     where: { id: takeId },
     data: { selectedTranscriptId: created.id, bodyText: text },
   });
+  await maybePromoteWorkingTakeFromSelectedTranscript(takeId);
 
   return listTranscriptBundle(takeId);
 }
 
 export async function selectTranscriptRevision(takeId: string, revisionId: string) {
+  await assertCompletedFinalRevisionFrozen(prisma, takeId);
   await takeOrThrow(takeId);
   const revision = await prisma.transcriptRevision.findFirst({
     where: { id: revisionId, takeId },
@@ -215,6 +223,7 @@ export async function selectTranscriptRevision(takeId: string, revisionId: strin
     where: { id: takeId },
     data: { selectedTranscriptId: revision.id, bodyText: revision.text },
   });
+  await maybePromoteWorkingTakeFromSelectedTranscript(takeId);
   return listTranscriptBundle(takeId);
 }
 

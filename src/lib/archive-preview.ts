@@ -112,6 +112,7 @@ export async function getArchiveThoughtPreview(reelId: string): Promise<ArchiveT
       status: true,
       selectedScriptId: true,
       finalScriptId: true,
+      finalTakeId: true,
       _count: { select: { takes: true } },
       scripts: {
         select: { id: true, kind: true, body: true, createdAt: true },
@@ -128,11 +129,29 @@ export async function getArchiveThoughtPreview(reelId: string): Promise<ArchiveT
   });
 
   const status = normalizeReelStatus(reel.status);
-  const accepted = pickAcceptedArchiveScript({
+  let accepted = pickAcceptedArchiveScript({
     selectedScriptId: reel.selectedScriptId,
     finalScriptId: reel.finalScriptId,
     versions: reel.scripts,
   });
+  if (status === "completed" && reel.finalTakeId) {
+    const take = await prisma.take.findFirst({
+      where: { id: reel.finalTakeId, reelId },
+      select: { id: true, selectedTranscriptId: true, bodyText: true },
+    });
+    if (take) {
+      const revision = take.selectedTranscriptId
+        ? await prisma.transcriptRevision.findFirst({
+            where: { id: take.selectedTranscriptId, takeId: take.id },
+            select: { text: true },
+          })
+        : null;
+      const text = (revision?.text ?? take.bodyText).trim();
+      if (text) {
+        accepted = { id: take.id, kind: "ready", body: text, createdAt: new Date(0) };
+      }
+    }
+  }
   const honesty = archivePreviewHonesty(job);
   const acceptedScript = accepted
     ? {

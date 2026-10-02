@@ -221,7 +221,9 @@ test("P17 matrix: thought without profile through finals, upload, compare, expor
   const exported = await exportCanonicalTxt(reel.id);
   assert.match(exported.filename, /\.txt$/);
   assert.match(exported.text, /P17 мысль/);
-  assert.match(exported.text, /Говорю коротко/);
+  assert.match(exported.text, /Итоговый текст/);
+  assert.match(exported.text, /Исходная мысль без профиля/);
+  assert.equal(exported.text.includes("Говорю коротко"), false);
   assert.doesNotMatch(exported.text, /promptText|api[_-]?key/i);
 
   await startProfileDialogue();

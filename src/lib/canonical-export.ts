@@ -33,11 +33,18 @@ export function resolveCanonicalExportScriptId(input: {
 export function buildCanonicalExportTxt(input: {
   title: string;
   scriptLabel?: string | null;
-  scriptBody: string;
+  scriptBody?: string | null;
   takeLabel?: string | null;
   takeText?: string | null;
+  finalTextLabel?: string | null;
+  finalText?: string | null;
 }): string {
-  const script = input.scriptBody.trim();
+  const finalText = (input.finalText ?? "").trim();
+  if (finalText) {
+    const blocks = [input.title.trim() || "Мысль", "", input.finalTextLabel?.trim() || "Итоговый текст", "", finalText];
+    return `${blocks.join("\n").trim()}\n`;
+  }
+  const script = (input.scriptBody ?? "").trim();
   if (!script) {
     throw new ExportError("Нет готового сценария для экспорта.", "EXPORT_EMPTY");
   }
