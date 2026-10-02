@@ -17,7 +17,7 @@ import { parseStudioTab, studioThoughtHref, writeStudioTab, type StudioMobileTab
 import { resolveStudioRecordDeepLink, studioRecordGate } from "@/lib/recording-session";
 import { studioShouldSilentRefetch } from "@/lib/recovery-client";
 import type { ReelStatus } from "@/types/reel";
-import type { ScriptWorkspaceDto } from "@/types/script";
+import type { ScriptNextQuestionDto, ScriptWorkspaceDto } from "@/types/script";
 
 export function ReelStudio({ reelId }: { reelId: string }) {
   const router = useRouter();
@@ -40,6 +40,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
   const [thoughtStatus, setThoughtStatus] = useState<ReelStatus>("idea");
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [focusDialogue, setFocusDialogue] = useState(false);
+  const [scriptQuestion, setScriptQuestion] = useState<ScriptNextQuestionDto | null>(null);
   const recordBootstrapped = useRef(false);
 
   const refreshStudioAfterJob = useCallback((status: "done" | "error") => {
@@ -164,7 +165,8 @@ export function ReelStudio({ reelId }: { reelId: string }) {
     openRecording();
   }
 
-  function answerScriptQuestion() {
+  function answerScriptQuestion(question?: ScriptNextQuestionDto) {
+    setScriptQuestion(question ?? null);
     setFocusDialogue(true);
     changeTab("dialog");
   }
@@ -242,7 +244,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
               reelId={reelId}
               reloadToken={scriptTick}
               thoughtCompleted={thoughtStatus === "completed"}
-              onAnswerQuestion={() => answerScriptQuestion()}
+              onAnswerQuestion={(question) => answerScriptQuestion(question)}
               onChanged={() => setScriptTick((value) => value + 1)}
             />
             ) : null
@@ -256,6 +258,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
               onDraftChange={setDraft}
               hasReadyScript={hasReadyScript}
               autoFocusComposer={focusDialogue}
+              pinnedQuestion={scriptQuestion}
               thoughtCompleted={thoughtStatus === "completed"}
               onGoRecord={requestRecording}
               onReopen={() => {

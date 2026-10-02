@@ -47,6 +47,8 @@ export class ScriptDraftSaveSession {
   private listeners = new Set<() => void>();
   private snapshot: ScriptDraftUiSnapshot;
   private version = 0;
+  private localEditVersion = 0;
+  private hydratedEditVersion = 0;
 
   constructor(
     private readonly deps: {
@@ -93,7 +95,12 @@ export class ScriptDraftSaveSession {
 
   setBody(body: string) {
     this.body = body;
+    this.localEditVersion += 1;
     this.emit();
+  }
+
+  hasUnsavedLocalEdits() {
+    return this.localEditVersion > this.hydratedEditVersion || this.body !== (this.savedBody ?? this.body);
   }
 
   enterDraft() {
@@ -112,7 +119,9 @@ export class ScriptDraftSaveSession {
     this.savedBody = draft.body;
     this.expectedUpdatedAt = draft.updatedAt;
     this.expectedSaveToken = draft.saveToken;
-    if (!keepBody) this.body = draft.body;
+    const preserve = keepBody || this.hasUnsavedLocalEdits();
+    if (!preserve) this.body = draft.body;
+    this.hydratedEditVersion = this.localEditVersion;
     this.emit();
   }
 

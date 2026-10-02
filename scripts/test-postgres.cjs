@@ -65,6 +65,7 @@ const dbTests = [
   "tests/v04-display-session.test.ts",
   "tests/v04-commit-session.test.ts",
   "tests/v05-scenario-tab.test.ts",
+  "tests/v05-review-fixes.test.ts",
   "tests/p10-p12-profile.test.ts",
   "tests/p17-e2e-matrix.test.ts",
   "tests/personal-mvp.test.ts",
@@ -130,6 +131,7 @@ const reelsTests = [
   "tests/v04-display-session.test.ts",
   "tests/v04-commit-session.test.ts",
   "tests/v05-scenario-tab.test.ts",
+  "tests/v05-review-fixes.test.ts",
   "tests/p10-p12-profile.test.ts",
   "tests/legacy-routes.test.ts",
   "tests/mvp-release.test.ts",
@@ -150,6 +152,7 @@ function selectedTests() {
   if (process.argv.includes("--v05")) {
     return [
       "tests/v05-scenario-tab.test.ts",
+      "tests/v05-review-fixes.test.ts",
       "tests/scripts.test.ts",
       "tests/thought-script-draft.test.ts",
       "tests/thought-text-create.test.ts",

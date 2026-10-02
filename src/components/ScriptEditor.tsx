@@ -74,8 +74,9 @@ export function ScriptEditor({
     const nextViewId = next.viewing?.id ?? next.headId ?? next.versions.find((row) => isHeadKind(row.kind))?.id ?? null;
     setViewingId((current) => current ?? nextViewId);
     if (next.viewing) setViewing(next.viewing);
-    session.hydrate(next.draft, keepDraftText);
-    if (next.draft && !keepDraftText) skipAutosave.current = true;
+    const preserve = keepDraftText || session.hasUnsavedLocalEdits();
+    session.hydrate(next.draft, preserve);
+    if (next.draft && !preserve) skipAutosave.current = true;
   }, [session]);
 
   const load = useCallback(
@@ -160,7 +161,7 @@ export function ScriptEditor({
         if (fresh.ok) applyWorkspace((await fresh.json()) as ScriptWorkspaceDto, true);
         return;
       }
-      applyWorkspace(data as ScriptWorkspaceDto, false);
+      applyWorkspace(data as ScriptWorkspaceDto, session.hasUnsavedLocalEdits());
       setViewingId((data as ScriptWorkspaceDto).headId);
       setViewing((data as ScriptWorkspaceDto).viewing);
       generateKeyRef.current = newGenerateKey();
@@ -177,7 +178,14 @@ export function ScriptEditor({
 
   async function keepCurrent() {
     setLoadError(null);
-    const res = await fetch(`/api/reels/${reelId}/scripts/keep`, { method: "POST" });
+    const res = await fetch(`/api/reels/${reelId}/scripts/keep`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        versionId: viewingId,
+        draft: snap.mode === "draft" || (!viewingId && Boolean(workspace?.draft)),
+      }),
+    });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Не удалось оставить сценарий.");
     applyWorkspace(data as ScriptWorkspaceDto, true);
@@ -263,12 +271,12 @@ export function ScriptEditor({
       ) : null}
       {generateFault?.kind === "error" ? (
         <div data-script-fault="error">
-          <ShellError message={generateFault.message} onRetry={() => void generate(newGenerateKey())} />
+          <ShellError message={generateFault.message} onRetry={() => void generate()} />
         </div>
       ) : null}
       {generating ? <p className="text-sm text-muted">Собираем сценарий…</p> : null}
       {snap.status && !snap.saving ? <p className="text-sm text-muted">{snap.status}</p> : null}
-      {workspace && phase === "not_ready" && workspace.blockReason ? (
+      {workspace && workspace.blockReason && (phase === "not_ready" || workspace.readyCount > 0 || workspace.draft) ? (
         <div className="vocal-card space-y-3 p-4">
           <p className="text-sm">{workspace.blockReason}</p>
           {workspace.nextQuestion ? (

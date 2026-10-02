@@ -29,6 +29,7 @@ import {
   retainDialogueSendKey,
 } from "@/lib/dialogue-client";
 import type { DialogueMessageDto, DialoguePageDto } from "@/types/dialogue";
+import type { ScriptNextQuestionDto } from "@/types/script";
 
 function MessageBubble({
   message,
@@ -65,6 +66,7 @@ export function ThoughtDialogue({
   thoughtCompleted = false,
   onReopen,
   autoFocusComposer = false,
+  pinnedQuestion = null,
 }: {
   reelId: string;
   draft: string;
@@ -74,6 +76,7 @@ export function ThoughtDialogue({
   thoughtCompleted?: boolean;
   onReopen?: () => void;
   autoFocusComposer?: boolean;
+  pinnedQuestion?: ScriptNextQuestionDto | null;
 }) {
   const [page, setPage] = useState<DialoguePageDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -433,6 +436,11 @@ export function ThoughtDialogue({
         </div>
       ) : null}
       <div className="mt-3 space-y-2 border-t border-line pt-3">
+        {pinnedQuestion?.text ? (
+          <p className="text-sm" data-dialogue-pinned-question={pinnedQuestion.gapId ?? ""}>
+            {pinnedQuestion.text}
+          </p>
+        ) : null}
         {thoughtCompleted ? (
           <ActionButton variant="secondary" onClick={onReopen}>
             Вернуть в работу

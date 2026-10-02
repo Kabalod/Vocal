@@ -25,6 +25,20 @@ function composerMarkup(session: ScriptDraftSaveSession, handlers: { onFinalize?
   );
 }
 
+test("generate hydrate keeps unsaved local textarea edits", () => {
+  const session = new ScriptDraftSaveSession({
+    patch: async (input) => ({
+      draft: { body: input.body, updatedAt: "t1", saveToken: input.expectedSaveToken + 1 },
+    }),
+  });
+  session.hydrate({ body: "сервер до генерации", updatedAt: "t0", saveToken: 1 }, false);
+  session.setBody("пользователь меняет textarea");
+  assert.equal(session.hasUnsavedLocalEdits(), true);
+  session.hydrate({ body: "новая версия с сервера", updatedAt: "t2", saveToken: 2 }, session.hasUnsavedLocalEdits());
+  assert.equal(session.body, "пользователь меняет textarea");
+  assert.equal(session.savedBody, "новая версия с сервера");
+});
+
 test("ScriptEditor binds composer to session snapshot, not a late finally", () => {
   const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/components/ScriptEditor.tsx"), "utf8");
   assert.match(source, /useSyncExternalStore/);

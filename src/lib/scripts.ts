@@ -150,7 +150,11 @@ export async function listAvailableSources(reelId: string): Promise<ScriptSource
     include: { transcripts: { orderBy: { createdAt: "asc" } } },
   });
   for (const take of takes) {
-    const selected = take.transcripts.find((row) => row.id === take.selectedTranscriptId) ?? take.transcripts[0];
+    const selected = take.selectedTranscriptId
+      ? take.transcripts.find((row) => row.id === take.selectedTranscriptId)
+      : take.inputType === "text"
+        ? take.transcripts[0]
+        : undefined;
     if (selected?.text.trim()) {
       options.push({
         type: "transcript",
