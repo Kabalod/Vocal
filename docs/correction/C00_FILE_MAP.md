@@ -1,6 +1,6 @@
 # C00 — файлы и риски схемы
 
-Документы C00 **приняты**. C00-01–C00-05 и **продукт C00 приняты** (`e268c40`). Маршрут: [`../ROADMAP.md`](../ROADMAP.md). V04 не принят.
+Документы C00 **приняты**. C00-01–C00-05 и **продукт C00 приняты** (`e268c40`). Маршрут: [`../ROADMAP.md`](../ROADMAP.md). V04 не принят. **продукт V05 принят** 02.10.2026.
 
 ## Читать как есть (принятый V03 + BASE портрета)
 
@@ -10,7 +10,7 @@
 | `src/lib/thought-state.ts`, `agent-action.ts` | факты, пробелы, non-content |
 | `src/lib/profile-dialogue.ts`, `profile-portrait.ts`, `ai/profile.ts` | портрет BASE / цель V04-00 |
 | `src/lib/reel-context.ts`, `ai-runtime-context.ts` | портрет → промпт / сценарий |
-| `src/lib/ai/script.ts`, `scripts.ts` | сценарий (V05 не начат) |
+| `src/lib/ai/script.ts`, `scripts.ts` | сценарий (**продукт V05 принят**) |
 | `src/lib/ai/questions.ts`, `review.ts` | вопросы/разбор |
 | `src/lib/thought-completion.ts` | `finalTakeId` (V06) |
 | `src/lib/auth/session.ts`, `auth/request.ts` | `ownerUserId` |
