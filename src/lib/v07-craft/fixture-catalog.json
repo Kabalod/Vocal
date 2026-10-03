@@ -1,0 +1,75 @@
+{
+  "version": "v07-fixtures-1",
+  "cards": [
+    {
+      "id": "craft_example_a",
+      "version": "1",
+      "layer": "fixture",
+      "applicableGapKey": "gap_example",
+      "contentModes": ["unspecified", "personal_story"],
+      "mechanism": "Конкретизировать один прожитый момент.",
+      "questionStrategy": "Спросить, какой один случай автор готов произнести.",
+      "contraindications": ["Не подсказывать чужую сцену."]
+    },
+    {
+      "id": "craft_example_b",
+      "version": "1",
+      "layer": "fixture",
+      "applicableGapKey": "gap_example",
+      "contentModes": ["unspecified", "personal_story"],
+      "mechanism": "Отделить наблюдение от вывода.",
+      "questionStrategy": "Спросить, что автор видел своими глазами.",
+      "contraindications": ["Не предлагать мораль."]
+    },
+    {
+      "id": "craft_example_c",
+      "version": "1",
+      "layer": "fixture",
+      "applicableGapKey": "gap_example",
+      "contentModes": ["unspecified", "personal_story"],
+      "mechanism": "Удержать одну мысль.",
+      "questionStrategy": "Спросить, какую одну формулировку нельзя потерять.",
+      "contraindications": ["Не собирать список советов."]
+    },
+    {
+      "id": "craft_example_d",
+      "version": "1",
+      "layer": "fixture",
+      "applicableGapKey": "gap_example",
+      "contentModes": ["unspecified", "personal_story"],
+      "mechanism": "Проверить, кому это сказано.",
+      "questionStrategy": "Спросить, кому автор это говорит в кадре.",
+      "contraindications": ["Не выдумывать аудиторию."]
+    },
+    {
+      "id": "craft_example_e",
+      "version": "1",
+      "layer": "fixture",
+      "applicableGapKey": "gap_example",
+      "contentModes": ["unspecified", "personal_story"],
+      "mechanism": "Лишний пятый приём для проверки лимита.",
+      "questionStrategy": "Не должен попасть в выборку из четырёх.",
+      "contraindications": []
+    },
+    {
+      "id": "craft_explain_only",
+      "version": "1",
+      "layer": "fixture",
+      "applicableGapKey": "gap_example",
+      "contentModes": ["explanation"],
+      "mechanism": "Разложить механизм без личного случая.",
+      "questionStrategy": "Спросить, какой шаг процесса ещё не назван.",
+      "contraindications": ["Не требовать исповедь."]
+    },
+    {
+      "id": "craft_other_gap",
+      "version": "1",
+      "layer": "fixture",
+      "applicableGapKey": "gap_other",
+      "contentModes": ["unspecified"],
+      "mechanism": "Карточка другого пробела.",
+      "questionStrategy": "Не выбирать, пока текущий пробел другой.",
+      "contraindications": []
+    }
+  ]
+}

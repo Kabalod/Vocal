@@ -46,6 +46,20 @@ import {
 } from "@/lib/dialogue-exec";
 import type { CompleteJsonFn } from "@/types/review";
 import type { DialogueKind, DialogueMessageDto, DialoguePageDto, DialogueRole } from "@/types/dialogue";
+import {
+  isV07CraftEnabled,
+  loadActiveCraftCatalog,
+  thoughtContentMode,
+} from "@/lib/v07-craft/catalog";
+import {
+  cardsForSnapshot,
+  craftSnapshotFromSelection,
+  formatCraftPromptHint,
+  parseCraftSnapshot,
+  selectCraftCards,
+  type CraftSnapshot,
+} from "@/lib/v07-craft/select";
+import { assertCraftNotAuthorEvidence } from "@/lib/v07-craft/guard";
 
 export const DIALOGUE_PAGE_SIZE = 20;
 
@@ -356,11 +370,41 @@ function parseTurnPayload(raw: string): { userMessageId?: string; aiCallId?: str
   }
 }
 
+function readStoredCraftSnapshot(raw: string): CraftSnapshot | null {
+  try {
+    const parsed = JSON.parse(raw) as { craft?: unknown };
+    return parseCraftSnapshot(parsed.craft);
+  } catch {
+    return null;
+  }
+}
+
+function resolveCraftSnapshot(
+  thought: { openGaps: { id: string; text: string; status: "open" | "resolved" }[]; decisions: string[] },
+  locked: CraftSnapshot | null,
+): CraftSnapshot {
+  const catalog = loadActiveCraftCatalog();
+  const enabled = isV07CraftEnabled();
+  if (locked) return locked;
+  if (!enabled) {
+    return { enabled: false, catalogVersion: catalog.version, cardIds: [], selectedGapId: null };
+  }
+  return craftSnapshotFromSelection(
+    selectCraftCards({
+      gaps: thought.openGaps,
+      contentMode: thoughtContentMode(thought),
+      catalog,
+    }),
+    catalog,
+    true,
+  );
+}
+
 async function freezeThoughtPrompt(
   reelId: string,
   threadId: string,
   authorText: string,
-  turn?: { userMessageId: string },
+  turn?: { userMessageId: string; lockedCraft?: CraftSnapshot | null },
 ) {
   const { reel, take } = await requireWorkingTake(reelId);
   if (v01TestSeams.afterWorkingTakeRead) await v01TestSeams.afterWorkingTakeRead();
@@ -445,6 +489,12 @@ async function freezeThoughtPrompt(
       ? [`Валидный пример author_negation, только если автор отрицает факт мысли: ${c00AuthorNegationExample}`]
       : []),
   ].join("\n");
+  const craft = resolveCraftSnapshot(thought, turn?.lockedCraft ?? null);
+  const catalog = loadActiveCraftCatalog();
+  const craftHint =
+    craft.enabled && (catalog.cards.length > 0 || craft.cardIds.length > 0)
+      ? formatCraftPromptHint(cardsForSnapshot(catalog, craft), craft.selectedGapId, craft.enabled)
+      : "";
   const prompt = [
     `Мысль: ${reel.id}`,
     `Название: ${reel.title ?? ""}`,
@@ -469,11 +519,17 @@ async function freezeThoughtPrompt(
       facts: thought.facts,
       openGaps: thought.openGaps,
     })}`,
+    craftHint,
     isC00PolicyEnabled() ? c00ReplyGuide : V03_HEAD_DIALOGUE_REPLY_GUIDE,
   ]
     .filter(Boolean)
     .join("\n\n");
-  return { prompt, material, thoughtFacts: thought.facts };
+  return {
+    prompt,
+    material,
+    thoughtFacts: thought.facts,
+    craft: resolveCraftSnapshot(thought, turn?.lockedCraft ?? null),
+  };
 }
 
 export async function buildThoughtMaterialContext(reelId: string): Promise<string> {
@@ -676,6 +732,12 @@ export async function runDialogueTurn(
         return listDialoguePage(reelId);
       }
       const reply = parseAgentReply(parseJsonObject(reusable.responseText));
+      assertCraftNotAuthorEvidence({
+        catalog: loadActiveCraftCatalog(),
+        action: reply.action,
+        thoughtUpdate: reply.thoughtUpdate,
+        c00Signal: reply.c00Signal,
+      });
       const classified = await classifiedCorrectionSignal({
         reelId,
         userText: text,
@@ -707,9 +769,16 @@ export async function runDialogueTurn(
       userMessageId: userMessage.id,
       complete,
     });
-    const { prompt: userPrompt, material, thoughtFacts } = await freezeThoughtPrompt(reelId, thread.id, text, {
-      userMessageId: userMessage.id,
-    });
+    const lockedCraft = readStoredCraftSnapshot(reusable.inputSnapshotJson);
+    const { prompt: userPrompt, material, thoughtFacts, craft } = await freezeThoughtPrompt(
+      reelId,
+      thread.id,
+      text,
+      {
+        userMessageId: userMessage.id,
+        lockedCraft,
+      },
+    );
     await prisma.aiCall.update({
       where: { id: reusable.id },
       data: {
@@ -726,6 +795,7 @@ export async function runDialogueTurn(
           dialogueVersion: material.dialogueVersion,
           thoughtStateRevision: material.thoughtStateRevision,
           thoughtFacts,
+          craft,
         }),
       },
     });
@@ -790,6 +860,12 @@ export async function runDialogueTurn(
       return listDialoguePage(reelId);
     }
     const reply = parseAgentReply(parseJsonObject(call.responseText));
+    assertCraftNotAuthorEvidence({
+      catalog: loadActiveCraftCatalog(),
+      action: reply.action,
+      thoughtUpdate: reply.thoughtUpdate,
+      c00Signal: reply.c00Signal,
+    });
     const classified = await classifiedPromise;
     await commitDialogueReply({
       reelId,

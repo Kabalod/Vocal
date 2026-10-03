@@ -9,7 +9,7 @@ Start here:
 6. V04: **продукт V04 принят** (`e8985243e85c73d181083428f80c8445fed29756`). V04_BASE_SHA = `564c9cf8534392501e125dda7ecc747c235a5c0d`.
 6a. V05: **продукт V05 принят** 02.10.2026. V05_HEAD = `5fa13657b38996ba8f3a416a22fb03b7647843b9`. V05_BASE_SHA = `abd6670f65269b081d20762f49945a3628db52fb`. Canon: `docs/core-loop/V05_SCENARIO_TAB_SPEC.md`, `docs/core-loop/V05_REPORT.md`.
 6b. V06: **продукт V06 принят** 04.10.2026. V06_HEAD = `d0bdb89cd36c6e1b6925d6746a6447323d419eb3`. V06_BASE_SHA = `f741eb8d9e6c5881afcdd43d3f4cff9a8ccbd2fd`. Report: `6e958e6ca3ac96d99a6d4fea5686f49e8ab98fd9`. Canon: `docs/core-loop/V06_PLAN.md`, `docs/core-loop/V06_REPORT.md`, `docs/core-loop/CONTRACT.md`.
-6c. V07: BASE assigned (`307bc8b9faf42d2ad64a0117c17f3b2ed800ef34`). Product not started. Canon: `docs/core-loop/V07_PLAN.md`. Do not implement V07 without an explicit start.
+6c. V07: BASE `307bc8b9faf42d2ad64a0117c17f3b2ed800ef34`. Product candidate in progress, **not accepted**. Canon: `docs/core-loop/V07_PLAN.md`, `docs/core-loop/V07_REPORT.md`. Do not accept V07. Do not declare I06/I08 done.
 7. V01_HEAD = `d34e8dee2243ae109f2e535a439784117cef3aff`
 8. V02_HEAD = `1c9a4b9d4fda8df91b2e650e217883c8e02ccc62`
 9. V03_BASE_SHA = `66cbcc0c3fc68a5b0786a4e9036a13d523ac3083`. Product at BASE equals V02_HEAD plus V02 acceptance docs. Do not treat V02_BASE as V03 BASE.
