@@ -1,65 +1,73 @@
-# V06 — кандидат (не принят)
+# V06 — кандидат на финальную внешнюю приёмку (не принят)
 
-Статус: **исправления по замечаниям, на повторную сверку**. Продукт V06 **не принят**.
+Статус: **полный прогон на продуктовом SHA выполнен**. Продукт V06 **не принят**.
+Продукт SHA: `d0bdb89cd36c6e1b6925d6746a6447323d419eb3`.
 V06_BASE_SHA: `f741eb8d9e6c5881afcdd43d3f4cff9a8ccbd2fd`.
 Опоры (не перепроверять): продукт V04 `e8985243e85c73d181083428f80c8445fed29756`; продукт V05 `5fa13657b38996ba8f3a416a22fb03b7647843b9`.
 План: [`V06_PLAN.md`](./V06_PLAN.md). Контракт: [`CONTRACT.md`](./CONTRACT.md).
-Полный `test:postgres` в этой итерации **не** гонялся.
+
+Внешняя сверка четырёх замечаний закрыта ранее (`10a5ccc` / `d0bdb89`). Этот отчёт — финальная приёмка без повторной правки кода.
 
 ## Замечания → исправление → тест → факт
 
-### 1. Автоперевод рабочего дубля ждал предшественника и проигрывал CAS
+### 1. Автоперевод рабочего дубля
 
-**Замечание.** T2 и T3, созданные при working=T1, оба ждали T1. Готовность T2 ставила working=T2, после чего T3 проигрывал CAS. Нужен порядок дублей, не порядок STT; ручной PATCH (включая тот же указатель) побеждает; повторы и completed не переключают; согласованный FOR UPDATE; отказать PATCH не должен отменять автоматику.
+**Замечание.** T2 и T3 при working=T1 оба ждали T1; после готовности T2 готовность T3 проигрывала CAS.
 
-**Исправление.** Журнал `v06_auto_work`: T3 может сменить working, если текущий указатель — автоматически продвинутый дубль с меньшим `number`. Ручной PATCH после успешного `updateMany` помечает queued как `error` (`working_take_manual`). Lock: `FOR UPDATE` Reel, затем pointer/CAS через `tx`. Отказавший PATCH не вызывает supersede.
+**Исправление.** Журнал `v06_auto_work`: поздний дубль с большим `number` может сменить автоматически продвинутый указатель; ручной PATCH после успешного `updateMany` supersede-ит queued; FOR UPDATE Reel, затем pointer/CAS через `tx`.
 
-**Тест.** `tests/v06-loop.test.ts`: T2 затем T3 → working=T3; T3 затем T2 → остаётся T3; барьер auto до lock → PATCH того же working → auto не переводит; отказ PATCH оставляет queued, STT переводит.
+**Тест.** `tests/v06-loop.test.ts`: оба порядка готовности и барьер «auto до lock → PATCH того же указателя».
 
-**Факт.** 26/26 адресных postgres, включая оба порядка готовности и барьер «auto до lock → PATCH того же указателя».
+**Факт.** Закрыто на `d0bdb89`; повторно не чинилось.
 
-### 2. Заморозка итогового текста не была атомарной
+### 2. Атомарная заморозка итоговой ревизии
 
-**Замечание.** Completion, смена `finalTakeId`, выбор/создание ревизии и `bodyText` расходились. Частичный `bodyText` при отклонённом выборе. Глобальный prisma внутри tx.
+**Замечание.** Completion, `finalTakeId`, выбор ревизии и `bodyText` расходились.
 
-**Исправление.** Один `FOR UPDATE` Reel + перечитывание через `tx` для complete/finalTake/revision write. `createEditedRevision` / `selectTranscriptRevision` пишут выбранную ревизию и `bodyText` в той же tx. `updateTake` больше не пишет `bodyText` до ревизии. Проверка completed — в tx, без prisma для проверяемых данных.
+**Исправление.** Один FOR UPDATE Reel + перечитывание в `tx`; edit create+select атомарны; `bodyText` не пишется до выбора ревизии.
 
-**Тест.** Барьер: правка ждала lock → completion выиграл → `NEED_REOPEN`, ревизия и текст прежние. Обратно: правка выиграла → completion завершает выбранную edit.
+**Тест.** Барьер правка vs complete в обе стороны.
 
-**Факт.** Барьерные тесты freeze в `v06-loop` прошли: NEED_REOPEN без смены ревизии/`bodyText`; обратный порядок завершает edit.
+**Факт.** Закрыто на `d0bdb89`; повторно не чинилось.
 
-### 3. `applyThoughtMediaFromTranscript` безусловно выбирал original
+### 3. Повтор `applyThoughtMediaFromTranscript`
 
-**Замечание.** Повтор обработки затирал edit; completed final менял выбранную ревизию.
+**Замечание.** Повтор безусловно выбирал original.
 
-**Исправление.** Условный `selectOriginalIfUnsetInTx` после lock: keep / frozen / select. Автоперевод — `promoteWorkingTakeInTx` в той же tx.
+**Исправление.** Условный `selectOriginalIfUnsetInTx`; completed final не меняет выбранную ревизию.
 
-**Тест.** edit сохраняется при повторном apply (проверка `Take.selectedTranscriptId` в БД); completed final+edit неизменен; первая original на незавершённой мысли выбирается и автоперевод ставит working на этот дубль (`v06_auto_work` done, promoted).
+**Тест.** Edit сохраняется; completed неизменен; первая original + разрешённый автоперевод.
 
-**Факт.** 26/26 адресных postgres: первая original пишется в `selectedTranscriptId`, working переходит на этот дубль, `v06_auto_work.promoted=true`. Edit и completed final не затираются.
+**Факт.** Закрыто на `d0bdb89`; повторно не чинилось.
 
-### 4. Источник итогового текста нестрогий
+### 4. Строгий итоговый текст
 
 **Замечание.** Экспорт/превью подставляли `bodyText`, первую original или сценарий.
 
-**Исправление.** Завершённая мысль: только `finalTakeId` → `selectedTranscriptId` → ревизия той же Take с непустым text. Иначе отказ экспорта и «Итоговый текст недоступен» в превью. `CompletionSummary` не считает fallback `bodyText`. Явный `scriptId` — отдельный экспорт сценария без смешения.
+**Исправление.** Только `finalTakeId` → `selectedTranscriptId` → ревизия той же Take с непустым text. Явный `scriptId` — отдельная операция.
 
-**Тест.** Экспорт/превью с выбранной ревизией; отказ и пустое превью без выбранной ревизии при наличии bodyText/сценария; `r7-export` явный scriptId vs пустой default.
+**Тест.** Экспорт/превью/r7.
 
-**Факт.** Строгий экспорт/превью и r7 (явный scriptId vs отказ default без итога) прошли.
+**Факт.** Закрыто на `d0bdb89`; повторно не чинилось.
 
-## Проверки этой итерации
+## Полный `test:postgres` на продуктовом SHA
 
-- `npx tsc --noEmit` — ок
-- адресные postgres (чистый env, `VOCAL_SKIP_PRISMA_GENERATE=1`): **26/26**
-  - `tests/v06-loop.test.ts`
-  - `tests/thought-completion.test.ts`
-  - `tests/thought-media-create.test.ts`
-  - `tests/thought-media-cleanup.test.ts`
-  - `tests/r7-export.test.ts`
-  - `tests/p01-5-archive-preview.test.ts`
-- полный `test:postgres` — **не запускался** (сначала повторная сверка замечаний)
+- SHA: `d0bdb89cd36c6e1b6925d6746a6447323d419eb3`
+- Окружение: чистое (без `VOCAL_UI_TEST_DB`, `VOCAL_AI_MOCK`, `VOCAL_SKIP_PRISMA_GENERATE`); штатный `prisma generate` (`vocal-test-time prisma_generate_ms=34707`)
+- Первый старт: **не тест-регрессия** — Docker Desktop не был запущен (`dockerDesktopLinuxEngine` pipe missing). Движок поднят, прогон **один** раз после готовности Docker.
+- Результат: **234 pass / 0 fail** (`# tests 234`, `# fail 0`, `exit_code: 0`)
+- Исторически: **230/230** на `d59695bb47909699d79ea3e0fb0349760f1edcea` — не переносится на этот SHA (на кандидате +4 теста V06)
+
+## UI smoke (тестовая Postgres `:55432`, `VOCAL_UI_TEST_DB=1`, `VOCAL_AI_MOCK=1`, `next dev -p 3010` без Turbopack)
+
+Desktop 1280 и узкий 390:
+
+- Итоговый текстовый дубль без сценария: кнопка «Завершить мысль» доступна; PATCH complete 200; «Мысль успешно завершена».
+- Итоговый текст — выбранная edit (`EDIT_UI_TEXT`, после reopen `EDIT_UI_AFTER_REOPEN`).
+- На `completed` смена ревизии: POST `/transcript` → **409 NEED_REOPEN**.
+- После «Вернуть в работу» правка доступна: POST `/transcript` → **201**.
+- Без выбранной ревизии: в CompletionSummary нет `bodyText`/сценария («Итоговый текст появится после выбора дубля с расшифровкой»), «Завершить мысль» disabled. Для completed без ревизии: export `EXPORT_EMPTY` («Нет выбранной расшифровки итогового дубля.»), archive-preview `acceptedScript: null`, hint «Итоговый текст недоступен.» (не bodyText и не сценарий). После reopen незавершённой мысли превью снова показывает принятый сценарий как сценарий, не как итоговый текст мысли.
 
 ## Ограничения
 
-Job-analyze, ремонт загрузки, legacy Review, I01, мост памяти, probe, SQL recreate, live-схема, платные модели, V07 — вне объёма. V06 самостоятельно не принимать.
+Job-analyze, ремонт загрузки, legacy Review, I01, мост памяти, probe, SQL recreate, live-схема, платные модели, V07, Turbopack/shared `node_modules` — вне объёма. V06 самостоятельно не принимать.
