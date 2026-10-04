@@ -6,7 +6,6 @@ import type { ReviewDto } from "@/types/review";
 export function ReviewPanel({ takeId }: { takeId: string }) {
   const [reviews, setReviews] = useState<ReviewDto[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/takes/${takeId}/review`, { cache: "no-store" });
@@ -19,47 +18,15 @@ export function ReviewPanel({ takeId }: { takeId: string }) {
     void load().catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."));
   }, [load]);
 
-  async function runReview() {
-    setRunning(true);
-    setError(null);
-    try {
-      const previous = reviews.find((row) => row.status === "done");
-      const res = await fetch(`/api/takes/${takeId}/review`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ previousReviewId: previous?.id ?? null }),
-      });
-      const data = await res.json();
-      if (!res.ok && res.status !== 422) throw new Error(data.error ?? "Не удалось запустить разбор.");
-      await load();
-      if (data.review?.status === "error") {
-        setError(data.review.errorMessage ?? "Модель не вернула корректный разбор.");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка.");
-    } finally {
-      setRunning(false);
-    }
-  }
-
   const latest = reviews[0] ?? null;
 
   return (
     <section className="space-y-3 rounded-2xl border border-line bg-bg-elev p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-medium">Разбор дубля</h3>
-        <button
-          type="button"
-          onClick={() => void runReview()}
-          disabled={running}
-          className="rounded-full bg-accent px-4 py-2 text-sm text-on-accent disabled:opacity-50"
-        >
-          {running ? "Разбираем…" : "Разобрать выбранный текст"}
-        </button>
+        <h3 className="font-medium">Сохранённые разборы</h3>
       </div>
       <p className="text-sm text-muted">
-        Вызов модели явный. Баллы не нужны. Мысль автора и предложение модели разделены. Цитата, которой нет в тексте,
-        помечается; повтор из‑за этого сам не запускается. Новый разбор не переписывает старый.
+        Новые разборы здесь не создаются. Задайте вопрос в основном Диалоге. Старые записи не удаляются.
       </p>
       {error ? <p className="text-sm text-bad">{error}</p> : null}
       {!latest ? <p className="text-sm text-muted">Разборов ещё нет.</p> : null}

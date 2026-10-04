@@ -70,6 +70,7 @@ const dbTests = [
   "tests/v06-loop.test.ts",
   "tests/v07-craft.test.ts",
   "tests/v07-cycle.test.ts",
+  "tests/media-path.test.ts",
   "tests/p10-p12-profile.test.ts",
   "tests/p17-e2e-matrix.test.ts",
   "tests/personal-mvp.test.ts",
@@ -173,6 +174,14 @@ function selectedTests() {
   }
   if (process.argv.includes("--v07")) {
     return ["tests/v07-craft.test.ts", "tests/v07-cycle.test.ts"];
+  }
+  if (process.argv.includes("--media")) {
+    return [
+      "tests/media-path.test.ts",
+      "tests/pipeline-recovery.test.ts",
+      "tests/thought-media-create.test.ts",
+      "tests/v06-loop.test.ts",
+    ];
   }
   if (process.argv.includes("--auth")) return authTests;
   if (process.argv.includes("--reels")) return reelsTests;

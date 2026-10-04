@@ -196,13 +196,6 @@ export async function ensureAutomaticTakeComparison(
     const listed = await listComparisons(reelId);
     return listed.find((item) => item.id === existing.id) ?? null;
   }
-  try {
-    return await createReelComparison(reelId, { leftTakeId, rightTakeId, runAi: true }, complete);
-  } catch {
-    try {
-      return await createReelComparison(reelId, { leftTakeId, rightTakeId, runAi: false }, complete);
-    } catch {
-      return null;
-    }
-  }
+  void complete;
+  return null;
 }

@@ -5,41 +5,8 @@ import path from "node:path";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
-import type { AnalysisResultPayload } from "../src/types/analysis";
 
-function fakePayload(transcript: string): AnalysisResultPayload {
-  return {
-    overallScore: 7,
-    summary: "mock",
-    video: { topic: "", mainIdea: "", targetAudience: "", format: "" },
-    metrics: {
-      durationSec: 1,
-      wordsPerMinute: 100,
-      pauseCount: 0,
-      avgPauseSec: 0,
-      maxPauseSec: 0,
-      fillerPer100Words: 0,
-      fillerCount: 0,
-      wordCount: 2,
-      rushShare: 0,
-    },
-    evaluations: [],
-    scores: [],
-    categoryScores: [],
-    strengths: [],
-    recommendations: [],
-    transcript: { text: transcript, segments: [{ start: 0, end: 1, text: transcript }] },
-    growthAreas: [],
-    exercise: { title: "", task: "", instruction: "", successCriteria: [] },
-    coach: {
-      format: "",
-      scenario: { spine: "", weakBeats: [], openingRewrite: "", endingRewrite: "" },
-      craft: [],
-    },
-  };
-}
-
-test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versions", async (t) => {
+test("pipeline recovery: STT saved, replay skips STT, lease, exhausted, versions", async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), "vocal-jobs-"));
   const { prisma } = await withPostgresTestDb(t);
       t.after(async () => {
@@ -78,7 +45,6 @@ test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versi
   const take = await createTake(reel.id, { inputType: "video", jobId: job.id });
 
   let sttCalls = 0;
-  let llmCalls = 0;
   const stt = async () => {
     sttCalls += 1;
     return {
@@ -93,34 +59,25 @@ test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versi
 
   await processJob(job.id, {
     transcribeAudio: stt,
-    analyzeSpeech: async () => {
-      llmCalls += 1;
-      throw Object.assign(new Error("LLM down"), { code: "LLM_SCHEMA" });
-    },
     extractAudio,
     probeDuration,
   });
 
   assert.equal(sttCalls, 1);
-  assert.equal(llmCalls, 1);
   const original = await findOriginalRevision(take.id);
   assert.ok(original);
   assert.equal(original?.text, "привет мир");
   const afterStt = await prisma.job.findUnique({ where: { id: job.id }});
-  assert.equal(afterStt?.status, "error");
-  assert.equal(afterStt?.stage, "analyze");
+  assert.equal(afterStt?.status, "done");
+  assert.equal(afterStt?.stage, "done");
+  assert.equal(await prisma.analysisResult.count({ where: { jobId: job.id } }), 0);
 
   await processJob(job.id, {
     transcribeAudio: stt,
-    analyzeSpeech: async () => {
-      llmCalls += 1;
-      return fakePayload("привет мир");
-    },
     extractAudio,
     probeDuration,
   });
   assert.equal(sttCalls, 1);
-  assert.equal(llmCalls, 2);
   const done = await prisma.job.findUnique({ where: { id: job.id } });
   assert.equal(done?.status, "done");
 
@@ -190,7 +147,6 @@ test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versi
 
   await processJob(hung.id, {
     transcribeAudio: stt,
-    analyzeSpeech: async () => fakePayload("привет мир"),
     extractAudio,
     probeDuration,
   });
@@ -258,7 +214,6 @@ test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versi
       sttFailCalls += 1;
       throw Object.assign(new Error("STT down"), { code: "GROQ_NETWORK" });
     },
-    analyzeSpeech: async () => fakePayload("no"),
     extractAudio,
     probeDuration,
   });
@@ -274,7 +229,6 @@ test("pipeline recovery: STT saved, LLM retry skips STT, lease, exhausted, versi
         model: "mock-stt",
       };
     },
-    analyzeSpeech: async () => fakePayload("второй заход"),
     extractAudio,
     probeDuration,
   });

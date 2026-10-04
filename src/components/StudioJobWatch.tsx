@@ -9,7 +9,7 @@ import { studioJobPhase } from "@/lib/recording-session";
 const PHASE_COPY = {
   saved: { label: "Файл сохранён", hint: "Материал на месте. Дальше расшифровка." },
   stt: { label: "Расшифровываем", hint: "Распознаём речь. Исходник уже сохранён." },
-  analysis: { label: "Анализируем", hint: "Материал и расшифровка готовы. Обновляем студию." },
+  analysis: { label: "Завершаем", hint: "Расшифровка уже есть. Открываем рабочий дубль." },
 } as const;
 
 export function StudioJobWatch({
@@ -92,7 +92,7 @@ export function StudioJobWatch({
           action={
             retryKind ? (
               <ActionButton variant="secondary" onClick={() => void retry()}>
-                {retryKind === "analysis" ? "Повторить анализ" : "Повторить расшифровку"}
+                {retryKind === "analysis" ? "Повторить обработку" : "Повторить расшифровку"}
               </ActionButton>
             ) : undefined
           }
@@ -102,7 +102,7 @@ export function StudioJobWatch({
   }
 
   if (phase === "done") {
-    return <ProcessingState label="Готово" hint="Дубль, сценарий и диалог обновлены." />;
+    return <ProcessingState label="Готово" hint="Расшифровка сохранена. Разбор — в основном Диалоге." />;
   }
 
   const copy = PHASE_COPY[phase];

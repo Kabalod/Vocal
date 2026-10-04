@@ -22,9 +22,9 @@ export async function heartbeatJob(jobId: string, leaseOwner: string, now = new 
   });
 }
 
-export async function releaseJobLease(jobId: string) {
+export async function releaseJobLease(jobId: string, leaseOwner?: string) {
   await prisma.job.updateMany({
-    where: { id: jobId },
+    where: leaseOwner ? { id: jobId, leaseOwner } : { id: jobId },
     data: { leaseUntil: null, leaseOwner: null },
   });
 }
@@ -74,9 +74,9 @@ export async function claimJob(jobId: string, now = new Date()): Promise<JobClai
   return { ok: true, reason: "claimed", job, leaseOwner };
 }
 
-export async function completeJob(jobId: string) {
-  await prisma.job.update({
-    where: { id: jobId },
+export async function completeJob(jobId: string, leaseOwner: string) {
+  const updated = await prisma.job.updateMany({
+    where: { id: jobId, leaseOwner, status: { not: "done" } },
     data: {
       status: "done",
       stage: "done",
@@ -86,6 +86,7 @@ export async function completeJob(jobId: string) {
       leaseOwner: null,
     },
   });
+  return updated.count === 1;
 }
 
 export async function listRecoverableJobIds(now = new Date()): Promise<string[]> {

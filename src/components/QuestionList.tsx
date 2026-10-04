@@ -7,12 +7,11 @@ function lastAnswerText(question: QuestionDto): string {
   return question.answers.at(-1)?.text ?? "";
 }
 
-export function QuestionList({ reelId, takeId }: { reelId: string; takeId: string | null }) {
+export function QuestionList({ reelId }: { reelId: string; takeId?: string | null }) {
   const [questions, setQuestions] = useState<QuestionDto[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
 
   const applyQuestions = useCallback((next: QuestionDto[]) => {
     setQuestions(next);
@@ -61,41 +60,14 @@ export function QuestionList({ reelId, takeId }: { reelId: string; takeId: strin
     await load();
   }
 
-  async function continueAi() {
-    setRunning(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/reels/${reelId}/questions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ takeId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Не удалось запросить вопросы.");
-      applyQuestions(data.questions as QuestionDto[]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка.");
-    } finally {
-      setRunning(false);
-    }
-  }
-
   return (
     <section className="space-y-3 rounded-2xl border border-line bg-bg-elev p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-medium">Вопросы</h3>
-        <button
-          type="button"
-          onClick={() => void continueAi()}
-          disabled={running}
-          className="rounded-full bg-accent px-4 py-2 text-sm text-on-accent disabled:opacity-50"
-        >
-          {running ? "Спрашиваем…" : "Продолжить с ИИ"}
-        </button>
+        <h3 className="font-medium">Сохранённые вопросы</h3>
       </div>
       <p className="text-sm text-muted">
-        Сохранение ответа не вызывает модель и правит текущий текст ответа. Более ранние версии, если они уже были,
-        остаются в истории. Новые вопросы не стирают старые.
+        Новая пачка вопросов здесь не создаётся. Задайте вопрос в основном Диалоге. Ответ на старый вопрос модель не
+        вызывает.
       </p>
       {error ? <p className="text-sm text-bad">{error}</p> : null}
       {questions.length === 0 ? <p className="text-sm text-muted">Вопросов пока нет.</p> : null}

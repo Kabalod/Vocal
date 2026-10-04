@@ -25,19 +25,19 @@ export function AutoTakeCompare({ reelId, reloadToken = 0 }: { reelId: string; r
   if (items.length === 0) {
     return (
       <ShellEmpty
-        title="Сравнение появится само"
-        description="Когда у двух дублей будет расшифровка, Vocal сравнит их без выбора пары."
+        title="Сохранённых сравнений нет"
+        description="Новое смысловое сравнение само не запускается. Разбор дубля — в основном Диалоге."
       />
     );
   }
 
   return (
     <section className="space-y-3" aria-label="Сравнение дублей">
-      <h2 className="font-[family-name:var(--font-display)] text-xl">Сравнение</h2>
-      <p className="text-sm text-muted">Vocal сравнивает дубли сам. Это не выбор лучшего и не итоговый дубль.</p>
+      <h2 className="font-[family-name:var(--font-display)] text-xl">Сохранённые сравнения</h2>
+      <p className="text-sm text-muted">Это архив. Новое сравнение само не появляется и не выбирает итоговый дубль.</p>
       {items.map((item) => (
         <article key={item.id} className="vocal-card space-y-2 p-4">
-          <p className="text-sm text-muted">{item.status === "error" ? "Сравнение не удалось сохранить полностью." : "Автоматическое сравнение"}</p>
+          <p className="text-sm text-muted">{item.status === "error" ? "Сравнение не удалось сохранить полностью." : "Сохранённое сравнение"}</p>
           {item.semantic ? (
             <>
               <p className="text-sm">{item.semantic.thoughtPreserved ? "Мысль сохранилась." : "Мысль могла сместиться."}</p>

@@ -1,8 +1,9 @@
 import { safeAiLog } from "@/lib/ai-runtime-context";
 import { NextResponse } from "next/server";
 import { withApiUser } from "@/lib/auth/request";
-import { continueQuestions, listReelQuestions } from "@/lib/ai/questions";
+import { listReelQuestions } from "@/lib/ai/questions";
 import { ReviewError } from "@/lib/ai/review";
+import { legacyQuestionsGone } from "@/lib/legacy-ai-routes";
 import { ReelError } from "@/lib/reels";
 
 export const dynamic = "force-dynamic";
@@ -26,19 +27,6 @@ export const GET = withApiUser(async function GET(_request: Request, context: { 
   }
 });
 
-export const POST = withApiUser(async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await context.params;
-    let takeId: string | null = null;
-    try {
-      const body = (await request.json()) as Record<string, unknown>;
-      if (typeof body.takeId === "string") takeId = body.takeId;
-    } catch {
-      takeId = null;
-    }
-    const questions = await continueQuestions(id, { takeId });
-    return NextResponse.json({ questions }, { status: 201 });
-  } catch (error) {
-    return errorResponse(error);
-  }
+export const POST = withApiUser(async function POST() {
+  return NextResponse.json(legacyQuestionsGone(), { status: 410 });
 });

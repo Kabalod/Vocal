@@ -198,7 +198,11 @@ export async function applyThoughtMediaFromTranscript(
   });
 
   if (key) {
-    await applyThoughtTitleFromTranscript(take.reelId, transcript, complete);
+    try {
+      await applyThoughtTitleFromTranscript(take.reelId, transcript, complete);
+    } catch {
+      /* title already writes fallback; transcript stays available */
+    }
   }
 }
 

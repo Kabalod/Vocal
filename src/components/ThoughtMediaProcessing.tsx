@@ -11,7 +11,7 @@ type Phase = "upload" | "saved" | "stt" | "analysis" | "done" | "error";
 const PHASE_COPY: Record<Exclude<Phase, "upload" | "error" | "done">, { label: string; hint: string }> = {
   saved: { label: "Файл сохранён", hint: "Материал на месте. Дальше расшифровка." },
   stt: { label: "Расшифровываем", hint: "Распознаём речь. Исходник уже сохранён." },
-  analysis: { label: "Анализируем", hint: "Материал и расшифровка готовы. Открываем работу с Vocal." },
+  analysis: { label: "Завершаем", hint: "Расшифровка уже есть. Открываем рабочий дубль." },
 };
 
 export function ThoughtMediaProcessing({
@@ -101,7 +101,7 @@ export function ThoughtMediaProcessing({
           action={
             retryKind ? (
               <ActionButton variant="secondary" onClick={() => void retry()}>
-                {retryKind === "analysis" ? "Повторить анализ" : "Повторить расшифровку"}
+                {retryKind === "analysis" ? "Повторить обработку" : "Повторить расшифровку"}
               </ActionButton>
             ) : undefined
           }

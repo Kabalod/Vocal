@@ -1,14 +1,20 @@
 import { existsSync } from "fs";
 import { enterWithOwner } from "@/lib/auth/session";
-import { analyzeSpeech } from "@/lib/analyze";
 import { MAX_VIDEO_SECONDS } from "@/lib/config";
-import { ensureCriteria, prisma } from "@/lib/db";
+import { prisma } from "@/lib/db";
 import { extractAudio, probeDuration } from "@/lib/ffmpeg";
 import { isGroqConnectionError, isGroqTokenLimitError } from "@/lib/groq";
-import { claimJob, completeJob, heartbeatJob, listRecoverableJobIds, releaseJobLease, failExhaustedRunningJobs, markJobFailed, EXHAUSTED_JOB_USER_MESSAGE } from "@/lib/jobs";
-import { computeMetrics } from "@/lib/metrics";
+import {
+  claimJob,
+  completeJob,
+  heartbeatJob,
+  listRecoverableJobIds,
+  releaseJobLease,
+  failExhaustedRunningJobs,
+  markJobFailed,
+  EXHAUSTED_JOB_USER_MESSAGE,
+} from "@/lib/jobs";
 import { safeServerLog } from "@/lib/safe-log";
-import { toCriterionDto } from "@/lib/serialize";
 import { audioPathFor } from "@/lib/storage";
 import { transcribeAudio } from "@/lib/stt";
 import {
@@ -24,7 +30,6 @@ let draining = false;
 
 export type PipelineDeps = {
   transcribeAudio?: typeof transcribeAudio;
-  analyzeSpeech?: typeof analyzeSpeech;
   extractAudio?: typeof extractAudio;
   probeDuration?: typeof probeDuration;
   now?: () => Date;
@@ -86,6 +91,8 @@ export function classifyPipelineError(error: unknown, stage: string) {
     code = "TOO_LONG";
   } else if (err.code === "VIDEO_MISSING") {
     code = "VIDEO_MISSING";
+  } else if (err.code === "LEASE_LOST") {
+    code = "LEASE_LOST";
   } else if (/Таймаут/i.test(message)) {
     code = "MEDIA_TIMEOUT";
     message = "Обработка файла слишком долго. Нажмите «Повторить».";
@@ -118,10 +125,18 @@ export function classifyPipelineError(error: unknown, stage: string) {
   };
 }
 
-async function fail(jobId: string, error: unknown, stage: string) {
+function leaseLostError() {
+  return Object.assign(new Error("LEASE_LOST"), { code: "LEASE_LOST" });
+}
+
+function isLeaseLost(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === "LEASE_LOST");
+}
+
+async function fail(jobId: string, error: unknown, stage: string, leaseOwner: string) {
   const { code, message } = classifyPipelineError(error, stage);
-  await prisma.job.update({
-    where: { id: jobId },
+  await prisma.job.updateMany({
+    where: { id: jobId, leaseOwner, status: { notIn: ["done", "error"] } },
     data: {
       status: "error",
       stage,
@@ -136,19 +151,20 @@ async function fail(jobId: string, error: unknown, stage: string) {
 async function setStage(
   jobId: string,
   leaseOwner: string,
-  status: "converting" | "transcribing" | "analyzing",
+  status: "converting" | "transcribing",
   extra: Record<string, unknown> = {},
 ) {
-  await prisma.job.update({
-    where: { id: jobId },
+  const updated = await prisma.job.updateMany({
+    where: { id: jobId, leaseOwner },
     data: {
       status,
-      stage: status === "converting" ? "convert" : status === "transcribing" ? "stt" : "analyze",
+      stage: status === "converting" ? "convert" : "stt",
       errorCode: null,
       errorMessage: null,
       ...extra,
     },
   });
+  if (updated.count !== 1) throw leaseLostError();
   await heartbeatJob(jobId, leaseOwner);
 }
 
@@ -170,7 +186,6 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
   enterWithOwner({ id: claimed.job.ownerUserId, email: null });
 
   const transcribe = deps.transcribeAudio ?? transcribeAudio;
-  const analyze = deps.analyzeSpeech ?? analyzeSpeech;
   const extract = deps.extractAudio ?? extractAudio;
   const probe = deps.probeDuration ?? probeDuration;
   const leaseOwner = claimed.leaseOwner;
@@ -179,6 +194,7 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
   try {
     const job = await prisma.job.findUnique({ where: { id: jobId } });
     if (!job) return claimed;
+    if (job.leaseOwner !== leaseOwner) throw leaseLostError();
 
     if (job.takeId) {
       const analysis = await prisma.analysisResult.findUnique({ where: { jobId } });
@@ -254,56 +270,16 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
     if (job.takeId && transcript.trim()) {
       const { applyThoughtMediaFromTranscript } = await import("@/lib/thought-media");
       await applyThoughtMediaFromTranscript(job.takeId, transcript, deps.suggestTitle);
-      try {
-        const take = await prisma.take.findUnique({ where: { id: job.takeId }, select: { reelId: true } });
-        if (take) {
-          const { ensureAutomaticTakeComparison } = await import("@/lib/ai/compare");
-          await ensureAutomaticTakeComparison(take.reelId, deps.suggestTitle);
-        }
-      } catch {
-        /* comparison is best-effort after processing */
-      }
     }
 
-    stage = "analyze";
-    await setStage(jobId, leaseOwner, "analyzing", { durationSec: duration });
-
-    await ensureCriteria();
-    const criteria = (
-      await prisma.criterion.findMany({
-        orderBy: [{ categoryOrder: "asc" }, { sortOrder: "asc" }],
-      })
-    ).map(toCriterionDto);
-    const metrics = computeMetrics(segments, transcript, duration);
-    const result = await analyze({
-      criteria,
-      metrics,
-      transcript,
-      segments,
-    });
-
-    const payload = result;
-    await prisma.analysisResult.upsert({
-      where: { jobId },
-      update: {
-        overallScore: result.overallScore,
-        summary: result.summary,
-        payload: JSON.stringify(payload),
-      },
-      create: {
-        jobId,
-        overallScore: result.overallScore,
-        summary: result.summary,
-        payload: JSON.stringify(payload),
-      },
-    });
-
-    await completeJob(jobId);
+    const finished = await completeJob(jobId, leaseOwner);
+    if (!finished) throw leaseLostError();
     return claimed;
   } catch (error) {
+    if (isLeaseLost(error)) return claimed;
     console.error(safeServerLog({ route: "pipeline", jobId, code: classifyPipelineError(error, stage).code }));
-    await fail(jobId, error, stage);
-    await releaseJobLease(jobId);
+    await fail(jobId, error, stage, leaseOwner);
+    await releaseJobLease(jobId, leaseOwner);
     return claimed;
   }
 }

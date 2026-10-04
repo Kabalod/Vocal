@@ -14,6 +14,7 @@
     "test:v03": "node scripts/test-postgres.cjs --v03",
     "test:v05": "node scripts/test-postgres.cjs --v05",
     "test:v06": "node scripts/test-postgres.cjs --v06",
+    "test:media": "node scripts/test-postgres.cjs --media",
     "test:postgres": "node scripts/test-postgres.cjs",
     "test:reels": "node scripts/test-postgres.cjs --reels",
     "backup": "tsx scripts/backup.ts",

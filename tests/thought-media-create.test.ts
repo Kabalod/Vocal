@@ -2,39 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
-import type { AnalysisResultPayload } from "../src/types/analysis";
-
-function fakePayload(transcript: string): AnalysisResultPayload {
-  return {
-    overallScore: 7,
-    summary: "mock",
-    video: { topic: "", mainIdea: "", targetAudience: "", format: "" },
-    metrics: {
-      durationSec: 1,
-      wordsPerMinute: 100,
-      pauseCount: 0,
-      avgPauseSec: 0,
-      maxPauseSec: 0,
-      fillerPer100Words: 0,
-      fillerCount: 0,
-      wordCount: 2,
-      rushShare: 0,
-    },
-    evaluations: [],
-    scores: [],
-    categoryScores: [],
-    strengths: [],
-    recommendations: [],
-    transcript: { text: transcript, segments: [{ start: 0, end: 1, text: transcript }] },
-    growthAreas: [],
-    exercise: { title: "", task: "", instruction: "", successCriteria: [] },
-    coach: {
-      format: "",
-      scenario: { spine: "", weakBeats: [], openingRewrite: "", endingRewrite: "" },
-      craft: [],
-    },
-  };
-}
 
 test("thought media create validates, is idempotent, and does not mint a script after STT", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
@@ -141,7 +108,7 @@ test("thought media create validates, is idempotent, and does not mint a script 
 
   await processJob(jobId, {
     transcribeAudio: async () => ({ text: "   ", segments: [], language: "ru", model: "mock" }),
-    analyzeSpeech: async () => fakePayload("no"),
+    suggestTitle: async () => { throw new Error("title unused on empty stt"); },
     extractAudio: async () => undefined,
     probeDuration: async () => 1,
   });
@@ -164,7 +131,6 @@ test("thought media create validates, is idempotent, and does not mint a script 
       language: "ru",
       model: "mock",
     }),
-    analyzeSpeech: async () => fakePayload("голос про смысл мысли"),
     extractAudio: async () => undefined,
     probeDuration: async () => 1,
     suggestTitle: async () => ({ text: '{"title":"Смысл мысли"}' }),

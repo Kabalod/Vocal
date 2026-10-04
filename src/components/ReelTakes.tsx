@@ -207,7 +207,7 @@ export function ReelTakes({
     <div className="space-y-6">
       <div>
         <h2 className="font-[family-name:var(--font-display)] text-2xl">Vocal</h2>
-        <p className="text-sm text-muted">Вопросы и разбор по выбранному дублю. Обычные ответы не вызывают ИИ.</p>
+        <p className="text-sm text-muted">Архив разборов и вопросов. Новый смысл — в основном Диалоге.</p>
       </div>
       {error ? <p className="text-bad">{error}</p> : null}
       {detailTake ? (

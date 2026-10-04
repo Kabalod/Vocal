@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { withApiUser } from "@/lib/auth/request";
 import { createReelComparison } from "@/lib/ai/compare";
 import { CompareError, listComparisons, previewTextDiff } from "@/lib/compare";
+import { legacyCompareAiGone } from "@/lib/legacy-ai-routes";
 import { ReelError } from "@/lib/reels";
 
 export const dynamic = "force-dynamic";
@@ -42,13 +43,16 @@ export const POST = withApiUser(async function POST(request: Request, context: {
   try {
     const { id } = await context.params;
     const body = (await request.json()) as Record<string, unknown>;
+    if (body.runAi === true) {
+      return NextResponse.json(legacyCompareAiGone(), { status: 410 });
+    }
     const comparison = await createReelComparison(id, {
       leftTakeId: typeof body.leftTakeId === "string" ? body.leftTakeId : "",
       rightTakeId: typeof body.rightTakeId === "string" ? body.rightTakeId : "",
       leftTranscriptId: typeof body.leftTranscriptId === "string" ? body.leftTranscriptId : null,
       rightTranscriptId: typeof body.rightTranscriptId === "string" ? body.rightTranscriptId : null,
       intent: body.intent,
-      runAi: body.runAi === true,
+      runAi: false,
     });
     return NextResponse.json({ comparison }, { status: 201 });
   } catch (error) {

@@ -140,6 +140,6 @@ test("scriptless recording waits for explicit start and upload no longer require
   assert.match(studio, /AutoTakeCompare/);
   assert.match(studio, /CompletionSummary/);
   assert.equal(studio.includes("TakeComparison"), false);
-  assert.match(compare, /без выбора пары/);
+  assert.match(compare, /Сохранённых сравнений нет/);
   assert.equal(compare.includes("leftTakeId"), false);
 });

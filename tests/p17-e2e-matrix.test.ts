@@ -73,7 +73,7 @@ test("P17 matrix: thought without profile through finals, upload, compare, expor
   const { patchScriptDraft, finalizeScriptDraft, setFinalScript, listScriptWorkspace } =
     await import("../src/lib/scripts");
   const { saveOriginalIfAbsent } = await import("../src/lib/transcripts");
-  const { ensureAutomaticTakeComparison } = await import("../src/lib/ai/compare");
+  const { createReelComparison, ensureAutomaticTakeComparison } = await import("../src/lib/ai/compare");
   const { exportCanonicalTxt } = await import("../src/lib/export-reel");
   const {
     startProfileDialogue,
@@ -183,18 +183,17 @@ test("P17 matrix: thought without profile through finals, upload, compare, expor
     idempotencyKey: "p17-take-2",
   });
   await saveOriginalIfAbsent(second.id, { text: "Второй дубль короче.", source: "manual" });
-  const compared = await ensureAutomaticTakeComparison(reel.id, async () => ({
-    text: JSON.stringify({
-      thoughtPreserved: true,
-      notes: "Мысль та же, формулировка короче.",
-    }),
-    usage: { promptTokens: 4, completionTokens: 4 },
-  }));
-  assert.ok(compared);
+  const compared = await createReelComparison(
+    reel.id,
+    { leftTakeId: originTake.id, rightTakeId: second.id, runAi: false },
+    async () => {
+      throw new Error("auto semantic compare is retired");
+    },
+  );
   assert.equal(compared.leftTakeId, originTake.id);
   assert.equal(compared.rightTakeId, second.id);
   const again = await ensureAutomaticTakeComparison(reel.id, async () => {
-    throw new Error("should not rerun");
+    throw new Error("should not start semantic compare");
   });
   assert.equal(again?.id, compared.id);
 
