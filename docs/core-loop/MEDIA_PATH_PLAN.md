@@ -24,6 +24,6 @@ BASE: `3206fe4ca6849aced92ee5a554cde0f72f284ca3`.
 
 ## Границы
 
-В объёме: pipeline дублей основного цикла; title + fallback; повтор STT; lease; 410 на создание legacy review/questions и AI-compare; UI-копии без автообещаний.
+В объёме: pipeline дублей основного цикла; title + fallback; повтор STT; lease; публикация original/V06/title только после FOR UPDATE Job и проверки `leaseOwner` (захват lease сериализуется тем же замком Job, затем Reel); 410 на создание legacy review/questions и AI-compare; UI-копии без автообещаний.
 
 Вне объёма: Prisma/live-схема, probe, I01, мост, I06/I07/I08, платные модели, удаление архивных таблиц, завершение мысли (итог выбирает автор).

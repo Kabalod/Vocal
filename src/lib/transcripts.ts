@@ -79,6 +79,24 @@ export async function findOriginalRevision(takeId: string) {
   });
 }
 
+export function transcriptFromAnalysisPayload(payloadRaw: string | null | undefined): {
+  text: string;
+  segments: TranscriptSegmentDto[] | null;
+} | null {
+  if (!payloadRaw) return null;
+  try {
+    const prev = JSON.parse(payloadRaw) as {
+      transcript?: { text?: string; segments?: TranscriptSegmentDto[] };
+    };
+    const text = prev.transcript?.text?.trim() ?? "";
+    if (!text) return null;
+    const segments = Array.isArray(prev.transcript?.segments) ? prev.transcript.segments : null;
+    return { text, segments };
+  } catch {
+    return null;
+  }
+}
+
 async function throwIfCompletedFinalTake(
   tx: Parameters<typeof lockVocalReel>[0],
   takeId: string,
@@ -111,36 +129,38 @@ export async function saveOriginalIfAbsent(
   const text = input.text.trim();
   if (!text) return findOriginalRevision(takeId);
 
-  let original = await findOriginalRevision(takeId);
-  if (!original) {
-    original = await prisma.transcriptRevision.create({
-      data: {
-        takeId,
-        kind: "original",
-        source: input.source,
-        text,
-        segmentsJson: input.segments && input.segments.length > 0 ? JSON.stringify(input.segments) : null,
-        language: input.language ?? null,
-        sttModel: input.sttModel ?? null,
-      },
-    });
-  }
-
   const peek = await prisma.take.findUnique({ where: { id: takeId }, select: { reelId: true } });
-  if (!peek) return original;
+  if (!peek) return findOriginalRevision(takeId);
   await v06TestSeams.beforeAutoPromoteLock?.();
-  await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
     const locked = await lockVocalReel(tx, peek.reelId);
     if (!locked) throw new ReelError("Карточка не найдена.", "REEL_NOT_FOUND", 404);
     await v06TestSeams.afterAutoPromoteLocked?.();
+    let original = await tx.transcriptRevision.findFirst({
+      where: { takeId, kind: "original" },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!original) {
+      original = await tx.transcriptRevision.create({
+        data: {
+          takeId,
+          kind: "original",
+          source: input.source,
+          text,
+          segmentsJson: input.segments && input.segments.length > 0 ? JSON.stringify(input.segments) : null,
+          language: input.language ?? null,
+          sttModel: input.sttModel ?? null,
+        },
+      });
+    }
     await selectOriginalIfUnsetInTx(tx, {
       takeId,
       originalId: original.id,
       originalText: original.text,
     });
     await promoteWorkingTakeInTx(tx, takeId);
+    return original;
   });
-  return original;
 }
 
 export async function ensureOriginalFromText(takeId: string, text: string) {
@@ -148,22 +168,13 @@ export async function ensureOriginalFromText(takeId: string, text: string) {
 }
 
 export async function importOriginalFromAnalysisPayload(takeId: string, payloadRaw: string | null | undefined) {
-  if (!payloadRaw) return findOriginalRevision(takeId);
-  try {
-    const prev = JSON.parse(payloadRaw) as {
-      transcript?: { text?: string; segments?: TranscriptSegmentDto[] };
-    };
-    const text = prev.transcript?.text?.trim() ?? "";
-    if (!text) return findOriginalRevision(takeId);
-    const segments = Array.isArray(prev.transcript?.segments) ? prev.transcript.segments : null;
-    return saveOriginalIfAbsent(takeId, {
-      text,
-      segments,
-      source: "payload_import",
-    });
-  } catch {
-    return findOriginalRevision(takeId);
-  }
+  const parsed = transcriptFromAnalysisPayload(payloadRaw);
+  if (!parsed) return findOriginalRevision(takeId);
+  return saveOriginalIfAbsent(takeId, {
+    text: parsed.text,
+    segments: parsed.segments,
+    source: "payload_import",
+  });
 }
 
 export async function importMissingOriginalsForTake(takeId: string) {

@@ -106,15 +106,14 @@ test("media path: STT without analyze, title fallback, replay, lease, retired PO
   assert.equal(await prisma.take.count({ where: { reelId: reel.id } }), 2);
 
   await createEditedRevision(take.id, "кухня, правка автора");
-  await processJob(job.id, {
-    transcribeAudio: async () => {
-      throw new Error("edit must stay");
-    },
-  });
   const afterEdit = await prisma.transcriptRevision.findFirstOrThrow({
     where: { takeId: take.id, kind: "edit" },
   });
   assert.equal(afterEdit.text, "кухня, правка автора");
+  assert.equal(
+    (await prisma.take.findUniqueOrThrow({ where: { id: take.id } })).selectedTranscriptId,
+    afterEdit.id,
+  );
 
   const staleAnalyze = await prisma.job.create({
     data: {
@@ -142,6 +141,14 @@ test("media path: STT without analyze, title fallback, replay, lease, retired PO
   assert.equal(recoverStt, 0);
   assert.equal((await prisma.job.findUniqueOrThrow({ where: { id: staleAnalyze.id } })).status, "done");
   assert.equal(await prisma.analysisResult.count({ where: { jobId: staleAnalyze.id } }), 0);
+  assert.equal(
+    (await prisma.take.findUniqueOrThrow({ where: { id: take.id } })).selectedTranscriptId,
+    afterEdit.id,
+  );
+  assert.equal(
+    (await prisma.transcriptRevision.findUniqueOrThrow({ where: { id: afterEdit.id } })).text,
+    "кухня, правка автора",
+  );
 
   const later = await createTake(reel.id, { inputType: "audio", bodyText: "", originalName: "later.webm" });
   await updateReel(reel.id, { workingTakeId: originId });
@@ -204,4 +211,153 @@ test("media path: STT without analyze, title fallback, replay, lease, retired PO
     params: Promise.resolve({ id: reel.id }),
   });
   assert.equal(compareGet.status, 200);
+});
+
+test("media path: lease barriers stop lost-owner publish and keep author title", async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vocal-media-lease-"));
+  const { prisma } = await withPostgresTestDb(t);
+  const { pipelineTestSeams } = await import("../src/lib/pipeline");
+  const { thoughtTitleTestSeams } = await import("../src/lib/thought-title");
+  t.after(async () => {
+    pipelineTestSeams.duringTranscribe = null;
+    thoughtTitleTestSeams.afterModelBeforeWrite = null;
+    await prisma.$disconnect();
+    await resetPrismaClient();
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* windows lock */
+    }
+  });
+
+  const { createThoughtFromText, DEFAULT_THOUGHT_TITLE } = await import("../src/lib/thought-create");
+  const { createTake, getReel } = await import("../src/lib/reels");
+  const { processJob } = await import("../src/lib/pipeline");
+  const { findOriginalRevision, saveOriginalIfAbsent } = await import("../src/lib/transcripts");
+
+  async function makeClipJob(key: string) {
+    const { reel } = await createThoughtFromText({
+      title: DEFAULT_THOUGHT_TITLE,
+      body: "Исходник LEASE",
+      idempotencyKey: key,
+    });
+    const videoPath = path.join(dir, `${key}.mp4`);
+    writeFileSync(videoPath, "fake-video");
+    const take = await createTake(reel.id, { inputType: "audio", bodyText: "", originalName: `${key}.webm` });
+    const job = await prisma.job.create({
+      data: {
+        ownerUserId: "local",
+        originalName: `${key}.webm`,
+        videoPath,
+        status: "queued",
+        stage: "convert",
+        takeId: take.id,
+        maxAttempts: 3,
+      },
+    });
+    return { reel, take, job };
+  }
+
+  const stolen = await makeClipJob("media-lease-steal");
+  let aLeaseOwner = "";
+  pipelineTestSeams.duringTranscribe = async ({ jobId, leaseOwner }) => {
+    const row = await prisma.job.findUniqueOrThrow({ where: { id: jobId } });
+    if (row.attempts !== 1) return;
+    aLeaseOwner = leaseOwner;
+    await prisma.job.update({
+      where: { id: jobId },
+      data: { leaseUntil: new Date(Date.now() - 1_000) },
+    });
+    await processJob(jobId, {
+      transcribeAudio: async () => ({
+        text: "текст бе",
+        segments: [{ start: 0, end: 1, text: "текст бе" }],
+        language: "ru",
+        model: "mock-b",
+      }),
+      extractAudio: async () => undefined,
+      probeDuration: async () => 2,
+      suggestTitle: async () => ({ text: '{"title":"От Б"}' }),
+    });
+  };
+
+  await processJob(stolen.job.id, {
+    transcribeAudio: async () => ({
+      text: "текст а",
+      segments: [{ start: 0, end: 1, text: "текст а" }],
+      language: "ru",
+      model: "mock-a",
+    }),
+    extractAudio: async () => undefined,
+    probeDuration: async () => 2,
+    suggestTitle: async () => ({ text: '{"title":"От А"}' }),
+  });
+  pipelineTestSeams.duringTranscribe = null;
+
+  const afterSteal = await prisma.job.findUniqueOrThrow({ where: { id: stolen.job.id } });
+  assert.equal(afterSteal.status, "done");
+  assert.equal(afterSteal.errorCode, null);
+  assert.notEqual(aLeaseOwner, "");
+  assert.equal(afterSteal.leaseOwner, null);
+  assert.equal(await prisma.transcriptRevision.count({ where: { takeId: stolen.take.id, kind: "original" } }), 1);
+  assert.equal((await findOriginalRevision(stolen.take.id))?.text, "текст бе");
+  assert.equal((await getReel(stolen.reel.id))?.workingTakeId, stolen.take.id);
+  assert.equal((await prisma.take.findUniqueOrThrow({ where: { id: stolen.take.id } })).bodyText, "текст бе");
+  assert.equal((await prisma.reel.findUniqueOrThrow({ where: { id: stolen.reel.id } })).title, "От Б");
+
+  const titleJob = await makeClipJob("media-lease-title");
+  thoughtTitleTestSeams.afterModelBeforeWrite = async () => {
+    await prisma.job.update({
+      where: { id: titleJob.job.id },
+      data: { leaseOwner: "other-owner", leaseUntil: new Date(Date.now() + 60_000) },
+    });
+  };
+  await processJob(titleJob.job.id, {
+    transcribeAudio: async () => ({
+      text: "голос для заголовка",
+      segments: [{ start: 0, end: 1, text: "голос для заголовка" }],
+      language: "ru",
+      model: "mock-title",
+    }),
+    extractAudio: async () => undefined,
+    probeDuration: async () => 2,
+    suggestTitle: async () => ({ text: '{"title":"Модель не должна записать"}' }),
+  });
+  thoughtTitleTestSeams.afterModelBeforeWrite = null;
+  assert.equal((await prisma.reel.findUniqueOrThrow({ where: { id: titleJob.reel.id } })).title, DEFAULT_THOUGHT_TITLE);
+  const titleAfter = await prisma.job.findUniqueOrThrow({ where: { id: titleJob.job.id } });
+  assert.notEqual(titleAfter.status, "error");
+  assert.equal(titleAfter.leaseOwner, "other-owner");
+
+  const renameJob = await makeClipJob("media-lease-rename");
+  await processJob(renameJob.job.id, {
+    transcribeAudio: async () => ({
+      text: "голос для правки названия",
+      segments: [{ start: 0, end: 1, text: "голос для правки названия" }],
+      language: "ru",
+      model: "mock-rename",
+    }),
+    extractAudio: async () => undefined,
+    probeDuration: async () => 2,
+    suggestTitle: async () => {
+      await prisma.reel.update({
+        where: { id: renameJob.reel.id },
+        data: { title: "Авторский заголовок" },
+      });
+      return { text: '{"title":"От модели"}' };
+    },
+  });
+  assert.equal((await prisma.reel.findUniqueOrThrow({ where: { id: renameJob.reel.id } })).title, "Авторский заголовок");
+  assert.equal((await prisma.job.findUniqueOrThrow({ where: { id: renameJob.job.id } })).status, "done");
+
+  const raceTake = await createTake(renameJob.reel.id, {
+    inputType: "audio",
+    bodyText: "",
+    originalName: "race.webm",
+  });
+  await Promise.all([
+    saveOriginalIfAbsent(raceTake.id, { text: "первый", source: "stt" }),
+    saveOriginalIfAbsent(raceTake.id, { text: "второй", source: "stt" }),
+  ]);
+  assert.equal(await prisma.transcriptRevision.count({ where: { takeId: raceTake.id, kind: "original" } }), 1);
 });

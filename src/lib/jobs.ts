@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { Job } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { lockVocalJob } from "@/lib/job-publish";
 
 export const JOB_MAX_ATTEMPTS = 3;
 export const JOB_LEASE_MS = 120_000;
@@ -30,48 +31,52 @@ export async function releaseJobLease(jobId: string, leaseOwner?: string) {
 }
 
 export async function claimJob(jobId: string, now = new Date()): Promise<JobClaimResult> {
-  const current = await prisma.job.findUnique({ where: { id: jobId } });
-  if (!current) return { ok: false, reason: "missing", job: null };
-  if (current.status === "done") return { ok: false, reason: "done", job: current };
-  if (current.attempts >= current.maxAttempts) {
-    return { ok: false, reason: "exhausted", job: current };
-  }
-
-  const leaseActive =
-    Boolean(current.leaseOwner) &&
-    current.leaseUntil !== null &&
-    current.leaseUntil.getTime() > now.getTime();
-  if (leaseActive) {
-    return { ok: false, reason: "busy", job: current };
-  }
-
-  const leaseOwner = randomUUID();
-  const leaseUntil = new Date(now.getTime() + JOB_LEASE_MS);
-  const claimed = await prisma.job.updateMany({
-    where: {
-      id: jobId,
-      attempts: current.attempts,
-      status: { not: "done" },
-      OR: [{ leaseOwner: null }, { leaseOwner: current.leaseOwner }],
-    },
-    data: {
-      attempts: { increment: 1 },
-      leaseOwner,
-      leaseUntil,
-    },
-  });
-
-  if (claimed.count !== 1) {
-    const again = await prisma.job.findUnique({ where: { id: jobId } });
-    if (again && again.attempts >= again.maxAttempts) {
-      return { ok: false, reason: "exhausted", job: again };
+  return prisma.$transaction(async (tx) => {
+    const locked = await lockVocalJob(tx, jobId);
+    if (!locked) return { ok: false as const, reason: "missing" as const, job: null };
+    const current = await tx.job.findUnique({ where: { id: jobId } });
+    if (!current) return { ok: false as const, reason: "missing" as const, job: null };
+    if (current.status === "done") return { ok: false as const, reason: "done" as const, job: current };
+    if (current.attempts >= current.maxAttempts) {
+      return { ok: false as const, reason: "exhausted" as const, job: current };
     }
-    return { ok: false, reason: "busy", job: again };
-  }
 
-  const job = await prisma.job.findUnique({ where: { id: jobId } });
-  if (!job) return { ok: false, reason: "missing", job: null };
-  return { ok: true, reason: "claimed", job, leaseOwner };
+    const leaseActive =
+      Boolean(current.leaseOwner) &&
+      current.leaseUntil !== null &&
+      current.leaseUntil.getTime() > now.getTime();
+    if (leaseActive) {
+      return { ok: false as const, reason: "busy" as const, job: current };
+    }
+
+    const leaseOwner = randomUUID();
+    const leaseUntil = new Date(now.getTime() + JOB_LEASE_MS);
+    const claimed = await tx.job.updateMany({
+      where: {
+        id: jobId,
+        attempts: current.attempts,
+        status: { not: "done" },
+        OR: [{ leaseOwner: null }, { leaseOwner: current.leaseOwner }],
+      },
+      data: {
+        attempts: { increment: 1 },
+        leaseOwner,
+        leaseUntil,
+      },
+    });
+
+    if (claimed.count !== 1) {
+      const again = await tx.job.findUnique({ where: { id: jobId } });
+      if (again && again.attempts >= again.maxAttempts) {
+        return { ok: false as const, reason: "exhausted" as const, job: again };
+      }
+      return { ok: false as const, reason: "busy" as const, job: again };
+    }
+
+    const job = await tx.job.findUnique({ where: { id: jobId } });
+    if (!job) return { ok: false as const, reason: "missing" as const, job: null };
+    return { ok: true as const, reason: "claimed" as const, job, leaseOwner };
+  });
 }
 
 export async function completeJob(jobId: string, leaseOwner: string) {

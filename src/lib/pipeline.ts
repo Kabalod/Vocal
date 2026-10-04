@@ -17,13 +17,16 @@ import {
 import { safeServerLog } from "@/lib/safe-log";
 import { audioPathFor } from "@/lib/storage";
 import { transcribeAudio } from "@/lib/stt";
+import { publishMediaJobResult } from "@/lib/job-publish";
 import {
   findOriginalRevision,
-  importOriginalFromAnalysisPayload,
-  saveOriginalIfAbsent,
-  selectedTranscriptText,
+  transcriptFromAnalysisPayload,
 } from "@/lib/transcripts";
 import type { TranscriptSegmentDto } from "@/types/transcript";
+
+export const pipelineTestSeams = {
+  duringTranscribe: null as ((ctx: { jobId: string; leaseOwner: string }) => Promise<void>) | null,
+};
 
 const queue: string[] = [];
 let draining = false;
@@ -196,15 +199,19 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
     if (!job) return claimed;
     if (job.leaseOwner !== leaseOwner) throw leaseLostError();
 
-    if (job.takeId) {
-      const analysis = await prisma.analysisResult.findUnique({ where: { jobId } });
-      await importOriginalFromAnalysisPayload(job.takeId, analysis?.payload);
-    }
+    const analysis = job.takeId ? await prisma.analysisResult.findUnique({ where: { jobId } }) : null;
+    const analysisPeek = transcriptFromAnalysisPayload(analysis?.payload);
 
     let original = job.takeId ? await findOriginalRevision(job.takeId) : null;
     let transcript = "";
     let segments: TranscriptSegmentDto[] = [];
     let duration = job.durationSec ?? 0;
+    let sttForPublish: {
+      text: string;
+      segments: TranscriptSegmentDto[];
+      language?: string | null;
+      sttModel?: string | null;
+    } | null = null;
 
     if (original) {
       transcript = original.text;
@@ -215,6 +222,9 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
       } catch {
         segments = [];
       }
+    } else if (analysisPeek) {
+      transcript = analysisPeek.text;
+      segments = analysisPeek.segments ?? [];
     } else {
       if (!existsSync(job.videoPath)) {
         throw Object.assign(new Error("Исходное видео не найдено на диске."), {
@@ -239,6 +249,7 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
       stage = "stt";
       await setStage(jobId, leaseOwner, "transcribing", { audioPath, durationSec: duration });
 
+      await pipelineTestSeams.duringTranscribe?.({ jobId, leaseOwner });
       const stt = await transcribe(audioPath);
       transcript = stt.text;
       segments = stt.segments;
@@ -247,29 +258,35 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
           code: "EMPTY_TRANSCRIPT",
         });
       }
-
-      if (job.takeId) {
-        original = await saveOriginalIfAbsent(job.takeId, {
-          text: transcript,
-          segments,
-          source: "stt",
-          language: stt.language,
-          sttModel: stt.model,
-        });
-      }
+      sttForPublish = {
+        text: transcript,
+        segments,
+        language: stt.language,
+        sttModel: stt.model,
+      };
     }
 
     if (job.takeId) {
-      const selected = await selectedTranscriptText(job.takeId);
-      if (selected?.text) {
-        transcript = selected.text;
-        if (selected.segments.length > 0) segments = selected.segments;
-      }
-    }
+      const published = await publishMediaJobResult({
+        jobId,
+        leaseOwner,
+        takeId: job.takeId,
+        stt: sttForPublish,
+        analysisPayload: analysis?.payload ?? null,
+      });
+      if (!published.ok) throw leaseLostError();
+      if (published.transcript.trim()) transcript = published.transcript;
 
-    if (job.takeId && transcript.trim()) {
-      const { applyThoughtMediaFromTranscript } = await import("@/lib/thought-media");
-      await applyThoughtMediaFromTranscript(job.takeId, transcript, deps.suggestTitle);
+      if (transcript.trim()) {
+        const key = await prisma.thoughtCreateKey.findUnique({ where: { reelId: published.reelId } });
+        if (key) {
+          const { applyThoughtTitleFromTranscript } = await import("@/lib/thought-title");
+          await applyThoughtTitleFromTranscript(published.reelId, transcript, deps.suggestTitle, {
+            jobId,
+            leaseOwner,
+          });
+        }
+      }
     }
 
     const finished = await completeJob(jobId, leaseOwner);
