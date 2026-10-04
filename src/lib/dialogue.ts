@@ -383,11 +383,18 @@ function resolveCraftSnapshot(
   thought: { openGaps: { id: string; text: string; status: "open" | "resolved" }[]; decisions: string[] },
   locked: CraftSnapshot | null,
 ): CraftSnapshot {
+  if (locked) return locked;
   const catalog = loadActiveCraftCatalog();
   const enabled = isV07CraftEnabled();
-  if (locked) return locked;
   if (!enabled) {
-    return { enabled: false, catalogVersion: catalog.version, cardIds: [], selectedGapId: null };
+    return {
+      enabled: false,
+      catalogVersion: catalog.version,
+      cardIds: [],
+      selectedGapId: null,
+      cards: [],
+      catalogHadCards: catalog.cards.length > 0,
+    };
   }
   return craftSnapshotFromSelection(
     selectCraftCards({
@@ -490,10 +497,10 @@ async function freezeThoughtPrompt(
       : []),
   ].join("\n");
   const craft = resolveCraftSnapshot(thought, turn?.lockedCraft ?? null);
-  const catalog = loadActiveCraftCatalog();
+  const frozenCards = cardsForSnapshot(craft);
   const craftHint =
-    craft.enabled && (catalog.cards.length > 0 || craft.cardIds.length > 0)
-      ? formatCraftPromptHint(cardsForSnapshot(catalog, craft), craft.selectedGapId, craft.enabled)
+    craft.enabled && (frozenCards.length > 0 || craft.catalogHadCards)
+      ? formatCraftPromptHint(frozenCards, craft.selectedGapId, true)
       : "";
   const prompt = [
     `Мысль: ${reel.id}`,
@@ -528,7 +535,7 @@ async function freezeThoughtPrompt(
     prompt,
     material,
     thoughtFacts: thought.facts,
-    craft: resolveCraftSnapshot(thought, turn?.lockedCraft ?? null),
+    craft,
   };
 }
 
@@ -733,7 +740,7 @@ export async function runDialogueTurn(
       }
       const reply = parseAgentReply(parseJsonObject(reusable.responseText));
       assertCraftNotAuthorEvidence({
-        catalog: loadActiveCraftCatalog(),
+        cardIds: readStoredCraftSnapshot(reusable.inputSnapshotJson)?.cardIds ?? [],
         action: reply.action,
         thoughtUpdate: reply.thoughtUpdate,
         c00Signal: reply.c00Signal,
@@ -861,7 +868,7 @@ export async function runDialogueTurn(
     }
     const reply = parseAgentReply(parseJsonObject(call.responseText));
     assertCraftNotAuthorEvidence({
-      catalog: loadActiveCraftCatalog(),
+      cardIds: craft.cardIds,
       action: reply.action,
       thoughtUpdate: reply.thoughtUpdate,
       c00Signal: reply.c00Signal,

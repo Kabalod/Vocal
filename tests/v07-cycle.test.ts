@@ -136,7 +136,8 @@ test("synthetic full cycle with craft, correction, several takes, conflict, and 
   const afterFault = await getThoughtState(reel.id);
   assert.equal(afterFault.takeTask, "Произнести этот вечер целиком, без морали.");
 
-  await prisma.reel.update({ where: { id: reel.id }, data: { workingTakeId: secondTake.id } });
+  const working = await getReel(reel.id);
+  assert.equal(working?.workingTakeId, secondTake.id);
   const chosen = await updateReel(reel.id, { finalTakeId: secondTake.id });
   assert.equal(chosen.finalTakeId, secondTake.id);
   assert.equal(chosen.finalScriptId, null);
@@ -144,4 +145,151 @@ test("synthetic full cycle with craft, correction, several takes, conflict, and 
   assert.equal(completed.status, "completed");
   assert.equal(completed.finalScriptId, null);
   assert.equal((await getReel(reel.id))?.workingTakeId, secondTake.id);
+});
+
+const compactCases = [
+  { name: "объяснение", body: "Хочу объяснить, как устроена очередь.", mode: "explanation", text: "уточни" },
+  { name: "наблюдение", body: "Заметил, что вечером улица пустеет.", mode: "observation", text: "уточни" },
+  { name: "готовая мысль", body: "Главное уже сказано: тишина после воды.", mode: "ready_thought", text: "хватит" },
+  { name: "недостаточный материал", body: "Есть обрывок без случая.", mode: "unspecified", text: "уточни" },
+] as const;
+
+for (const item of compactCases) {
+  test(`synthetic ${item.name}: allowed action, no auto-complete or script`, async (t) => {
+    await withPostgresTestDb(t);
+    await resetPrismaClient();
+    t.after(() => {
+      v07CraftSeam.catalog = null;
+    });
+    v07CraftSeam.catalog = FIXTURE_CRAFT_CATALOG;
+    const { reel } = await createThoughtFromText({
+      title: `V07 ${item.name}`,
+      body: item.body,
+      idempotencyKey: `v07-case-${item.mode}-create`,
+    });
+    await applyThoughtState({
+      reelId: reel.id,
+      expectedRevision: 0,
+      patch: {
+        decisions: [`content_mode:${item.mode}`],
+        openGaps: [{ id: "gap_example", text: "что ещё нужно", status: "open" }],
+      },
+    });
+    if (item.mode === "ready_thought") {
+      await assert.rejects(
+        () =>
+          sendDialogueMessage(reel.id, { text: item.text, idempotencyKey: `v07-case-${item.mode}-1` }, async () => ({
+            text: JSON.stringify({
+              action: "content_sufficient",
+              checkedInTranscript: "исходник",
+              whyNoGaps: "уже готово",
+            }),
+            usage: { promptTokens: 1, completionTokens: 1 },
+          })),
+        (error: unknown) => error instanceof Error && "code" in error && error.code === "ACTION_NOT_ALLOWED",
+      );
+    } else {
+      const page = await sendDialogueMessage(
+        reel.id,
+        { text: item.text, idempotencyKey: `v07-case-${item.mode}-1` },
+        async () => ({
+          text: askQuestionJson("Чего не хватает, чтобы это произнести?"),
+          usage: { promptTokens: 1, completionTokens: 1 },
+        }),
+      );
+      assert.ok(page.messages.some((row) => row.kind === "question"));
+      assert.equal(page.messages.some((row) => row.kind === "script_proposal"), false);
+    }
+    const reelAfter = await getReel(reel.id);
+    assert.equal(reelAfter?.status, "idea");
+    assert.equal(reelAfter?.finalTakeId, null);
+  });
+}
+
+test("synthetic refuse, redirect, intent change, long dialogue, and V04 portrait", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  t.after(() => {
+    v07CraftSeam.catalog = null;
+  });
+  v07CraftSeam.catalog = FIXTURE_CRAFT_CATALOG;
+  const { reel } = await createThoughtFromText({
+    title: "V07 extras",
+    body: "Черновик про вечер.",
+    idempotencyKey: "v07-extra-create",
+  });
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: 0,
+    patch: { openGaps: [{ id: "gap_example", text: "пример", status: "open" }] },
+  });
+  const beforeRefuse = await getThoughtState(reel.id);
+  await sendDialogueMessage(reel.id, { text: "не знаю", idempotencyKey: "v07-extra-refuse" }, async () => ({
+    text: askQuestionJson("Что тогда можно сказать иначе?"),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  const afterRefuse = await getThoughtState(reel.id);
+  assert.deepEqual(afterRefuse.facts, beforeRefuse.facts);
+  assert.equal(afterRefuse.openGaps.find((gap) => gap.id === "gap_example")?.status, "open");
+
+  await sendDialogueMessage(reel.id, { text: "как сварить кашу", idempotencyKey: "v07-extra-redir" }, async () => ({
+    text: JSON.stringify({ action: "redirect_to_task", currentTask: "вернуться к вечеру" }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  const afterRedirect = await getThoughtState(reel.id);
+  assert.deepEqual(afterRedirect.facts, afterRefuse.facts);
+  assert.equal(afterRedirect.takeTask, afterRefuse.takeTask);
+
+  await applyThoughtState({
+    reelId: reel.id,
+    expectedRevision: afterRedirect.revision,
+    patch: { intent: "уже не вечер, а очередь в поликлинике" },
+  });
+  await sendDialogueMessage(reel.id, { text: "теперь про очередь", idempotencyKey: "v07-extra-intent" }, async () => ({
+    text: askQuestionJson("Что в очереди вы хотите донести?"),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  assert.equal((await getThoughtState(reel.id)).intent, "уже не вечер, а очередь в поликлинике");
+  assert.equal((await getReel(reel.id))?.status, "idea");
+
+  for (let i = 0; i < 4; i += 1) {
+    await sendDialogueMessage(reel.id, { text: `ещё деталь ${i}`, idempotencyKey: `v07-extra-long-${i}` }, async () => ({
+      text: askQuestionJson(`Что именно в детали ${i}?`),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    }));
+  }
+  const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId: reel.id } });
+  const proposals = await prisma.dialogueMessage.count({
+    where: { threadId: thread.id, kind: "script_proposal" },
+  });
+  assert.equal(proposals, 0);
+  assert.equal((await getReel(reel.id))?.status, "idea");
+
+  const thoughtFacts = (await getThoughtState(reel.id)).facts;
+  const { startProfileDialogue, sendProfileMessage } = await import("../src/lib/profile-dialogue");
+  await startProfileDialogue();
+  await sendProfileMessage(
+    { text: "Моя цель — говорить своими словами.", idempotencyKey: "v07-extra-v04" },
+    async () => {
+      const user = await prisma.dialogueMessage.findFirstOrThrow({
+        where: { role: "user", body: "Моя цель — говорить своими словами." },
+        orderBy: { createdAt: "desc" },
+      });
+      return {
+        text: JSON.stringify({
+          kind: "apply_update",
+          category: "blog_goal",
+          value: "говорить своими словами",
+          scope: "global",
+          evidenceType: "explicit_statement",
+          evidenceMessageIds: [user.id],
+          confidence: 0.9,
+          operation: "replace_explicit",
+        }),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+    },
+  );
+  assert.deepEqual((await getThoughtState(reel.id)).facts, thoughtFacts);
+  assert.equal((await getReel(reel.id))?.status, "idea");
 });

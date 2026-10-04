@@ -4,12 +4,13 @@ import type { C00SignalCandidate } from "@/lib/c00-signal";
 import { craftCardIds, type CraftCatalog } from "./catalog";
 
 export function assertCraftNotAuthorEvidence(input: {
-  catalog: CraftCatalog;
+  cardIds?: Iterable<string>;
+  catalog?: CraftCatalog;
   action: AgentAction;
   thoughtUpdate: ThoughtUpdate;
   c00Signal: C00SignalCandidate | null;
 }) {
-  const ids = craftCardIds(input.catalog);
+  const ids = new Set(input.cardIds ?? (input.catalog ? craftCardIds(input.catalog) : []));
   if (!ids.size) return;
   const fact = input.thoughtUpdate.fact;
   if (fact && ids.has(fact.sourceId)) {

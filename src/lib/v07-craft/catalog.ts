@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isAppTestRuntime, isLocalUiTestRuntime } from "@/lib/db-target";
 import productionJson from "./production-catalog.json";
 import fixtureJson from "./fixture-catalog.json";
 
@@ -79,18 +80,28 @@ export const FIXTURE_CRAFT_CATALOG = parseCraftCatalog(fixtureJson, "fixture");
 export const v07CraftSeam = {
   enabled: null as boolean | null,
   catalog: null as CraftCatalog | null,
+  /** When false, fixture catalog is forbidden even under NODE_ENV=test. */
+  fixtureRuntime: null as boolean | null,
 };
 
-export function isV07CraftEnabled() {
+export function isV07CraftEnabled(env: Record<string, string | undefined> = process.env) {
   if (v07CraftSeam.enabled != null) return v07CraftSeam.enabled;
-  const raw = process.env[V07_CRAFT_ENV]?.trim().toLowerCase();
+  const raw = env[V07_CRAFT_ENV]?.trim().toLowerCase();
   return raw !== "0" && raw !== "off" && raw !== "false" && raw !== "disabled";
 }
 
-export function loadActiveCraftCatalog(): CraftCatalog {
+/** Fixtures only in isolated test / local UI-test DB. Production and development ignore the flag. */
+export function isFixtureCraftRuntime(env: Record<string, string | undefined> = process.env) {
+  if (v07CraftSeam.fixtureRuntime != null) return v07CraftSeam.fixtureRuntime;
+  if (env.NODE_ENV === "production" || env.NODE_ENV === "development") return false;
+  return isAppTestRuntime(env) || isLocalUiTestRuntime(env);
+}
+
+export function loadActiveCraftCatalog(env: Record<string, string | undefined> = process.env): CraftCatalog {
   if (v07CraftSeam.catalog) return v07CraftSeam.catalog;
-  const fixtures = process.env[V07_CRAFT_FIXTURES_ENV]?.trim();
-  if (fixtures === "1") return FIXTURE_CRAFT_CATALOG;
+  if (isFixtureCraftRuntime(env) && env[V07_CRAFT_FIXTURES_ENV]?.trim() === "1") {
+    return FIXTURE_CRAFT_CATALOG;
+  }
   return PRODUCTION_CRAFT_CATALOG;
 }
 

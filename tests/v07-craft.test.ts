@@ -8,12 +8,15 @@ import { resetPrismaClient } from "../src/lib/db";
 import { buildThoughtMaterialContext, sendDialogueMessage } from "../src/lib/dialogue";
 import { createThoughtFromText } from "../src/lib/thought-create";
 import { applyThoughtState, getThoughtState } from "../src/lib/thought-state";
+import { v03TestSeams } from "../src/lib/v03-test-seams";
 import {
   FIXTURE_CRAFT_CATALOG,
   PRODUCTION_CRAFT_CATALOG,
+  loadActiveCraftCatalog,
   parseCraftCatalog,
   v07CraftSeam,
 } from "../src/lib/v07-craft/catalog";
+import type { CraftCard, CraftCatalog } from "../src/lib/v07-craft/catalog";
 import { assertCraftNotAuthorEvidence } from "../src/lib/v07-craft/guard";
 import { CRAFT_SELECT_LIMIT, selectCraftCards, selectCurrentOpenGap } from "../src/lib/v07-craft/select";
 import { askQuestionJson, c00SignalFor, suggestTakeJson } from "./helpers/agent-action-json";
@@ -24,6 +27,8 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 function resetCraftSeam() {
   v07CraftSeam.enabled = null;
   v07CraftSeam.catalog = null;
+  v07CraftSeam.fixtureRuntime = null;
+  v03TestSeams.beforeCommitDialogueReply = null;
 }
 
 async function thoughtWithGap(title: string, key: string, gapId = "gap_example") {
@@ -43,7 +48,34 @@ async function thoughtWithGap(title: string, key: string, gapId = "gap_example")
 }
 
 function snapshotOf(raw: string) {
-  return JSON.parse(raw) as { craft?: { enabled: boolean; catalogVersion: string; cardIds: string[]; selectedGapId: string | null } };
+  return JSON.parse(raw) as {
+    craft?: {
+      enabled: boolean;
+      catalogVersion: string;
+      cardIds: string[];
+      selectedGapId: string | null;
+      cards: CraftCard[];
+      catalogHadCards: boolean;
+    };
+  };
+}
+
+function oneCardCatalog(card: Partial<CraftCard> & Pick<CraftCard, "id" | "mechanism" | "version">): CraftCatalog {
+  return parseCraftCatalog({
+    version: `frozen-${card.version}`,
+    cards: [
+      {
+        id: card.id,
+        version: card.version,
+        layer: "fixture",
+        applicableGapKey: "gap_example",
+        contentModes: ["unspecified"],
+        mechanism: card.mechanism,
+        questionStrategy: card.questionStrategy ?? "спросить",
+        contraindications: [],
+      },
+    ],
+  });
 }
 
 test("production catalog is empty research; fixtures stay in their file", () => {
@@ -172,6 +204,8 @@ test("dialogue snapshot records craft; replay keeps the stored snapshot", async 
     "craft_example_c",
     "craft_example_d",
   ]);
+  assert.equal(first.craft?.cards?.[0]?.mechanism, "Конкретизировать один прожитый момент.");
+  assert.equal(first.craft?.catalogHadCards, true);
   const prompt = await buildThoughtMaterialContext(reel.id);
   assert.match(prompt, /craft_example_a/);
   assert.equal(prompt.includes("playbook"), false);
@@ -201,6 +235,8 @@ test("empty catalog and disabled flag keep the ordinary dialogue path", async (t
   const emptySnap = snapshotOf(emptyCall.inputSnapshotJson);
   assert.equal(emptySnap.craft?.enabled, true);
   assert.deepEqual(emptySnap.craft?.cardIds, []);
+  assert.deepEqual(emptySnap.craft?.cards, []);
+  assert.equal(emptySnap.craft?.catalogHadCards, false);
   assert.equal(emptySnap.craft?.catalogVersion, "v07-1");
   const emptyPrompt = await buildThoughtMaterialContext(emptyReel.id);
   assert.equal(emptyPrompt.includes("Подсказки приёмов"), false);
@@ -300,4 +336,124 @@ test("a craft card is not a fact, evidence, or C00 target", async (t) => {
       }),
     (error: unknown) => error instanceof AgentActionError && error.code === "CRAFT_NOT_EVIDENCE",
   );
+});
+
+test("production and development ignore the fixture flag", () => {
+  assert.deepEqual(
+    loadActiveCraftCatalog({ NODE_ENV: "production", VOCAL_V07_CRAFT_FIXTURES: "1" }).cards,
+    [],
+  );
+  assert.deepEqual(
+    loadActiveCraftCatalog({ NODE_ENV: "development", VOCAL_V07_CRAFT_FIXTURES: "1" }).cards,
+    [],
+  );
+  assert.equal(
+    loadActiveCraftCatalog({ NODE_ENV: "test", VOCAL_V07_CRAFT_FIXTURES: "1" }).cards.some(
+      (card) => card.id === "craft_example_a",
+    ),
+    true,
+  );
+});
+
+test("production-like runtime with fixture flag keeps the research catalog in dialogue", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  const previous = process.env.VOCAL_V07_CRAFT_FIXTURES;
+  t.after(() => {
+    resetCraftSeam();
+    if (previous == null) delete process.env.VOCAL_V07_CRAFT_FIXTURES;
+    else process.env.VOCAL_V07_CRAFT_FIXTURES = previous;
+  });
+  resetCraftSeam();
+  v07CraftSeam.fixtureRuntime = false;
+  process.env.VOCAL_V07_CRAFT_FIXTURES = "1";
+  const reel = await thoughtWithGap("V07 prod flag", "v07-prod-flag");
+  await sendDialogueMessage(reel.id, { text: "уточни", idempotencyKey: "v07-prod-flag-1" }, async () => ({
+    text: askQuestionJson("Что главное?"),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  const call = await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id, kind: "dialogue" } });
+  const snap = snapshotOf(call.inputSnapshotJson);
+  assert.equal(snap.craft?.catalogVersion, "v07-1");
+  assert.deepEqual(snap.craft?.cardIds, []);
+  assert.equal(call.promptText.includes("craft_example_a"), false);
+  assert.equal((await buildThoughtMaterialContext(reel.id)).includes("craft_example_a"), false);
+});
+
+test("frozen craft cards survive model fault, catalog rewrite, deletion, and resume guard", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  t.after(resetCraftSeam);
+  resetCraftSeam();
+  const original = oneCardCatalog({
+    id: "craft_example_a",
+    version: "1",
+    mechanism: "FROZEN_ORIGINAL_MECHANISM",
+    questionStrategy: "FROZEN_ORIGINAL_QUESTION",
+  });
+  v07CraftSeam.catalog = original;
+
+  const reel = await thoughtWithGap("V07 freeze", "v07-freeze");
+  const first = await sendDialogueMessage(reel.id, { text: "уточни", idempotencyKey: "v07-freeze-1" }, async () => {
+    throw new Error("model down after snapshot");
+  });
+  assert.ok(first.messages.some((row) => row.kind === "error"));
+  const call = await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id, kind: "dialogue" } });
+  const frozen = snapshotOf(call.inputSnapshotJson).craft;
+  assert.equal(frozen?.cards[0]?.mechanism, "FROZEN_ORIGINAL_MECHANISM");
+  assert.equal(frozen?.cards[0]?.version, "1");
+
+  v07CraftSeam.catalog = oneCardCatalog({
+    id: "craft_example_a",
+    version: "9",
+    mechanism: "REPLACED_MECHANISM",
+    questionStrategy: "REPLACED_QUESTION",
+  });
+  let seenPrompt = "";
+  let modelCalls = 0;
+  await sendDialogueMessage(reel.id, { text: "уточни", idempotencyKey: "v07-freeze-1" }, async (input) => {
+    modelCalls += 1;
+    seenPrompt = input.user;
+    return { text: askQuestionJson("Какой случай?"), usage: { promptTokens: 1, completionTokens: 1 } };
+  });
+  assert.match(seenPrompt, /FROZEN_ORIGINAL_MECHANISM/);
+  assert.equal(seenPrompt.includes("REPLACED_MECHANISM"), false);
+  const afterRewrite = snapshotOf(
+    (await prisma.aiCall.findUniqueOrThrow({ where: { id: call.id } })).inputSnapshotJson,
+  ).craft;
+  assert.deepEqual(afterRewrite, frozen);
+
+  v07CraftSeam.catalog = parseCraftCatalog({ version: "empty-now", cards: [] });
+  modelCalls = 0;
+  await sendDialogueMessage(reel.id, { text: "уточни", idempotencyKey: "v07-freeze-1" }, async () => {
+    modelCalls += 1;
+    throw new Error("successful replay must not call the model");
+  });
+  assert.equal(modelCalls, 0);
+  assert.deepEqual(
+    snapshotOf((await prisma.aiCall.findUniqueOrThrow({ where: { id: call.id } })).inputSnapshotJson).craft,
+    frozen,
+  );
+
+  const resumeReel = await thoughtWithGap("V07 resume guard", "v07-resume");
+  v07CraftSeam.catalog = original;
+  v03TestSeams.beforeCommitDialogueReply = async () => {
+    throw new Error("stop after saved response");
+  };
+  await sendDialogueMessage(resumeReel.id, { text: "снимай", idempotencyKey: "v07-resume-1" }, async () => ({
+    text: suggestTakeJson("сказать случай", ["craft_example_a"]),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  v03TestSeams.beforeCommitDialogueReply = null;
+  v07CraftSeam.catalog = PRODUCTION_CRAFT_CATALOG;
+  let resumeCalls = 0;
+  await assert.rejects(
+    () =>
+      sendDialogueMessage(resumeReel.id, { text: "снимай", idempotencyKey: "v07-resume-1" }, async () => {
+        resumeCalls += 1;
+        throw new Error("resume must use the saved response");
+      }),
+    (error: unknown) => error instanceof AgentActionError && error.code === "CRAFT_NOT_EVIDENCE",
+  );
+  assert.equal(resumeCalls, 0);
 });

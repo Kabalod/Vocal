@@ -18,6 +18,8 @@ export type CraftSnapshot = {
   catalogVersion: string;
   cardIds: string[];
   selectedGapId: string | null;
+  cards: CraftCard[];
+  catalogHadCards: boolean;
 };
 
 /** First open gap by stable id order. Does not invent a gap for a card. */
@@ -53,16 +55,32 @@ export function selectCraftCards(input: {
   return { selectedGapId: current.id, cards: matched };
 }
 
+export function normalizeFrozenCraftCard(card: CraftCard): CraftCard {
+  return {
+    id: card.id,
+    version: card.version,
+    layer: card.layer,
+    applicableGapKey: card.applicableGapKey,
+    contentModes: [...card.contentModes],
+    mechanism: card.mechanism,
+    questionStrategy: card.questionStrategy,
+    contraindications: [...card.contraindications],
+  };
+}
+
 export function craftSnapshotFromSelection(
   selection: CraftSelection,
   catalog: CraftCatalog,
   enabled: boolean,
 ): CraftSnapshot {
+  const cards = enabled ? selection.cards.map(normalizeFrozenCraftCard) : [];
   return {
     enabled,
     catalogVersion: catalog.version,
-    cardIds: enabled ? selection.cards.map((card) => card.id) : [],
+    cardIds: cards.map((card) => card.id),
     selectedGapId: enabled ? selection.selectedGapId : null,
+    cards,
+    catalogHadCards: catalog.cards.length > 0,
   };
 }
 
@@ -72,18 +90,52 @@ export function parseCraftSnapshot(raw: unknown): CraftSnapshot | null {
   if (typeof row.enabled !== "boolean" || typeof row.catalogVersion !== "string") return null;
   if (!Array.isArray(row.cardIds) || row.cardIds.some((id) => typeof id !== "string")) return null;
   if (row.selectedGapId !== null && typeof row.selectedGapId !== "string") return null;
+  if (!Array.isArray(row.cards)) return null;
+  if (typeof row.catalogHadCards !== "boolean") return null;
+  const cards: CraftCard[] = [];
+  for (const item of row.cards) {
+    const parsed = parseFrozenCard(item);
+    if (!parsed) return null;
+    cards.push(parsed);
+  }
+  if (cards.map((card) => card.id).join("\0") !== (row.cardIds as string[]).join("\0")) return null;
   return {
     enabled: row.enabled,
     catalogVersion: row.catalogVersion,
     cardIds: row.cardIds as string[],
     selectedGapId: row.selectedGapId,
+    cards,
+    catalogHadCards: row.catalogHadCards,
   };
 }
 
-export function cardsForSnapshot(catalog: CraftCatalog, snapshot: CraftSnapshot): CraftCard[] {
+function parseFrozenCard(raw: unknown): CraftCard | null {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as Record<string, unknown>;
+  if (typeof row.id !== "string" || typeof row.version !== "string") return null;
+  if (row.layer !== "research" && row.layer !== "fixture") return null;
+  if (typeof row.applicableGapKey !== "string" || typeof row.mechanism !== "string") return null;
+  if (typeof row.questionStrategy !== "string") return null;
+  if (!Array.isArray(row.contentModes) || row.contentModes.some((mode) => typeof mode !== "string")) return null;
+  if (!Array.isArray(row.contraindications) || row.contraindications.some((item) => typeof item !== "string")) {
+    return null;
+  }
+  return normalizeFrozenCraftCard({
+    id: row.id,
+    version: row.version,
+    layer: row.layer,
+    applicableGapKey: row.applicableGapKey,
+    contentModes: row.contentModes as CraftCard["contentModes"],
+    mechanism: row.mechanism,
+    questionStrategy: row.questionStrategy,
+    contraindications: row.contraindications as string[],
+  });
+}
+
+/** Frozen turn cards only. Never look up the live catalog. */
+export function cardsForSnapshot(snapshot: CraftSnapshot): CraftCard[] {
   if (!snapshot.enabled) return [];
-  const byId = new Map(catalog.cards.map((card) => [card.id, card]));
-  return snapshot.cardIds.map((id) => byId.get(id)).filter((card): card is CraftCard => Boolean(card));
+  return snapshot.cards.map(normalizeFrozenCraftCard);
 }
 
 export function formatCraftPromptHint(cards: CraftCard[], selectedGapId: string | null, enabled: boolean) {
