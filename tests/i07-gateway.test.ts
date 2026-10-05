@@ -183,9 +183,13 @@ test("I07 STT: a failed provider call is still charged", async (t) => {
 
 test("I07 voice: same idempotency key transcribes once (thought dialogue)", async (t) => {
   const prisma = await setup(t);
-  const { createReel } = await import("../src/lib/reels");
+  const { createThoughtFromText } = await import("../src/lib/thought-create");
   const { sendDialogueVoice } = await import("../src/lib/dialogue");
-  const reel = await createReel({ title: "Голос" });
+  const { reel } = await createThoughtFromText({
+    title: "Голос",
+    body: "Исходная мысль для голосового ответа.",
+    idempotencyKey: "i07-voice-thought",
+  });
   let sttCalls = 0;
   let modelCalls = 0;
   const transcribe = async () => {

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { after, before, test } from "node:test";
+import { resetPrismaClient } from "../src/lib/db";
+import { closePostgresTestDb, openPostgresTestDb, type PostgresTestDb } from "./helpers/postgres-test-db";
 import {
   classifyC00CorrectionSignal,
   isExplicitAuthorFactCorrection,
@@ -8,6 +10,18 @@ import {
 } from "../src/lib/c00-classify-signal";
 import { c00SignalFor } from "./helpers/agent-action-json";
 import { routeC00Decision } from "../src/lib/c00-router";
+
+// The AI gateway meters every classifier call (budget + accounting row), so these tests need a database.
+let db: PostgresTestDb;
+before(async () => {
+  (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
+  db = await openPostgresTestDb();
+  await resetPrismaClient();
+});
+after(async () => {
+  await closePostgresTestDb(db);
+  await resetPrismaClient();
+});
 
 const facts = [{ id: "fact_seed", text: "Вечер тихий.", sourceType: "initial_note" }];
 

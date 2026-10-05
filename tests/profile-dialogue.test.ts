@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resetProfileLockSeamForTests, setProfileLockSeamForTests } from "../src/lib/profile-lock-seam";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
@@ -559,13 +560,14 @@ test("late answer for the same field does not overwrite a newer value", async (t
   assert.notEqual(workspace.pending?.readyToConfirm, true);
 });
 
-test("late turn re-reads the journal written by a newer turn (V04 form)", async (t) => {
+test("V04 commits are serialized by the CreatorProfile lock (fails without FOR UPDATE)", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   delete process.env.VOCAL_TEST_USER_ID;
   await resetPrismaClient();
   resetAiInflightForTests();
   t.after(async () => {
+    resetProfileLockSeamForTests();
     await prisma.$disconnect();
     await resetPrismaClient();
     resetAiInflightForTests();
@@ -592,39 +594,43 @@ test("late turn re-reads the journal written by a newer turn (V04 form)", async 
   const userIdFor = async (body: string) =>
     (await prisma.dialogueMessage.findFirstOrThrow({ where: { role: "user", body } })).id;
 
-  let releaseFirst!: () => void;
-  const holdFirst = new Promise<void>((resolve) => {
-    releaseFirst = resolve;
+  let entries = 0;
+  let releaseFirstCommit!: () => void;
+  const firstCommitHeld = new Promise<void>((resolve) => {
+    releaseFirstCommit = resolve;
   });
-  let enteredFirst!: () => void;
-  const firstInModel = new Promise<void>((resolve) => {
-    enteredFirst = resolve;
+  let firstHoldsLock!: () => void;
+  const firstInLock = new Promise<void>((resolve) => {
+    firstHoldsLock = resolve;
+  });
+  setProfileLockSeamForTests({
+    afterCommitLocked: async () => {
+      entries += 1;
+      if (entries === 1) {
+        firstHoldsLock();
+        await firstCommitHeld;
+      }
+    },
   });
 
-  const first = sendProfileMessage({ text: "Старый ход, пример.", idempotencyKey: "late-first" }, async () => {
-    const id = await userIdFor("Старый ход, пример.");
-    enteredFirst();
-    await holdFirst;
-    return { text: observation([id]), usage: { promptTokens: 2, completionTokens: 2 } };
+  const reply = (body: string) => async () => ({
+    text: observation([await userIdFor(body)]),
+    usage: { promptTokens: 2, completionTokens: 2 },
   });
-  await firstInModel;
-  await sendProfileMessage({ text: "Новый ход, другой пример.", idempotencyKey: "late-second" }, async () => {
-    const id = await userIdFor("Новый ход, другой пример.");
-    return { text: observation([id]), usage: { promptTokens: 2, completionTokens: 2 } };
-  });
-  releaseFirst();
-  await first;
+  const first = sendProfileMessage({ text: "Первый ход, пример.", idempotencyKey: "lock-first" }, reply("Первый ход, пример."));
+  await firstInLock;
+  const second = sendProfileMessage({ text: "Второй ход, пример.", idempotencyKey: "lock-second" }, reply("Второй ход, пример."));
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  assert.equal(entries, 1, "the second commit must wait for the CreatorProfile row lock");
+  releaseFirstCommit();
+  await Promise.all([first, second]);
+  assert.equal(entries, 2);
 
   const calls = await prisma.aiCall.findMany({ where: { kind: PROFILE_DIALOGUE_KIND } });
-  assert.equal(calls.length, 2);
-  const weightByUserText = new Map<string, number | undefined>();
-  for (const call of calls) {
-    const snapshot = JSON.parse(call.inputSnapshotJson) as { text: string };
-    weightByUserText.set(snapshot.text, parseV04ResultEnvelope(call.resultJson)?.event?.applyResult.systemWeight);
-  }
-  // The newer turn committed first (weight 1); the late turn must see its journal entry (weight 2).
-  assert.equal(weightByUserText.get("Новый ход, другой пример."), 1);
-  assert.equal(weightByUserText.get("Старый ход, пример."), 2);
+  const weights = calls
+    .map((call) => parseV04ResultEnvelope(call.resultJson)?.event?.applyResult.systemWeight)
+    .sort();
+  assert.deepEqual(weights, [1, 2], "the later commit re-reads the journal written by the earlier one");
 
   const workspace = await getProfileWorkspace();
   assert.equal(workspace.portrait, null);
