@@ -18,11 +18,15 @@ export async function GET() {
   }
 
   let postgres = false;
+  let schema = false;
   try {
     resolveAppDatabaseUrl();
     const { prisma } = await import("@/lib/db");
     await prisma.$queryRaw`select 1`;
     postgres = true;
+    // Reachable but not migrated: report it instead of failing later on the first request.
+    await prisma.criterion.count();
+    schema = true;
   } catch (error) {
     logApiError("health/postgres", error);
   }
@@ -43,8 +47,9 @@ export async function GET() {
       storage,
       groq: Boolean(process.env.GROQ_API_KEY?.trim()),
       postgres,
-      postgresStatus: postgres ? "ok" : "unavailable",
+      schema,
+      postgresStatus: !postgres ? "unavailable" : schema ? "ok" : "schema_missing",
     },
-    { status: postgres ? 200 : 503 },
+    { status: postgres && schema ? 200 : 503 },
   );
 }

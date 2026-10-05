@@ -6,19 +6,30 @@ export async function startNodeApp() {
   const { ensureStorageDirs } = await import("@/lib/storage");
   const { recoverUnfinishedJobs } = await import("@/lib/pipeline");
   await ensureStorageDirs();
-  await ensureCriteria();
-  await recoverUnfinishedJobs();
+  // A database that is reachable but not migrated yet (first `docker compose up`) must not crash the
+  // hook: the server stays up and /api/health answers 503 "schema_missing" until `npm run db:migrate`.
+  const schemaReady = await ensureCriteria().then(
+    () => true,
+    (error: { code?: string }) => {
+      if (error?.code !== "P2021" && error?.code !== "P2022") throw error;
+      console.warn("vocal: database schema is not migrated, run `npm run db:migrate`; background jobs are not started");
+      return false;
+    },
+  );
+  if (schemaReady) {
+    await recoverUnfinishedJobs();
 
-  // Media nobody references any more (failed unlinks, files written by a worker after its thought
-  // was deleted) is collected at start and then every 6 hours. Files younger than 1 hour are kept.
-  const { sweepOrphanMedia } = await import("@/lib/data-deletion");
-  const sweep = () => void sweepOrphanMedia().catch(() => undefined);
-  sweep();
-  setInterval(sweep, 6 * 60 * 60_000).unref();
+    // Media nobody references any more (failed unlinks, files written by a worker after its thought
+    // was deleted) is collected at start and then every 6 hours. Files younger than 1 hour are kept.
+    const { sweepOrphanMedia } = await import("@/lib/data-deletion");
+    const sweep = () => void sweepOrphanMedia().catch(() => undefined);
+    sweep();
+    setInterval(sweep, 6 * 60 * 60_000).unref();
 
-  // A killed process leaves jobs with a lease that expires on its own; pick them up without waiting
-  // for someone to open the page.
-  setInterval(() => void recoverUnfinishedJobs().catch(() => undefined), 60_000).unref();
+    // A killed process leaves jobs with a lease that expires on its own; pick them up without waiting
+    // for someone to open the page.
+    setInterval(() => void recoverUnfinishedJobs().catch(() => undefined), 60_000).unref();
+  }
 
   // Graceful stop. Needs NEXT_MANUAL_SIG_HANDLE=true, otherwise Next exits on SIGTERM before this runs.
   const { shutdownPipeline } = await import("@/lib/pipeline");

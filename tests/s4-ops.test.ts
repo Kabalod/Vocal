@@ -20,7 +20,7 @@ test("S4 container: single instance, media volume, signals reach the app, health
   assert.match(compose, /vocal-media:\/data/);
   assert.equal(/replicas:\s*[2-9]/.test(compose), false);
   const ignore = read(".dockerignore");
-  for (const entry of [".env", "storage", "node_modules"]) assert.ok(ignore.split("\n").includes(entry), entry);
+  for (const entry of [".env", "storage", "node_modules"]) assert.ok(ignore.split(/\r?\n/).includes(entry), entry);
   const stop = read("src/instrumentation-node.ts");
   assert.match(stop, /shutdownPipeline/);
   assert.match(stop, /SIGTERM/);
@@ -69,5 +69,6 @@ test("S4 docs: runbook covers the required topics and the stale README sections 
 test("S4 health reports the media volume", () => {
   const health = read("src/app/api/health/route.ts");
   assert.match(health, /storage/);
+  assert.match(health, /schema_missing/);
   assert.match(health, /R_OK \| constants\.W_OK/);
 });

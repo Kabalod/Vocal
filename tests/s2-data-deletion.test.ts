@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { resetAiInflightForTests } from "../src/lib/ai/usage-guard";
 import { resetPrismaClient } from "../src/lib/db";
@@ -406,7 +407,7 @@ test("S2 sweeper keeps referenced and young files, removes only unreferenced old
 
 test("S2 UI: delete actions are confirmed, account deletion needs the typed phrase", async () => {
   const { readFileSync } = await import("node:fs");
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const actions = readFileSync(path.join(root, "src/components/DeleteActions.tsx"), "utf8");
   assert.match(actions, /Удалить мысль\?/);
   assert.match(actions, /Удалить дубль\?/);

@@ -3,11 +3,12 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
-const child = path.resolve(path.dirname(new URL(import.meta.url).pathname), "helpers/job-worker-child.ts");
+const child = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "helpers/job-worker-child.ts");
 
 function startChild(env: Record<string, string>): { proc: ChildProcess; output: () => string; waitFor: (text: string, ms?: number) => Promise<void>; exited: Promise<number | null> } {
   const proc = spawn(process.execPath, ["--import", "tsx", child], { env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
@@ -60,7 +61,7 @@ async function prepare(t: Parameters<typeof withPostgresTestDb>[0]) {
   return { prisma, env, media, take, sttLog };
 }
 
-const sttCalls = (file: string) => readFileSync(file, "utf8").split("\n").filter(Boolean).length;
+const sttCalls = (file: string) => readFileSync(file, "utf8").split(/\r?\n/).filter(Boolean).length;
 
 test("S4 hard kill during STT: after the lease the job is recovered and finishes once, the file stays", async (t) => {
   const { prisma, env, media, take, sttLog } = await prepare(t);
@@ -92,7 +93,7 @@ test("S4 hard kill during STT: after the lease the job is recovered and finishes
   assert.equal(await prisma.transcriptRevision.count({ where: { takeId: take.id, kind: "original" } }), 1);
 });
 
-test("S4 SIGTERM during STT: the running job is allowed to finish before the process exits", async (t) => {
+test("S4 SIGTERM during STT: the running job is allowed to finish before the process exits", { skip: process.platform === "win32" && "no POSIX SIGTERM on Windows" }, async (t) => {
   const { prisma, env, media, take, sttLog } = await prepare(t);
   const proc = startChild({ ...env, MODE: "graceful", STT_MS: "1500" });
   await proc.waitFor("IN_STT");
@@ -107,7 +108,7 @@ test("S4 SIGTERM during STT: the running job is allowed to finish before the pro
   assert.equal(sttCalls(sttLog), 1);
 });
 
-test("S4 SIGTERM with a job that outlives the grace period: the lease is released for immediate takeover", async (t) => {
+test("S4 SIGTERM with a job that outlives the grace period: the lease is released for immediate takeover", { skip: process.platform === "win32" && "no POSIX SIGTERM on Windows" }, async (t) => {
   const { prisma, env, media, sttLog } = await prepare(t);
   const proc = startChild({ ...env, MODE: "graceful", STT_MS: "60000", VOCAL_JOB_LEASE_MS: "600000" });
   await proc.waitFor("IN_STT");

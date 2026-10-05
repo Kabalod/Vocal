@@ -100,6 +100,6 @@ scripts/ops/verify-restore.sh "postgresql://…/vocal_restore" /var/lib/vocal-re
 
 ## 7. Что смотреть
 
-- `GET /api/health`: `postgres` (503, если база недоступна), `storage` (том доступен на запись), `ffmpeg`, `groq` (есть ли ключ).
+- `GET /api/health`: `postgres` (503, если база недоступна), `schema` (503 и `postgresStatus: "schema_missing"`, если миграции не накатаны — первый `docker compose up` до `npm run db:migrate`), `storage` (том доступен на запись), `ffmpeg`, `groq` (есть ли ключ).
 - `npm run report:ai` — расход модели по дням (токены чата и секунды STT: `kind = stt`).
 - Диск: каталог `storage/`. Файлы без ссылок из БД старше часа удаляются сами (старт и каждые 6 часов).
