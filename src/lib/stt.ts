@@ -79,6 +79,9 @@ function sttMockOn() {
 
 export async function transcribeAudio(mp3Path: string): Promise<SttResult> {
   if (sttMockOn()) {
+    // Lets an operator hold a job inside STT to check a graceful stop (docs/OPERATIONS.md). Mock only.
+    const delayMs = Number(process.env.VOCAL_STT_MOCK_DELAY_MS);
+    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, Math.min(delayMs, 120_000)));
     const text = "Мок расшифровки: я хочу рассказать, как начал вести блог.";
     return { text, segments: [{ start: 0, end: 2, text }], language: "ru", model: "mock-stt" };
   }

@@ -72,3 +72,9 @@ test("S4 health reports the media volume", () => {
   assert.match(health, /schema_missing/);
   assert.match(health, /R_OK \| constants\.W_OK/);
 });
+
+test("S4 pipeline state is one object per process, shared by the instrumentation hook and route handlers", () => {
+  const pipeline = read("src/lib/pipeline.ts");
+  assert.match(pipeline, /globalThis[\s\S]*__vocalPipelineState/);
+  assert.doesNotMatch(pipeline, /^(const|let) (queue|draining|shuttingDown|activeLeases)\b/m);
+});

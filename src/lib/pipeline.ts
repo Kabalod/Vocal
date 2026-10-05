@@ -30,11 +30,25 @@ export const pipelineTestSeams = {
   duringTranscribe: null as ((ctx: { jobId: string; leaseOwner: string }) => Promise<void>) | null,
 };
 
-const queue: string[] = [];
-let draining = false;
-let shuttingDown = false;
-/** jobId → leaseOwner of jobs this process is working on right now. */
-const activeLeases = new Map<string, string>();
+/**
+ * One state object per process. Next bundles the instrumentation hook (graceful stop) and the route
+ * handlers (enqueueJob) separately, so plain module variables would be two unrelated copies and the
+ * stop would never see a job that a request started.
+ */
+type PipelineState = {
+  queue: string[];
+  draining: boolean;
+  shuttingDown: boolean;
+  /** jobId → leaseOwner of jobs this process is working on right now. */
+  activeLeases: Map<string, string>;
+};
+const pipelineGlobal = globalThis as unknown as { __vocalPipelineState?: PipelineState };
+const state: PipelineState = (pipelineGlobal.__vocalPipelineState ??= {
+  queue: [],
+  draining: false,
+  shuttingDown: false,
+  activeLeases: new Map(),
+});
 
 export type PipelineDeps = {
   transcribeAudio?: typeof transcribeAudio;
@@ -46,9 +60,9 @@ export type PipelineDeps = {
 
 export function enqueueJob(jobId: string) {
   if (process.env.VOCAL_SKIP_JOB_ENQUEUE === "1") return;
-  if (shuttingDown) return; // stays in the database and is picked up by recoverUnfinishedJobs after restart
-  if (!queue.includes(jobId)) {
-    queue.push(jobId);
+  if (state.shuttingDown) return; // stays in the database and is picked up by recoverUnfinishedJobs after restart
+  if (!state.queue.includes(jobId)) {
+    state.queue.push(jobId);
   }
   void drain();
 }
@@ -78,16 +92,16 @@ export async function recoverJobIfStale(jobId: string, now = new Date()): Promis
 }
 
 async function drain() {
-  if (draining) return;
-  draining = true;
+  if (state.draining) return;
+  state.draining = true;
   try {
-    while (queue.length > 0 && !shuttingDown) {
-      const id = queue.shift();
+    while (state.queue.length > 0 && !state.shuttingDown) {
+      const id = state.queue.shift();
       if (!id) continue;
       await processJob(id);
     }
   } finally {
-    draining = false;
+    state.draining = false;
   }
 }
 
@@ -96,12 +110,12 @@ async function drain() {
  * is still running are released so the next process takes them over at once instead of after the lease.
  */
 export async function shutdownPipeline(timeoutMs: number): Promise<{ drained: boolean; released: number }> {
-  shuttingDown = true;
+  state.shuttingDown = true;
   const deadline = Date.now() + timeoutMs;
-  while ((draining || activeLeases.size > 0) && Date.now() < deadline) {
+  while ((state.draining || state.activeLeases.size > 0) && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  const pending = [...activeLeases.entries()];
+  const pending = [...state.activeLeases.entries()];
   for (const [jobId, leaseOwner] of pending) {
     await releaseJobLease(jobId, leaseOwner).catch(() => undefined);
   }
@@ -109,8 +123,8 @@ export async function shutdownPipeline(timeoutMs: number): Promise<{ drained: bo
 }
 
 export function resetPipelineShutdownForTests() {
-  shuttingDown = false;
-  activeLeases.clear();
+  state.shuttingDown = false;
+  state.activeLeases.clear();
 }
 
 export function classifyPipelineError(error: unknown, stage: string) {
@@ -227,7 +241,7 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
   }
 
   enterWithOwner({ id: claimed.job.ownerUserId, email: null });
-  activeLeases.set(jobId, claimed.leaseOwner);
+  state.activeLeases.set(jobId, claimed.leaseOwner);
 
   const transcribe = deps.transcribeAudio ?? transcribeAudio;
   const extract = deps.extractAudio ?? extractAudio;
@@ -344,7 +358,7 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
     await releaseJobLease(jobId, leaseOwner);
     return claimed;
   } finally {
-    activeLeases.delete(jobId);
+    state.activeLeases.delete(jobId);
   }
 }
 

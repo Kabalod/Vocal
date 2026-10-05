@@ -48,4 +48,14 @@
 - **Первый запуск без миграций** давал 500 из instrumentation. Теперь хук переживает отсутствие таблиц (P2021/P2022): сервер стартует, фоновые задачи не запускаются, `/api/health` → 503 `schema_missing`. Проверено в контейнере на пустой схеме. Недоступная база по-прежнему валит старт (fail-fast).
 - **Dockerfile:** `openssl` добавлен и в стадию `build`.
 - **Тесты на Windows:** `fileURLToPath` вместо `new URL().pathname`, CRLF в `.dockerignore`, два SIGTERM-теста пропускаются на `win32`. S2/S4: 18 из 18 на Linux.
-- **Не сделано:** SIGTERM во время длинного STT в Docker; CI на этом SHA (runner не выделен / запуск отменён).
+- **Не сделано:** CI на `ffab025` (runner не выделен / запуск отменён); на `b66ddc1` CI зелёный (запуск №6).
+
+## Дополнение: остановка во время активного STT в Docker (проверено)
+
+Реальный контейнер (production-сборка, `VOCAL_UI_TEST_DB=1`, mock AI, `VOCAL_STT_MOCK_DELAY_MS`), видео загружено через `POST /api/thoughts/media`, `docker stop` на 4-й секунде STT.
+
+- **Дефект найден:** до правки остановка завершалась за 0,13 с с `drained=true released=0`, хотя задание было в STT. Причина: Next собирает instrumentation-хук и route-handlers отдельно, переменные модуля `pipeline.ts` (`queue`, `activeLeases`, `shuttingDown`) были двумя несвязанными копиями, остановка не видела задание запроса. Тесты `s4-restart` этого не ловили (дочерний процесс — один бандл). Правка: состояние в одном объекте на `globalThis` (`src/lib/pipeline.ts`).
+- **STT 15 с (меньше grace 25 с):** остановка 11 с, `drained=true released=0`, код 0; после запуска задание `done`, `attempts 1` (STT не повторялся).
+- **STT 40 с (больше grace):** остановка 25 с, `drained=false released=1`, код 0; после запуска задание подхвачено сразу, `attempts 2`, `done`.
+- Для этого в mock STT добавлена задержка `VOCAL_STT_MOCK_DELAY_MS` (только при `VOCAL_STT_MOCK`).
+- Не проверялось: `docker compose` целиком на живой базе с этой сценой; живой STT.
