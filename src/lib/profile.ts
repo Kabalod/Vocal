@@ -82,7 +82,13 @@ export async function ensureLocalProfile() {
   const id = portraitProfileId();
   const existing = await prisma.creatorProfile.findUnique({ where: { id } });
   if (existing) return existing;
-  return prisma.creatorProfile.create({ data: { id, ownerUserId: id } });
+  try {
+    return await prisma.creatorProfile.create({ data: { id, ownerUserId: id } });
+  } catch (error) {
+    // Two requests of one owner can both miss the row: the loser reads what the winner created.
+    if ((error as { code?: string } | null)?.code !== "P2002") throw error;
+    return prisma.creatorProfile.findUniqueOrThrow({ where: { id } });
+  }
 }
 
 export async function getProfile(): Promise<ProfileDto> {
