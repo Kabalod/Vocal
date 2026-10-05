@@ -18,6 +18,8 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # a test reads the accepted V03 prompt from git history
       - uses: actions/setup-node@v4
         with:
           node-version: 22

@@ -718,6 +718,7 @@ export async function runDialogueTurn(
   }
   if (v03TestSeams.afterUserMessageCreate) await v03TestSeams.afterUserMessageCreate();
 
+  let follower = false;
   const { processing, call: reusable } = await ensureDialogueTurnBinding({
     reelId,
     threadId: thread.id,
@@ -804,6 +805,8 @@ export async function runDialogueTurn(
     });
     let call = await prisma.aiCall.findUniqueOrThrow({ where: { id: reusable.id } });
     let execClaim: { ownerId: string; generation: number } | null = null;
+    // True when another executor produced the model reply and this one only waited for it.
+    follower = !call.responseText;
     if (!call.responseText) {
       const ownerId = randomUUID();
       while (!call.responseText) {
@@ -847,6 +850,7 @@ export async function runDialogueTurn(
           call = await prisma.aiCall.findUniqueOrThrow({ where: { id: call.id } });
           break;
         }
+        follower = true;
         call = await waitForDialogueModelResponse(call.id);
       }
     }
@@ -891,6 +895,17 @@ export async function runDialogueTurn(
   } catch (error) {
     if (await isDialogueTurnComplete(thread.id, userMessage.id, key)) {
       return listDialoguePage(reelId);
+    }
+    if (error instanceof StateVersionError) {
+      // Two executors of one turn can both see a "changed" snapshot: the second one creates the
+      // processing message after the first froze its snapshot, and nobody has committed yet. The
+      // other executor may be about to complete the turn, so give it a moment before reporting a
+      // conflict. A follower waits longer; a genuinely stale turn pays at most this delay.
+      const deadline = Date.now() + (follower ? 5_000 : 1_500);
+      while (Date.now() < deadline) {
+        if (await isDialogueTurnComplete(thread.id, userMessage.id, key)) return listDialoguePage(reelId);
+        await new Promise((resolve) => setTimeout(resolve, 40));
+      }
     }
     const latestProcessing = await prisma.dialogueMessage.findUniqueOrThrow({ where: { id: processing.id } });
     if (isCommittedAssistantTurn(latestProcessing)) {
