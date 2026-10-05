@@ -1,6 +1,5 @@
-import { consumeAiCallBudget } from "@/lib/ai-call-budget";
 import { LLM_MODEL } from "@/lib/config";
-import { chatCompletionModel, createXaiChatCompletion, getGroq, usesXaiChat, withRetry } from "@/lib/groq";
+import { aiAttemptTimeoutMs, chatCompletionModel, createXaiChatCompletion, getGroq, usesXaiChat, withRetry } from "@/lib/groq";
 import type { CompleteJsonFn } from "@/types/review";
 
 function parseJsonObject(text: string): unknown {
@@ -54,7 +53,6 @@ export const defaultCompleteJson: CompleteJsonFn = async ({ model, system, user,
     return mockedCompleteJson(label);
   }
   if (usesXaiChat()) {
-    consumeAiCallBudget(label ?? "dialogue");
     const completion = await createXaiChatCompletion({
       model: chatCompletionModel(model) ?? "grok-4",
       system,
@@ -65,17 +63,20 @@ export const defaultCompleteJson: CompleteJsonFn = async ({ model, system, user,
   }
   const completion = await withRetry(
     () =>
-      getGroq().chat.completions.create({
-        model,
-        temperature: 0.2,
-        max_tokens: 1800,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      }),
-    { label },
+      getGroq().chat.completions.create(
+        {
+          model,
+          temperature: 0.2,
+          max_tokens: 1800,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+        },
+        { timeout: aiAttemptTimeoutMs() },
+      ),
+    { label, retries: 3 },
   );
   const message = completion.choices[0]?.message;
   const raw = message?.content;

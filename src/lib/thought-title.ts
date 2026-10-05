@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { gatewayComplete } from "@/lib/ai/gateway";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
@@ -89,7 +90,7 @@ export async function applyThoughtTitleFromTranscript(
   });
 
   try {
-    const raw = await complete({
+    const raw = await gatewayComplete(complete, {
       model: LLM_MODEL,
       system: TITLE_SYSTEM,
       user: userPrompt,

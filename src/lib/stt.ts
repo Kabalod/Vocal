@@ -1,6 +1,6 @@
 import fs from "fs";
 import { STT_FALLBACK_MODEL, STT_MODEL } from "@/lib/config";
-import { getGroq, withRetry } from "@/lib/groq";
+import { getGroq, sttAttemptTimeoutMs, withRetry } from "@/lib/groq";
 import { cleanSttResult } from "@/lib/stt-clean";
 import type { TranscriptSegment } from "@/types/analysis";
 
@@ -28,16 +28,19 @@ interface VerboseTranscription {
 async function transcribeOnce(mp3Path: string, model: string): Promise<SttResult> {
   const raw = await withRetry(
     () =>
-      getGroq().audio.transcriptions.create({
-        file: fs.createReadStream(mp3Path),
-        model,
-        language: "ru",
-        response_format: "verbose_json",
-        timestamp_granularities: ["segment", "word"],
-        temperature: 0,
-        prompt: "Разговорное видео. Живая устная речь на русском языке.",
-      }) as Promise<VerboseTranscription>,
-    { retries: 5, label: "stt" },
+      getGroq().audio.transcriptions.create(
+        {
+          file: fs.createReadStream(mp3Path),
+          model,
+          language: "ru",
+          response_format: "verbose_json",
+          timestamp_granularities: ["segment", "word"],
+          temperature: 0,
+          prompt: "Разговорное видео. Живая устная речь на русском языке.",
+        },
+        { timeout: sttAttemptTimeoutMs() },
+      ) as Promise<VerboseTranscription>,
+    { retries: 3, label: "stt" },
   );
 
   const text = (raw.text ?? "").trim();

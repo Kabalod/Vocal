@@ -559,9 +559,8 @@ test("late answer for the same field does not overwrite a newer value", async (t
   assert.notEqual(workspace.pending?.readyToConfirm, true);
 });
 
-test("stale ready reply cannot complete after a newer clarify", async (t) => {
-  const { prisma, url } = await withPostgresTestDb(t);
-  process.env.DATABASE_URL = url;
+test("late turn re-reads the journal written by a newer turn (V04 form)", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;
   delete process.env.VOCAL_TEST_USER_ID;
   await resetPrismaClient();
@@ -575,7 +574,23 @@ test("stale ready reply cannot complete after a newer clarify", async (t) => {
   const { startProfileDialogue, sendProfileMessage, getProfileWorkspace } = await import(
     "../src/lib/profile-dialogue"
   );
+  const { PROFILE_DIALOGUE_KIND } = await import("../src/lib/ai/profile");
+  const { parseV04ResultEnvelope } = await import("../src/lib/v04-commit");
   await startProfileDialogue();
+
+  const observation = (evidenceMessageIds: string[]) =>
+    JSON.stringify({
+      kind: "apply_update",
+      category: "concreteness",
+      value: "high",
+      scope: "global",
+      evidenceType: "behavioral_observation",
+      evidenceMessageIds,
+      confidence: 0.9,
+      operation: "add_observation",
+    });
+  const userIdFor = async (body: string) =>
+    (await prisma.dialogueMessage.findFirstOrThrow({ where: { role: "user", body } })).id;
 
   let releaseFirst!: () => void;
   const holdFirst = new Promise<void>((resolve) => {
@@ -586,57 +601,35 @@ test("stale ready reply cannot complete after a newer clarify", async (t) => {
     enteredFirst = resolve;
   });
 
-  const first = sendProfileMessage({ text: "для коллег, цель говорить", idempotencyKey: "stale-ready" }, async () => {
+  const first = sendProfileMessage({ text: "Старый ход, пример.", idempotencyKey: "late-first" }, async () => {
+    const id = await userIdFor("Старый ход, пример.");
     enteredFirst();
     await holdFirst;
-    return {
-      text: JSON.stringify({
-        reply: "Портрета достаточно.",
-        kind: "ready",
-        complete: true,
-        understood: "старый запрос",
-        openQuestions: [],
-        coveredKeys: ["whyRecord", "audience"],
-        missingKeys: [],
-        patch: {
-          whyRecord: { text: "говорить для коллег", usage: "understanding" },
-          audience: { text: "коллеги", usage: "understanding" },
-        },
-      }),
-      usage: { promptTokens: 2, completionTokens: 2 },
-    };
+    return { text: observation([id]), usage: { promptTokens: 2, completionTokens: 2 } };
   });
-  const second = sendProfileMessage({ text: "для близких, цель говорить своими словами", idempotencyKey: "fresh-clarify" }, async () => {
-    await firstInModel;
-    return {
-      text: JSON.stringify({
-        reply: "Уточните, для кого именно?",
-        kind: "clarify",
-        complete: false,
-        understood: "изменить аудиторию на близких",
-        openQuestions: ["Уточните, для кого именно?"],
-        coveredKeys: ["whyRecord", "audience"],
-        missingKeys: [],
-        patch: {
-          whyRecord: { text: "говорить своими словами", usage: "understanding" },
-          audience: { text: "близкие", usage: "understanding" },
-        },
-      }),
-      usage: { promptTokens: 2, completionTokens: 2 },
-    };
+  await firstInModel;
+  await sendProfileMessage({ text: "Новый ход, другой пример.", idempotencyKey: "late-second" }, async () => {
+    const id = await userIdFor("Новый ход, другой пример.");
+    return { text: observation([id]), usage: { promptTokens: 2, completionTokens: 2 } };
   });
-
-  await second;
   releaseFirst();
   await first;
 
+  const calls = await prisma.aiCall.findMany({ where: { kind: PROFILE_DIALOGUE_KIND } });
+  assert.equal(calls.length, 2);
+  const weightByUserText = new Map<string, number | undefined>();
+  for (const call of calls) {
+    const snapshot = JSON.parse(call.inputSnapshotJson) as { text: string };
+    weightByUserText.set(snapshot.text, parseV04ResultEnvelope(call.resultJson)?.event?.applyResult.systemWeight);
+  }
+  // The newer turn committed first (weight 1); the late turn must see its journal entry (weight 2).
+  assert.equal(weightByUserText.get("Новый ход, другой пример."), 1);
+  assert.equal(weightByUserText.get("Старый ход, пример."), 2);
+
   const workspace = await getProfileWorkspace();
-  assert.equal(workspace.profile.fields.find((field) => field.id === "audience")?.text, "");
-  assert.equal(workspace.phase, "conversation");
   assert.equal(workspace.portrait, null);
   assert.equal(workspace.draftPortrait, null);
-  assert.notEqual(workspace.pending?.readyToConfirm, true);
-  assert.ok(workspace.dialogue.messages.some((item) => item.kind === "error"));
+  assert.ok(!workspace.dialogue.messages.some((item) => item.kind === "error"));
 });
 
 test("incomplete intake resume keeps the current question", async (t) => {

@@ -1,12 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
 import { extractAudio } from "@/lib/ffmpeg";
+import { gatewayComplete, transcribeVoiceOnce } from "@/lib/ai/gateway";
 import { transcribeAudio } from "@/lib/stt";
 import { aiOperationKey, assertDailyTokenBudget, StateVersionError, withAiInflight } from "@/lib/ai/usage-guard";
 import { pageDialogueItems, decodeDialogueCursor } from "@/lib/dialogue-cursor";
@@ -822,7 +820,7 @@ export async function runDialogueTurn(
                 generation: claim.generation,
               });
             }
-            const raw = await complete({
+            const raw = await gatewayComplete(complete, {
               model: LLM_MODEL,
               system: thoughtDialogueSystemPrompt(),
               user: userPrompt,
@@ -954,43 +952,29 @@ export async function sendDialogueVoice(
   transcribe: typeof transcribeAudio = transcribeAudio,
   extract: typeof extractAudio = extractAudio,
 ): Promise<DialoguePageDto> {
-  const dir = await mkdtemp(path.join(tmpdir(), "vocal-dialogue-voice-"));
-  const rawPath = path.join(dir, "reply.webm");
-  const mp3Path = path.join(dir, "reply.mp3");
-  try {
-    if (!input.file.size) {
-      throw new DialogueError("Голосовой файл пуст. Запишите голос заново.", "VOICE_EMPTY");
-    }
-    await writeFile(rawPath, Buffer.from(await input.file.arrayBuffer()));
-    try {
-      await extract(rawPath, mp3Path);
-    } catch {
-      throw new DialogueError("Не удалось подготовить голосовой ответ. Запишите голос заново.", "STT_PREPARE");
-    }
-    let stt;
-    try {
-      stt = await transcribe(mp3Path);
-    } catch {
-      throw new DialogueError("Не удалось расшифровать голос. Повторите отправку или запишите заново.", "STT_FAILED");
-    }
-    const text = stt.text.trim();
-    if (!text) {
-      throw new DialogueError("Речь не распознана. Запишите голос заново или отправьте текстом.", "EMPTY_TRANSCRIPT");
-    }
-    return sendDialogueMessage(
-      reelId,
-      {
-        text,
-        idempotencyKey: input.idempotencyKey,
-        voiceDurationLabel: input.voiceDurationLabel,
-        expectedUpdatedAt: input.expectedUpdatedAt,
-        expectedWorkingTakeId: input.expectedWorkingTakeId,
-      },
-      complete,
-    );
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  const text = await transcribeVoiceOnce({
+    scope: `thought:${reelId}`,
+    reelId,
+    idempotencyKey: input.idempotencyKey,
+    file: input.file,
+    transcribe,
+    extract,
+    makeError: (message, code) => new DialogueError(message, code),
+  });
+  if (!text) {
+    throw new DialogueError("Речь не распознана. Запишите голос заново или отправьте текстом.", "EMPTY_TRANSCRIPT");
   }
+  return sendDialogueMessage(
+    reelId,
+    {
+      text,
+      idempotencyKey: input.idempotencyKey,
+      voiceDurationLabel: input.voiceDurationLabel,
+      expectedUpdatedAt: input.expectedUpdatedAt,
+      expectedWorkingTakeId: input.expectedWorkingTakeId,
+    },
+    complete,
+  );
 }
 
 export async function requestScriptHelp(

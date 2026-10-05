@@ -22,8 +22,21 @@ const authTests = [
   "tests/criteria-write.test.ts",
 ];
 
+/** Live-model tests. Never part of any runner: they call the paid provider (see tests/runner-coverage.test.ts). */
+const liveModelTests = ["tests/c00-classify-live.test.ts", "tests/c00-live-model.test.ts"];
+
+const i07Tests = ["tests/i07-gateway.test.ts", "tests/runner-coverage.test.ts"];
+
 const dbTests = [
   ...authTests,
+  ...i07Tests,
+  "tests/v04-01-union.test.ts",
+  "tests/v04-02-envelope.test.ts",
+  "tests/v04-03-slice.test.ts",
+  "tests/v05-generate-keys.test.ts",
+  "tests/c00-classify-skip-model.test.ts",
+  "tests/p01-6-2-final.test.ts",
+  "tests/landing.test.ts",
   "tests/reels-workspace.test.ts",
   "tests/reels-takes.test.ts",
   "tests/pipeline-recovery.test.ts",
@@ -171,6 +184,16 @@ function selectedTests() {
   }
   if (process.argv.includes("--v06")) {
     return ["tests/v06-loop.test.ts", "tests/thought-completion.test.ts", "tests/v03-agent-actions.test.ts"];
+  }
+  if (process.argv.includes("--i07")) {
+    return [
+      ...i07Tests,
+      "tests/profile-dialogue.test.ts",
+      "tests/v04-05-concurrency.test.ts",
+      "tests/r4-voice.test.ts",
+      "tests/pipeline-recovery.test.ts",
+      "tests/thought-dialogue.test.ts",
+    ];
   }
   if (process.argv.includes("--v07")) {
     return ["tests/v07-craft.test.ts", "tests/v07-cycle.test.ts"];

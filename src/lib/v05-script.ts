@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
+import { gatewayComplete } from "@/lib/ai/gateway";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
 import { aiOperationKey, AiInflightError, assertDailyTokenBudget, withAiInflight } from "@/lib/ai/usage-guard";
 import { listAcceptedC00Corrections } from "@/lib/c00-envelope";
@@ -1011,7 +1012,7 @@ export async function generateV05Script(
       }
 
       try {
-        const raw = await complete({
+        const raw = await gatewayComplete(complete, {
           model: LLM_MODEL,
           system:
             "Ты собираешь черновик сценария — текст прямой речи для следующего дубля. Только материал автора. Не используй портрет как источник событий. Не копируй чужие истории. Не добавляй CTA. Верни только JSON.",

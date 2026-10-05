@@ -8,6 +8,7 @@ import {
   claimJob,
   completeJob,
   heartbeatJob,
+  jobLeaseMs,
   listRecoverableJobIds,
   releaseJobLease,
   failExhaustedRunningJobs,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/jobs";
 import { safeServerLog } from "@/lib/safe-log";
 import { audioPathFor } from "@/lib/storage";
+import { meteredTranscribe } from "@/lib/ai/gateway";
 import { transcribeAudio } from "@/lib/stt";
 import { publishMediaJobResult } from "@/lib/job-publish";
 import {
@@ -151,6 +153,18 @@ async function fail(jobId: string, error: unknown, stage: string, leaseOwner: st
   });
 }
 
+/** Keeps the lease alive while a long external call (STT, title) runs, so the job is not re-claimed and paid twice. */
+async function withLeaseHeartbeat<T>(jobId: string, leaseOwner: string, run: () => Promise<T>): Promise<T> {
+  const timer = setInterval(() => {
+    void heartbeatJob(jobId, leaseOwner).catch(() => undefined);
+  }, Math.max(10, Math.floor(jobLeaseMs() / 3)));
+  try {
+    return await run();
+  } finally {
+    clearInterval(timer);
+  }
+}
+
 async function setStage(
   jobId: string,
   leaseOwner: string,
@@ -202,7 +216,7 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
     const analysis = job.takeId ? await prisma.analysisResult.findUnique({ where: { jobId } }) : null;
     const analysisPeek = transcriptFromAnalysisPayload(analysis?.payload);
 
-    let original = job.takeId ? await findOriginalRevision(job.takeId) : null;
+    const original = job.takeId ? await findOriginalRevision(job.takeId) : null;
     let transcript = "";
     let segments: TranscriptSegmentDto[] = [];
     let duration = job.durationSec ?? 0;
@@ -250,7 +264,9 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
       await setStage(jobId, leaseOwner, "transcribing", { audioPath, durationSec: duration });
 
       await pipelineTestSeams.duringTranscribe?.({ jobId, leaseOwner });
-      const stt = await transcribe(audioPath);
+      const stt = await withLeaseHeartbeat(jobId, leaseOwner, () =>
+        meteredTranscribe(audioPath, transcribe, { seconds: duration }),
+      );
       transcript = stt.text;
       segments = stt.segments;
       if (!transcript.trim()) {
@@ -281,10 +297,12 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
         const key = await prisma.thoughtCreateKey.findUnique({ where: { reelId: published.reelId } });
         if (key) {
           const { applyThoughtTitleFromTranscript } = await import("@/lib/thought-title");
-          await applyThoughtTitleFromTranscript(published.reelId, transcript, deps.suggestTitle, {
-            jobId,
-            leaseOwner,
-          });
+          await withLeaseHeartbeat(jobId, leaseOwner, () =>
+            applyThoughtTitleFromTranscript(published.reelId, transcript, deps.suggestTitle, {
+              jobId,
+              leaseOwner,
+            }),
+          );
         }
       }
     }

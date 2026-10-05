@@ -5,6 +5,12 @@ import { lockVocalJob } from "@/lib/job-publish";
 
 export const JOB_MAX_ATTEMPTS = 3;
 export const JOB_LEASE_MS = 120_000;
+
+/** Lease length. `VOCAL_JOB_LEASE_MS` exists so tests can shrink it; production keeps the default. */
+export function jobLeaseMs(): number {
+  const value = Number(process.env.VOCAL_JOB_LEASE_MS);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : JOB_LEASE_MS;
+}
 export const EXHAUSTED_JOB_USER_MESSAGE =
   "Обработка остановилась после нескольких попыток. Если лимит не исчерпан, нажмите «Повторить».";
 
@@ -19,7 +25,7 @@ export type JobClaimResult =
 export async function heartbeatJob(jobId: string, leaseOwner: string, now = new Date()) {
   await prisma.job.updateMany({
     where: { id: jobId, leaseOwner },
-    data: { leaseUntil: new Date(now.getTime() + JOB_LEASE_MS) },
+    data: { leaseUntil: new Date(now.getTime() + jobLeaseMs()) },
   });
 }
 
@@ -50,7 +56,7 @@ export async function claimJob(jobId: string, now = new Date()): Promise<JobClai
     }
 
     const leaseOwner = randomUUID();
-    const leaseUntil = new Date(now.getTime() + JOB_LEASE_MS);
+    const leaseUntil = new Date(now.getTime() + jobLeaseMs());
     const claimed = await tx.job.updateMany({
       where: {
         id: jobId,

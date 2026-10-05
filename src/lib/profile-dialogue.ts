@@ -1,6 +1,3 @@
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ZodError } from "zod";
@@ -8,6 +5,7 @@ import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/comple
 import { PROFILE_DIALOGUE_KIND, PROFILE_DIALOGUE_SYSTEM, profileV04UserPrompt } from "@/lib/ai/profile";
 import { aiOperationKey, assertDailyTokenBudget, withAiInflight } from "@/lib/ai/usage-guard";
 import { extractAudio } from "@/lib/ffmpeg";
+import { gatewayComplete, transcribeVoiceOnce } from "@/lib/ai/gateway";
 import { transcribeAudio } from "@/lib/stt";
 import { decodeDialogueCursor, pageDialogueItems } from "@/lib/dialogue-cursor";
 import {
@@ -310,6 +308,36 @@ export async function supplementProfileDialogue(): Promise<ProfileWorkspaceDto &
   return getProfileWorkspace();
 }
 
+const PROFILE_PROCESSING_STALE_MS = 3 * 60_000;
+
+/**
+ * A turn whose process died after "Собираю портрет…" was created never gets a reply. Close such
+ * turns with an honest error so the thread does not hang forever. Fresh turns are left alone.
+ */
+export async function failStaleProfileProcessing(threadId: string, now = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - PROFILE_PROCESSING_STALE_MS);
+  const stale = await prisma.dialogueMessage.updateMany({
+    where: { threadId, kind: "processing", status: "pending", createdAt: { lt: cutoff } },
+    data: {
+      kind: "error",
+      body: "Не удалось собрать портрет. Отправьте ответ ещё раз.",
+      status: "error",
+    },
+  });
+  if (stale.count > 0) {
+    await prisma.aiCall.updateMany({
+      where: {
+        kind: PROFILE_DIALOGUE_KIND,
+        ownerUserId: ownerUserId(),
+        status: "running",
+        createdAt: { lt: cutoff },
+      },
+      data: { status: "error", errorMessage: "PROCESSING_STALE" },
+    });
+  }
+  return stale.count;
+}
+
 export async function sendProfileMessage(
   input: { text: string; idempotencyKey: string; voiceDurationLabel?: string },
   complete: CompleteJsonFn = defaultCompleteJson,
@@ -322,7 +350,10 @@ export async function sendProfileMessage(
   const existing = await prisma.dialogueMessage.findFirst({
     where: { threadId: thread.id, idempotencyKey: key },
   });
-  if (existing) return getProfileWorkspace();
+  if (existing) {
+    await failStaleProfileProcessing(thread.id);
+    return getProfileWorkspace();
+  }
 
   return withAiInflight(
     aiOperationKey({
@@ -397,7 +428,7 @@ export async function sendProfileMessage(
     });
 
     try {
-      const raw = await complete({
+      const raw = await gatewayComplete(complete, {
         model: LLM_MODEL,
         system: PROFILE_DIALOGUE_SYSTEM,
         user: userPrompt,
@@ -440,38 +471,23 @@ export async function sendProfileVoice(
   transcribe: typeof transcribeAudio = transcribeAudio,
   extract: typeof extractAudio = extractAudio,
 ): Promise<ProfileWorkspaceDto & { dialogue: DialoguePageDto }> {
-  const dir = await mkdtemp(path.join(tmpdir(), "vocal-profile-voice-"));
-  const rawPath = path.join(dir, "reply.webm");
-  const mp3Path = path.join(dir, "reply.mp3");
-  try {
-    if (!input.file.size) {
-      throw new ProfileDialogueError("Голосовой файл пуст. Запишите голос заново.", "VOICE_EMPTY");
-    }
-    await writeFile(rawPath, Buffer.from(await input.file.arrayBuffer()));
-    try {
-      await extract(rawPath, mp3Path);
-    } catch {
-      throw new ProfileDialogueError("Не удалось подготовить голосовой ответ. Запишите голос заново.", "STT_PREPARE");
-    }
-    let stt;
-    try {
-      stt = await transcribe(mp3Path);
-    } catch {
-      throw new ProfileDialogueError("Не удалось расшифровать голос. Повторите отправку или запишите заново.", "STT_FAILED");
-    }
-    const text = stt.text.trim();
-    if (!text) {
-      throw new ProfileDialogueError("Речь не распознана. Запишите голос заново или отправьте текстом.", "EMPTY_TRANSCRIPT");
-    }
-    return sendProfileMessage(
-      {
-        text,
-        idempotencyKey: input.idempotencyKey,
-        voiceDurationLabel: input.voiceDurationLabel,
-      },
-      complete,
-    );
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  const text = await transcribeVoiceOnce({
+    scope: `profile:${portraitProfileId()}`,
+    idempotencyKey: input.idempotencyKey,
+    file: input.file,
+    transcribe,
+    extract,
+    makeError: (message, code) => new ProfileDialogueError(message, code),
+  });
+  if (!text) {
+    throw new ProfileDialogueError("Речь не распознана. Запишите голос заново или отправьте текстом.", "EMPTY_TRANSCRIPT");
   }
+  return sendProfileMessage(
+    {
+      text,
+      idempotencyKey: input.idempotencyKey,
+      voiceDurationLabel: input.voiceDurationLabel,
+    },
+    complete,
+  );
 }

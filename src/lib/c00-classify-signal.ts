@@ -1,3 +1,4 @@
+import { gatewayComplete } from "@/lib/ai/gateway";
 import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/complete";
 import { emptyThoughtUpdate, type ThoughtUpdate } from "@/lib/agent-action";
 import type { C00SignalCandidate } from "@/lib/c00-signal";
@@ -132,7 +133,7 @@ export async function classifyC00CorrectionSignal(
     "Цитата или пересказ чужих слов без явного «не я» / «я этого не говорил» → signal null. Одной фразы «это неправда» недостаточно.",
     `JSON: {"signal":null} или {"signal":{"signalType":"wrong_speaker"|"author_negation","targetId":"<id факта>"}}`,
   ].join("\n");
-  const raw = await complete({
+  const raw = await gatewayComplete(complete, {
     model: LLM_MODEL,
     system: SYSTEM,
     user,

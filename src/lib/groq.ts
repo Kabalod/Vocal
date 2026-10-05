@@ -14,6 +14,20 @@ export function usesXaiChat() {
   return envFlagOn("VOCAL_USE_XAI") && Boolean(process.env.XAI_API_KEY?.trim());
 }
 
+function envMs(name: string, fallback: number) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+/** One provider attempt. The whole operation is bounded separately by the gateway deadline. */
+export function aiAttemptTimeoutMs() {
+  return envMs("VOCAL_AI_ATTEMPT_TIMEOUT_MS", 45_000);
+}
+
+export function sttAttemptTimeoutMs() {
+  return envMs("VOCAL_STT_ATTEMPT_TIMEOUT_MS", 120_000);
+}
+
 export function noAutomaticModelRetry() {
   return usesXaiChat() || envFlagOn("VOCAL_AI_NO_RETRY");
 }
@@ -30,7 +44,7 @@ function createGroqClient(): Groq {
   }
   return new Groq({
     apiKey,
-    timeout: 10 * 60 * 1000,
+    timeout: sttAttemptTimeoutMs(),
     maxRetries: 0,
   });
 }
@@ -53,6 +67,7 @@ export async function createXaiChatCompletion(input: {
   }
   const response = await fetch(XAI_CHAT_URL, {
     method: "POST",
+    signal: AbortSignal.timeout(aiAttemptTimeoutMs()),
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
@@ -134,7 +149,7 @@ export function isRetryableGroqError(error: unknown): boolean {
 
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  opts: { retries?: number; label?: string } = {},
+  opts: { retries?: number; label?: string; deadlineAt?: number } = {},
 ): Promise<T> {
   const retries = opts.retries ?? (noAutomaticModelRetry() ? 1 : 4);
   let lastError: unknown;
@@ -150,6 +165,9 @@ export async function withRetry<T>(
         resetGroq();
       }
       const waitMs = groqRetryAfterMs(error) ?? 2000 * 2 ** attempt;
+      if (opts.deadlineAt !== undefined && Date.now() + waitMs >= opts.deadlineAt) {
+        throw error;
+      }
       console.warn(
         `Groq ${opts.label ?? "request"} retry ${attempt + 1}/${retries - 1} in ${waitMs}ms`,
       );
