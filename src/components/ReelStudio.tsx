@@ -10,6 +10,7 @@ import { ReelStudioFrame } from "@/components/ReelStudioFrame";
 import { ReelTakes } from "@/components/ReelTakes";
 import { ScriptEditor } from "@/components/ScriptEditor";
 import { ThoughtDialogue } from "@/components/ThoughtDialogue";
+import { DeleteThoughtAction } from "@/components/DeleteActions";
 import { ThoughtStudioHeader } from "@/components/ThoughtStudioHeader";
 import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
 import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
@@ -189,7 +190,13 @@ export function ReelStudio({ reelId }: { reelId: string }) {
   return (
     <>
         <ReelStudioFrame
-          header={<ThoughtStudioHeader title={thoughtTitle} status={thoughtStatus} />}
+          header={
+            <ThoughtStudioHeader
+              title={thoughtTitle}
+              status={thoughtStatus}
+              action={<DeleteThoughtAction reelId={reelId} title={thoughtTitle} />}
+            />
+          }
           tab={recording ? "takes" : tab}
           onTab={changeTab}
           hideTabs={recording}

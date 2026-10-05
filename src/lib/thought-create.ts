@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
+import { assertThoughtKeyNotDeleted } from "@/lib/data-deletion";
 import { getReel, ReelError } from "@/lib/reels";
 import { ensureThoughtState } from "@/lib/thought-state";
 import { REEL_NOTE_MAX, REEL_TITLE_MAX, TAKE_TEXT_MAX, type ReelDto } from "@/types/reel";
@@ -47,6 +48,7 @@ export async function createThoughtFromText(input: {
 
   const existing = await reelByCreateKey(idempotencyKey);
   if (existing) return { reel: existing, created: false };
+  await assertThoughtKeyNotDeleted(idempotencyKey);
 
   try {
     const reelId = await prisma.$transaction(async (tx) => {

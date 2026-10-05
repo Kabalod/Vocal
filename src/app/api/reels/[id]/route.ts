@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withApiUser } from "@/lib/auth/request";
+import { deleteThought } from "@/lib/data-deletion";
 import { ReelError, getReel, updateReel } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
 import { parseReelStatusInput, type UpdateReelInput } from "@/types/reel";
@@ -99,6 +100,18 @@ export const PATCH = withApiUser(async function PATCH(
     }
     const reel = await updateReel(id, input);
     return NextResponse.json({ reel });
+  } catch (error) {
+    return errorResponse(error);
+  }
+});
+
+export const DELETE = withApiUser(async function DELETE(
+  _request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await context.params;
+    return NextResponse.json(await deleteThought(id));
   } catch (error) {
     return errorResponse(error);
   }

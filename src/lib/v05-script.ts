@@ -887,8 +887,6 @@ async function lockThoughtWorld(tx: Prisma.TransactionClient, reelId: string) {
 
 function buildUserPrompt(context: Awaited<ReturnType<typeof getReelContext>>, texts: { label: string; text: string }[]) {
   return `Собери черновик прямой речи только из материалов автора ниже. Не придумывай факты, события и выводы. Портрет — только тон, не сюжет.
-Замысел карточки: ${context.live.reelGoal || "не указан"}
-Аудитория карточки: ${context.live.reelAudience || "не указана"}
 Тон портрета (не факты мысли): ${JSON.stringify(context.live.publicForScript)}
 Структурированные основания мысли и выбранный материал:
 ${texts.map((item, index) => `${index + 1}. ${item.label}\n${item.text}`).join("\n\n")}

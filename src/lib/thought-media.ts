@@ -1,4 +1,5 @@
 import path from "node:path";
+import { assertThoughtKeyNotDeleted } from "@/lib/data-deletion";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
@@ -112,6 +113,8 @@ export async function createThoughtFromMedia(input: {
     enqueueJob(existing.job.id);
     return { reel: existing.reel, take: existing.take, job: existing.job, created: false };
   }
+
+  if (!existing) await assertThoughtKeyNotDeleted(idempotencyKey);
 
   try {
     let reelId = existing?.reel.id;

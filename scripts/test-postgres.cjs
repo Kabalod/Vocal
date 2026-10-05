@@ -29,10 +29,13 @@ const i07Tests = ["tests/i07-gateway.test.ts", "tests/runner-coverage.test.ts"];
 
 const s3Tests = ["tests/s3-entry-cleanup.test.ts"];
 
+const s2Tests = ["tests/s2-data-deletion.test.ts"];
+
 const dbTests = [
   ...authTests,
   ...i07Tests,
   ...s3Tests,
+  ...s2Tests,
   "tests/v04-01-union.test.ts",
   "tests/v04-02-envelope.test.ts",
   "tests/v04-03-slice.test.ts",

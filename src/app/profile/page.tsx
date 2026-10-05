@@ -1,4 +1,5 @@
 import { ProfileConversation } from "@/components/ProfileConversation";
+import { DeleteAccountAction } from "@/components/DeleteActions";
 import { LogoutButton } from "@/components/LogoutButton";
 import { Panel } from "@/components/vocal-ui/Panel";
 
@@ -10,6 +11,7 @@ export default function ProfilePage() {
         <ProfileConversation />
       </Panel>
       <LogoutButton />
+      <DeleteAccountAction />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { DeleteTakeAction } from "@/components/DeleteActions";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { TakeList } from "@/components/TakeList";
 import { TakePlayer } from "@/components/TakePlayer";
@@ -175,6 +176,21 @@ export function ReelTakes({
         ← К списку дублей
       </ActionButton>
       <TakePlayer take={detailTake} seekTo={seekTo} />
+      {detailTake ? (
+        <div>
+          <DeleteTakeAction
+            key={`delete-${detailTake.id}`}
+            takeId={detailTake.id}
+            label={`Дубль №${detailTake.number}`}
+            onDeleted={() => {
+              setViewingId(null);
+              setDetailOpen(false);
+              void load();
+              onChanged?.();
+            }}
+          />
+        </div>
+      ) : null}
       {detailTake ? <TranscriptEditor key={detailTake.id} takeId={detailTake.id} /> : null}
       {detailTake && detailTake.inputType !== "text" && detailTake.browserPlayback ? (
         <form

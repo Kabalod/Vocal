@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withApiUser } from "@/lib/auth/request";
+import { deleteTake } from "@/lib/data-deletion";
 import { ReelError } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
 import { getTakeDto, updateTake } from "@/lib/takes";
@@ -41,6 +42,15 @@ export const PATCH = withApiUser(async function PATCH(request: Request, context:
             : undefined,
     });
     return NextResponse.json({ take });
+  } catch (error) {
+    return errorResponse(error);
+  }
+});
+
+export const DELETE = withApiUser(async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params;
+  try {
+    return NextResponse.json(await deleteTake(id));
   } catch (error) {
     return errorResponse(error);
   }
