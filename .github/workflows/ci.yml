@@ -28,7 +28,14 @@ jobs:
       - run: npm run build
       # Starts its own postgres:16-alpine container (Docker is available on ubuntu-latest) and
       # runs every test except the live-model ones. No paid model is called.
-      - run: npm run test:postgres
+      - name: Tests
+        run: set -o pipefail; npm run test:postgres 2>&1 | tee test.log
         env:
           DATABASE_URL: ""
           DIRECT_URL: ""
+      # Failed tests become annotations on the run page (readable without downloading logs).
+      - name: Report failed tests
+        if: failure()
+        run: |
+          grep -n -E "^(not ok|# (tests|pass|fail))" test.log | head -40 | while read -r line; do echo "::error title=test::${line}"; done
+          grep -n -E "^\s+error: " -A3 test.log | head -80 | sed 's/^/::notice title=detail::/' | head -60
