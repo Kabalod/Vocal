@@ -1,0 +1,10 @@
+<!-- Supabase → Authentication → Email Templates → "Confirm signup". Subject: Подтвердите почту в Vocal -->
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#1d1a24">
+  <h2 style="margin:0 0 16px">Добро пожаловать в Vocal</h2>
+  <p>Подтвердите адрес почты, чтобы войти и начать свою первую мысль.</p>
+  <p style="margin:24px 0">
+    <a href="{{ .ConfirmationURL }}" style="background:#6c5bd4;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:10px;display:inline-block">Подтвердить почту</a>
+  </p>
+  <p style="font-size:13px;color:#6b6676">Если кнопка не работает, откройте ссылку: <br>{{ .ConfirmationURL }}</p>
+  <p style="font-size:13px;color:#6b6676">Вы получили это письмо, потому что этот адрес указали при регистрации в Vocal. Если это были не вы, просто проигнорируйте письмо.</p>
+</div>

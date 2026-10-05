@@ -31,6 +31,6 @@ V04-00 is docs only. V04-01 **accepted**. V04-02 **accepted**. V04-03 **accepted
 
 C00 docs **accepted** (`8cb7351`). C00-01 **accepted** (`2391217`). C00-02 **accepted** (`548b813`). C00-03 **accepted** (`f1eeb54438d057eedf86c345b2a77c71afa3f214`). C00-04 **accepted** (`ce6a43c386bdab163e531a4670ec8e08d524477e`). C00-05 and C00 product **accepted** (`e268c40a80a5baa9a50699e9b920e01b522edb94`). Auth **accepted** (`51d6033`). Live schema **accepted** 29.09.2026. `docs/ROADMAP.md` **accepted** 29.09.2026 as work order only. **продукт V04 принят** (`e8985243e85c73d181083428f80c8445fed29756`). **продукт V05 принят** 02.10.2026 (`5fa13657b38996ba8f3a416a22fb03b7647843b9`). **продукт V06 принят** 04.10.2026 (`d0bdb89cd36c6e1b6925d6746a6447323d419eb3`). **продукт V07 принят** 04.10.2026 (`4a066e221193795ef147c9768cb4105621b15772`). **медиа-путь принят** 04.10.2026 (`269a389f6bcc31d6d9243a0e50540f24c1078784`). Do not start I01 or memory bridge without an explicit start. See `docs/ROADMAP.md`.
 
-Do **not** apply Prisma baseline, migrations 8–9, or `migrate resolve` to live Supabase from this cycle.
+Live Supabase has Prisma migrations 0…10 registered (live schema accepted 29.09.2026). Do **not** apply Prisma baseline or `migrate resolve` to live Supabase, and do not create or apply new migrations, from the audit stages S0–S5 without an explicit owner decision. Operations: `docs/OPERATIONS.md`.
 
 After each development stage, user sends results to agent «Создание приложение» for review before the next stage.

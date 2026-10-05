@@ -1,0 +1,19 @@
+# One instance only: the job queue is in the process and the media is on this volume.
+# Do not scale this service above 1 replica.
+services:
+  vocal:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:?set NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+    env_file: .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - vocal-media:/data
+    restart: unless-stopped
+    # Longer than VOCAL_SHUTDOWN_GRACE_MS (25 s): a running STT job gets time to finish on stop.
+    stop_grace_period: 60s
+volumes:
+  vocal-media:

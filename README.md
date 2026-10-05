@@ -15,16 +15,14 @@
 - Ключ [Groq](https://console.groq.com/) в `.env` (`GROQ_API_KEY`) — расшифровка, названия, диалог, сценарий и портрет
 - FFmpeg подтягивается через `ffmpeg-static` / `ffprobe-static` (системный ставить не обязательно)
 
-## Первая установка
+## Первая установка (разработка)
 
-В PowerShell из корня репозитория. Файл `.env` создаётся **только если его ещё нет** — существующий ключ не перезаписывается.
+В PowerShell из корня репозитория. Файл `.env` создаётся **только если его ещё нет** — существующий ключ не перезаписывается. Нужны `DATABASE_URL` и `DIRECT_URL` проекта Supabase, `NEXT_PUBLIC_SUPABASE_*` и `GROQ_API_KEY`.
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-# при необходимости впишите GROQ_API_KEY в .env
 npm install
-npx prisma migrate deploy
-npx prisma db seed
+npm run db:migrate
 npm run dev
 ```
 
@@ -38,9 +36,9 @@ npm run dev
 
 Навигация пользователя: **Мысли** (`/reels`) и **Профиль** (`/profile`). Глобального раздела «Вопросы» нет.
 
-## Существующая БД (после db push)
+## База данных
 
-Если база уже была создана через `db push` (старые таблицы Job/AnalysisResult/Criterion без `_prisma_migrations`), сначала `npm run db:migrate:existing`. Пустую базу не baselined — для неё обычный `migrate deploy`. При несовпадении схемы скрипт останавливается. Затем `npm run db:backfill-reels`. Не используйте `db push --force-reset`.
+Приложение работает только с PostgreSQL (Supabase). SQLite и локальные файлы БД больше не используются. Миграции: `npm run db:migrate` (`prisma migrate deploy` по `DIRECT_URL`). Не используйте `db push --force-reset` и `migrate reset`. Развёртывание, бэкапы и восстановление — [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## Проверки кода
 
@@ -61,21 +59,11 @@ npm run report:ai
 
 В development также есть `/dev/ai`. В production страница недоступна.
 
-Дневной лимит токенов: `VOCAL_DAILY_TOKEN_LIMIT` в `.env`. При исчерпании клиент получает понятную ошибку; несохранённый текст в поле ввода не стирается.
+Суточные лимиты на пользователя: `VOCAL_DAILY_TOKEN_LIMIT` (по умолчанию 200000 токенов) и `VOCAL_DAILY_STT_SECONDS` (3600 с); `0` отключает лимит только для локальной разработки. При исчерпании клиент получает понятную ошибку; несохранённый текст в поле ввода не стирается.
 
 ## Резервное копирование
 
-Перед копированием остановите `npm run dev` и другие процессы, пишущие в БД.
-
-```powershell
-npx tsx scripts/backup.ts --dest "$env:USERPROFILE\Vocal-backups\manual-$(Get-Date -Format yyyy-MM-dd-HHmmss)"
-npx tsx scripts/backup.ts --restore-from "<каталог-бэкапа>" --restore-to "$env:USERPROFILE\Vocal-restore-check"
-```
-
-На части Windows `npm run backup -- --dest …` отбрасывает `--dest`. Надёжнее вызывать `npx tsx scripts/backup.ts` напрямую.
-
-Восстановление только в **изолированный** каталог, не поверх рабочей `prisma/dev.db`.
-Не используйте `migrate reset`, `db push --force-reset` и флаги с потерей данных.
+Логический бэкап Postgres (схема `public`) и медиа: `scripts/ops/backup.sh`; восстановление в пустую базу и проверка: `scripts/ops/restore.sh`, `scripts/ops/verify-restore.sh`. Подробности и расписание — [docs/OPERATIONS.md](docs/OPERATIONS.md), раздел 5.
 
 Экспорт карточки: в студии мысли, `GET /api/reels/:id/export`. Без `includeHiddenContext=1` скрытый контекст анкеты не входит.
 

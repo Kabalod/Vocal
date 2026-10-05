@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.github
+.env
+.env.*
+!.env.example
+storage
+backups
+tests
+docs
+*.md
+!README.md
+.codex
+.agents

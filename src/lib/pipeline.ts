@@ -32,6 +32,9 @@ export const pipelineTestSeams = {
 
 const queue: string[] = [];
 let draining = false;
+let shuttingDown = false;
+/** jobId → leaseOwner of jobs this process is working on right now. */
+const activeLeases = new Map<string, string>();
 
 export type PipelineDeps = {
   transcribeAudio?: typeof transcribeAudio;
@@ -43,6 +46,7 @@ export type PipelineDeps = {
 
 export function enqueueJob(jobId: string) {
   if (process.env.VOCAL_SKIP_JOB_ENQUEUE === "1") return;
+  if (shuttingDown) return; // stays in the database and is picked up by recoverUnfinishedJobs after restart
   if (!queue.includes(jobId)) {
     queue.push(jobId);
   }
@@ -77,7 +81,7 @@ async function drain() {
   if (draining) return;
   draining = true;
   try {
-    while (queue.length > 0) {
+    while (queue.length > 0 && !shuttingDown) {
       const id = queue.shift();
       if (!id) continue;
       await processJob(id);
@@ -85,6 +89,28 @@ async function drain() {
   } finally {
     draining = false;
   }
+}
+
+/**
+ * Graceful stop: no new jobs start, running ones get `timeoutMs` to finish, and the leases of whatever
+ * is still running are released so the next process takes them over at once instead of after the lease.
+ */
+export async function shutdownPipeline(timeoutMs: number): Promise<{ drained: boolean; released: number }> {
+  shuttingDown = true;
+  const deadline = Date.now() + timeoutMs;
+  while ((draining || activeLeases.size > 0) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  const pending = [...activeLeases.entries()];
+  for (const [jobId, leaseOwner] of pending) {
+    await releaseJobLease(jobId, leaseOwner).catch(() => undefined);
+  }
+  return { drained: pending.length === 0, released: pending.length };
+}
+
+export function resetPipelineShutdownForTests() {
+  shuttingDown = false;
+  activeLeases.clear();
 }
 
 export function classifyPipelineError(error: unknown, stage: string) {
@@ -201,6 +227,7 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
   }
 
   enterWithOwner({ id: claimed.job.ownerUserId, email: null });
+  activeLeases.set(jobId, claimed.leaseOwner);
 
   const transcribe = deps.transcribeAudio ?? transcribeAudio;
   const extract = deps.extractAudio ?? extractAudio;
@@ -316,6 +343,8 @@ export async function processJob(jobId: string, deps: PipelineDeps = {}) {
     await fail(jobId, error, stage, leaseOwner);
     await releaseJobLease(jobId, leaseOwner);
     return claimed;
+  } finally {
+    activeLeases.delete(jobId);
   }
 }
 

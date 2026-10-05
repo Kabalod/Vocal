@@ -81,11 +81,17 @@ function NavItem({
   );
 }
 
+/** Auth pages render bare. The shell body is a separate component so its hooks never run conditionally. */
 export function VocalAppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
   if (isAuthShellPath(pathname)) {
     return <>{children}</>;
   }
+  return <VocalAppShellFrame>{children}</VocalAppShellFrame>;
+}
+
+function VocalAppShellFrame({ children }: { children: ReactNode }) {
+  const pathname = usePathname() ?? "";
   const archiveDesktop = pathname === "/reels";
   const [dateHost, setDateHost] = useState<HTMLElement | null>(null);
   const [statusHost, setStatusHost] = useState<HTMLElement | null>(null);

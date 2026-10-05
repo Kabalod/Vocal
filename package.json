@@ -17,7 +17,7 @@
     "test:media": "node scripts/test-postgres.cjs --media",
     "test:postgres": "node scripts/test-postgres.cjs",
     "test:reels": "node scripts/test-postgres.cjs --reels",
-    "backup": "tsx scripts/backup.ts",
+    "backup": "bash scripts/ops/backup.sh",
     "report:ai": "tsx scripts/ai-usage-report.ts",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
