@@ -13,7 +13,7 @@ import {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("legacy history and jobs redirect to thoughts without loops; settings stay", () => {
+test("legacy history, settings and jobs redirect to thoughts without loops", () => {
   assert.deepEqual(
     SHELL_NAV.map((item) => item.href),
     ["/reels", "/profile"],
@@ -21,7 +21,7 @@ test("legacy history and jobs redirect to thoughts without loops; settings stay"
   assert.equal(legacyHistoryHref(), "/reels");
   assert.equal(legacyUserRedirect("/history"), "/reels");
   assert.equal(legacyUserRedirect("/history/extra"), "/reels");
-  assert.equal(legacyUserRedirect("/settings"), null);
+  assert.equal(legacyUserRedirect("/settings"), "/reels");
   assert.equal(legacyUserRedirect("/"), null);
   assert.equal(legacyUserRedirect("/reels"), null);
   assert.equal(jobDeepLinkHref("abc"), "/reels/abc?tab=takes");
@@ -38,8 +38,8 @@ test("legacy history and jobs redirect to thoughts without loops; settings stay"
   assert.match(history, /redirect\(legacyHistoryHref\(\)\)/);
   assert.match(jobs, /jobDeepLinkHref/);
   assert.match(jobs, /notFound/);
-  assert.equal(settings.includes("redirect("), false);
-  assert.match(settings, /\/api\/criteria/);
+  assert.match(settings, /redirect\(legacySettingsHref\(\)\)/);
+  assert.equal(settings.includes("/api/criteria"), false);
   assert.equal(home.includes("redirect("), false);
   assert.match(home, /LandingPage/);
   assert.equal(home.includes("UploadDropzone"), false);

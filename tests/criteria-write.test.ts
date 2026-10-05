@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
-test("regular user cannot write shared criteria", async (t) => {
+test("criteria are read-only for everyone: PUT and POST return 410 and change nothing", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
     (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
   delete process.env.VOCAL_CRITERIA_ADMIN_USER_IDS;
@@ -29,12 +29,12 @@ test("regular user cannot write shared criteria", async (t) => {
       }),
     }),
   );
-  assert.equal(put.status, 403);
+  assert.equal(put.status, 410);
   const body = await put.json();
-  assert.equal(body.code, "CRITERIA_READONLY");
+  assert.equal(body.code, "GONE");
 
   const reset = await POST();
-  assert.equal(reset.status, 403);
+  assert.equal(reset.status, 410);
 
   const after = await prisma.criterion.findMany({ orderBy: { id: "asc" } });
   assert.deepEqual(

@@ -1,14 +1,8 @@
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { withApiUser } from "@/lib/auth/request";
-import { writeFile } from "fs/promises";
-import path from "path";
-import { ALLOWED_EXTENSIONS, MAX_UPLOAD_MB } from "@/lib/config";
-import { ensureCriteria, prisma } from "@/lib/db";
-import { ownerUserId } from "@/lib/auth/session";
 import { enqueueJob } from "@/lib/pipeline";
-import { ReelError, createReel, createTake } from "@/lib/reels";
-import { toJobDto } from "@/lib/serialize";
-import { ensureStorageDirs, videoPathFor } from "@/lib/storage";
+import { ensureStorageDirs } from "@/lib/storage";
+import { ReelError } from "@/lib/reels";
 import { saveUploadedTake } from "@/lib/takes";
 import { logApiError } from "@/lib/safe-log";
 import { canProcessSavedTake } from "@/lib/recording-session";
@@ -52,50 +46,12 @@ export const POST = withApiUser(async function POST(request: Request) {
       return NextResponse.json({ take, job }, { status: 201 });
     }
 
-    await ensureCriteria();
-    const ext = path.extname(file.name).toLowerCase();
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      return NextResponse.json(
-        { error: "Нужен файл mp4, webm, mov или mkv." },
-        { status: 400 },
-      );
-    }
-
-    const maxBytes = MAX_UPLOAD_MB * 1024 * 1024;
-    if (file.size > maxBytes) {
-      return NextResponse.json(
-        { error: `Файл больше ${MAX_UPLOAD_MB} МБ.` },
-        { status: 400 },
-      );
-    }
-
-    const job = await prisma.job.create({
-      data: {
-        originalName: file.name,
-        videoPath: "pending",
-        status: "queued",
-        ownerUserId: ownerUserId(),
-      },
-    });
-
-    const dest = videoPathFor(job.id, file.name);
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(dest, buffer);
-
-    const updated = await prisma.job.update({
-      where: { id: job.id },
-      data: { videoPath: dest },
-    });
-
-    const title = path.parse(file.name).name.trim() || "Ролик без названия";
-    const reel = await createReel({ title });
-    await createTake(reel.id, { inputType: "video", jobId: job.id });
-
-    after(() => {
-      enqueueJob(job.id);
-    });
-
-    return NextResponse.json({ job: toJobDto(updated) });
+    // A bare upload used to create a thought outside ThoughtCreateKey. New thoughts come from
+    // POST /api/thoughts or /api/thoughts/media; a take needs an existing thought (reelId).
+    return NextResponse.json(
+      { error: "Загрузка без мысли закрыта. Создайте мысль или откройте существующую.", code: "GONE" },
+      { status: 410 },
+    );
   } catch (error) {
     if (error instanceof ReelError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });

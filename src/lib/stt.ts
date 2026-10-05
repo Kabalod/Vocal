@@ -71,7 +71,17 @@ function finalize(result: SttResult): SttResult {
   return cleanSttResult(result);
 }
 
+/** Test/local UI only, like VOCAL_AI_MOCK. Never set in production. */
+function sttMockOn() {
+  const raw = process.env.VOCAL_STT_MOCK?.trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "on";
+}
+
 export async function transcribeAudio(mp3Path: string): Promise<SttResult> {
+  if (sttMockOn()) {
+    const text = "Мок расшифровки: я хочу рассказать, как начал вести блог.";
+    return { text, segments: [{ start: 0, end: 2, text }], language: "ru", model: "mock-stt" };
+  }
   const primary = finalize(await transcribeOnce(mp3Path, STT_MODEL));
   const empty = primary.text.length === 0 || primary.segments.length === 0;
   const likelySilence = (primary.avgNoSpeechProb ?? 0) > 0.8 && primary.text.length < 20;

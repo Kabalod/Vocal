@@ -506,8 +506,6 @@ async function freezeThoughtPrompt(
     `Рабочий дубль: ${take.id}`,
     revisionId ? `Ревизия: ${revisionId}` : "",
     selectedText?.trim() ? `Материал:\n${selectedText.slice(0, 4000)}` : "Выбранной расшифровки рабочего дубля пока нет. Не анализируй неизвестный текст нового дубля и не считай сценарий произнесённым материалом.",
-    `Цель ролика: ${live.live.reelGoal || "не указана"}`,
-    `Аудитория ролика: ${live.live.reelAudience || "не указана"}`,
     `Отображаемый портрет (можно в текст): ${JSON.stringify(live.live.publicForScript)}`,
     `Отображаемый портрет (только понимание): ${JSON.stringify(live.live.understandingOnly)}`,
     `Недавняя переписка:\n${recent}`,

@@ -2,12 +2,17 @@ export function legacyHistoryHref(): "/reels" {
   return "/reels";
 }
 
+export function legacySettingsHref(): "/reels" {
+  return "/reels";
+}
+
 export function jobDeepLinkHref(reelId: string | null | undefined): string {
   return reelId ? `/reels/${reelId}?tab=takes` : "/reels";
 }
 
 export function legacyUserRedirect(pathname: string): string | null {
   if (pathname === "/history" || pathname.startsWith("/history/")) return legacyHistoryHref();
+  if (pathname === "/settings" || pathname.startsWith("/settings/")) return legacySettingsHref();
   return null;
 }
 

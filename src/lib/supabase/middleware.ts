@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isLocalUiTestRuntime } from "@/lib/db-target";
 import { isPublicPagePath } from "@/lib/auth/paths";
 import { safeReturnTo } from "@/lib/auth/return-to";
 import { getSupabasePublicEnv } from "@/lib/supabase/env";
@@ -8,7 +9,7 @@ export async function updateSupabaseSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
   const env = getSupabasePublicEnv();
   if (!env) {
-    if (process.env.NODE_ENV === "test") return supabaseResponse;
+    if (process.env.NODE_ENV === "test" || isLocalUiTestRuntime()) return supabaseResponse;
     return NextResponse.json({ error: "Нужен вход.", code: "UNAUTHENTICATED" }, { status: 401 });
   }
 

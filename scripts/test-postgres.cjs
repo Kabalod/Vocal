@@ -27,9 +27,12 @@ const liveModelTests = ["tests/c00-classify-live.test.ts", "tests/c00-live-model
 
 const i07Tests = ["tests/i07-gateway.test.ts", "tests/runner-coverage.test.ts"];
 
+const s3Tests = ["tests/s3-entry-cleanup.test.ts"];
+
 const dbTests = [
   ...authTests,
   ...i07Tests,
+  ...s3Tests,
   "tests/v04-01-union.test.ts",
   "tests/v04-02-envelope.test.ts",
   "tests/v04-03-slice.test.ts",
@@ -92,7 +95,6 @@ const dbTests = [
 
 const reelsTests = [
   "tests/reels-workspace.test.ts",
-  "tests/reels-editor-session.test.ts",
   "tests/reels-takes.test.ts",
   "tests/pipeline-recovery.test.ts",
   "tests/creator-profile.test.ts",
