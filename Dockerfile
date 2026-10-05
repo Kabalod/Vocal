@@ -1,7 +1,12 @@
 # Vocal: one long-lived container, one instance, media on a persistent volume (S0 decision, variant A).
-# NOT built or run in the development environment of S4 (no Docker there): see docs/OPERATIONS.md.
+# Built and run in the dev environment at S4 follow-up (docker build, HEALTHCHECK, SIGTERM): see docs/OPERATIONS.md.
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
+# postinstall runs `prisma generate`, which picks the query engine by the OpenSSL it finds here.
+# Without openssl it generates for debian-openssl-1.1.x and the run stage (OpenSSL 3) cannot load it.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 RUN npm ci

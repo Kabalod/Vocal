@@ -11,7 +11,7 @@
 ## Что открыто
 
 1. **CI красный на `feat/s4-operations`** (вкладка Actions; логи без токена недоступны, упавшие тесты выводятся аннотациями шага «Report failed tests»). Известно: тест `disabled C00 policy…` падал из-за shallow-клона (исправлено `fetch-depth: 0`); тест `two executors of one turnKey call complete once` — старый флак (~25 % на базе `0066469`), после правки в `src/lib/dialogue.ts` ~17 %; 2 оставшихся падения не разобраны.
-2. **Docker**: установлен владельцем (29.1.3), но у `claudeuser` нет доступа к сокету. Нужно `sudo usermod -aG docker claudeuser` и новая сессия. Затем: `docker build` и запуск по `Dockerfile`, проверка `HEALTHCHECK` и SIGTERM во время активного задания, `npm run test:postgres` штатным способом.
+2. **Docker**: образ собран и запущен (HEALTHCHECK, SIGTERM, том) — см. S4_REPORT; найден и исправлен дефект openssl. Не проверено: остановка во время активного задания, `npm run test:postgres` штатным способом через Docker Postgres.
 3. S5 (приёмка закрытого запуска) не начат: E2E по экранам 01–09, два пользователя, прогон на живой модели (бюджет и разрешение владельца), регистрация и письма на живой среде (SMTP не выбран, S0.5).
 4. Не проверялось (см. отчёты): живой Supabase (`auth.admin.deleteUser`, `public.profiles`, бакет), upload-дефект на Windows, Docker-образ.
 

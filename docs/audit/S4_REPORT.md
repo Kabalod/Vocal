@@ -25,7 +25,7 @@
 
 ## Не проверялось
 
-- **Docker-образ не собирался и не запускался** (нет Docker): `Dockerfile` и `docker-compose.yml` проверены только чтением и статическими тестами. Первый `docker compose build` на сервере — действие владельца.
+- **Docker-образ** собран и запущен на `claudeuser` (Docker 29.1.3), 05.10.2026: `docker build` ≈ 3,5 мин; найден и исправлен дефект — `prisma generate` в стадии `deps` без `openssl` генерировал движок `debian-openssl-1.1.x`, в стадии `run` (OpenSSL 3) клиент не стартовал; в `deps` добавлен `openssl`. После правки: `HEALTHCHECK` = healthy, `/api/health` 200 (postgres, storage, ffmpeg ok), процесс под пользователем `node`, том `/data` сохраняется после `docker stop`/`start`, `docker stop` по SIGTERM завершается кодом 0 за 0,15 с с записью `drained=true released=0`. Запуск — в тестовом режиме (`VOCAL_UI_TEST_DB=1`, локальный Postgres, mock AI/STT, `--network host`), потому что в production приложение принимает только Supabase. **Не проверено:** остановка во время активного задания STT, `docker compose` целиком, живой Supabase.
 - **CI на GitHub** не запускался из этой среды; результат первого запуска нужно посмотреть на вкладке Actions.
 - Восстановление проверено на обычном Postgres 16, **не на проекте Supabase** (роли, расширения, `auth.users`). Бэкап входа — на стороне Supabase; тариф и срок хранения в runbook не заполнены (поля `______`).
 - Вариант B (несколько экземпляров) не делался: решением S0 выбран A. Два экземпляра запускать нельзя.
