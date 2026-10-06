@@ -44,7 +44,7 @@ test("text thought create is one transaction, idempotent, and keeps draft on err
   delete process.env.VOCAL_FAIL_THOUGHT_CREATE;
   assert.equal(await prisma.reel.count(), before);
   assert.equal(await prisma.take.count(), 0);
-  assert.equal(await prisma.scriptVersion.count(), 0);
+  assert.equal(await prisma.scriptVersion.count({ where: { kind: { not: "from_take" } } }), 0);
   assert.equal(await prisma.transcriptRevision.count(), 0);
 
   const created = await POST(
@@ -72,7 +72,7 @@ test("text thought create is one transaction, idempotent, and keeps draft on err
   const againBody = await again.json();
   assert.equal(againBody.reel.id, reelId);
   assert.equal(await prisma.take.count(), 1);
-  assert.equal(await prisma.scriptVersion.count(), 0);
+  assert.equal(await prisma.scriptVersion.count({ where: { kind: { not: "from_take" } } }), 0);
 
   const reelRes = await getReel(new Request(`http://vocal.local/api/reels/${reelId}`), {
     params: Promise.resolve({ id: reelId }),
@@ -140,7 +140,7 @@ test("concurrent thought create with the same key returns one thought", async (t
     reels: await prisma.reel.count(),
     takes: await prisma.take.count(),
     transcripts: await prisma.transcriptRevision.count(),
-    scripts: await prisma.scriptVersion.count(),
+    scripts: await prisma.scriptVersion.count({ where: { kind: { not: "from_take" } } }),
     keys: await prisma.thoughtCreateKey.count(),
   };
 
@@ -169,6 +169,6 @@ test("concurrent thought create with the same key returns one thought", async (t
   assert.equal(await prisma.reel.count(), before.reels + 1);
   assert.equal(await prisma.take.count(), before.takes + 1);
   assert.equal(await prisma.transcriptRevision.count(), before.transcripts + 1);
-  assert.equal(await prisma.scriptVersion.count(), before.scripts);
+  assert.equal(await prisma.scriptVersion.count({ where: { kind: { not: "from_take" } } }), before.scripts);
   assert.equal(await prisma.thoughtCreateKey.count(), before.keys + 1);
 });

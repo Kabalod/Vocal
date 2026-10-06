@@ -71,7 +71,7 @@ test("personal MVP cycle, export, compare, backup restore, failures", async (t) 
 
   const script = await saveManualScript(ideaA.id, {
     body: "Черновик сценария про чай.",
-    expectedHeadId: undefined,
+    expectedHeadId: null,
     sources: (await (await import("../src/lib/scripts")).listAvailableSources(ideaA.id))
       .filter((item) => item.type === "note" || item.type === "transcript")
       .map((item) => ({ type: item.type, id: item.id })),

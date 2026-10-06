@@ -46,7 +46,7 @@ test("V05 generate is explicit, versions are immutable, STT does not mint a scri
   assert.equal(listed.readyCount, 0);
   assert.equal(listed.phase, "ready_to_generate");
   assert.equal(listed.canGenerate, true);
-  assert.equal(await prisma.scriptVersion.count({ where: { reelId: reel.id } }), 0);
+  assert.equal(await prisma.scriptVersion.count({ where: { reelId: reel.id, kind: { not: "from_take" } } }), 0);
 
   await applyThoughtState({
     reelId: reel.id,
@@ -61,7 +61,7 @@ test("V05 generate is explicit, versions are immutable, STT does not mint a scri
     () => generateV05Script(reel.id, { idempotencyKey: "blocked" }, async () => ({ text: '{"script":"нет"}' })),
     (error: unknown) => error instanceof ScriptReadinessError && error.blockReason === "Какая ваша позиция?",
   );
-  assert.equal(await prisma.scriptVersion.count({ where: { reelId: reel.id } }), 0);
+  assert.equal(await prisma.scriptVersion.count({ where: { reelId: reel.id, kind: { not: "from_take" } } }), 0);
 
   await applyThoughtState({
     reelId: reel.id,
@@ -71,7 +71,7 @@ test("V05 generate is explicit, versions are immutable, STT does not mint a scri
 
   const take = await prisma.take.findFirstOrThrow({ where: { reelId: reel.id } });
   await applyThoughtMediaFromTranscript(take.id, "Я хочу сказать, что чай остыл на подоконнике.");
-  assert.equal(await prisma.scriptVersion.count({ where: { reelId: reel.id } }), 0);
+  assert.equal(await prisma.scriptVersion.count({ where: { reelId: reel.id, kind: { not: "from_take" } } }), 0);
 
   let calls = 0;
   const first = await generateV05Script(reel.id, { idempotencyKey: "gen-1" }, async () => {

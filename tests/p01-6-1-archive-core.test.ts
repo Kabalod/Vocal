@@ -80,7 +80,7 @@ test("P01.6-1 UI drops counters and old sort labels; cards stay compact", () => 
   assert.match(helper, /id: "newest"/);
   assert.match(helper, /id: "oldest"/);
   assert.match(reels, /createdAt: true/);
-  assert.match(reels, /_count: \{ select: \{ takes: true, scripts: true \} \}/);
+  assert.match(reels, /_count: \{ select: \{ takes: true, scripts: userScriptsCount \} \}/);
   assert.equal(reels.includes("scripts: {"), false);
   assert.equal(reels.includes("body: true"), false);
   assert.match(serialize, /preview: note/);

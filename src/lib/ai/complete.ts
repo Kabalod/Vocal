@@ -31,6 +31,15 @@ function mockedCompleteJson(label?: string): { text: string; usage: { promptToke
       usage: { promptTokens: 1, completionTokens: 1 },
     };
   }
+  if (label === "take-diagnosis") {
+    return {
+      text: JSON.stringify({
+        contentMode: "unspecified",
+        gaps: [{ kind: "no_episode", text: "Нет конкретного случая, на котором держится мысль." }],
+      }),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    };
+  }
   return {
     text: JSON.stringify({
       action: "ask_question",

@@ -33,6 +33,7 @@ import {
 import { isC00PolicyEnabled } from "@/lib/c00-policy";
 import { C00EnvelopeError } from "@/lib/c00-envelope";
 import type { C00SignalCandidate } from "@/lib/c00-signal";
+import { diagnoseLatestTake, isTakeDiagnosisEnabled } from "@/lib/take-diagnosis";
 import { candidateFactId, getThoughtState, ThoughtStateError, type ThoughtGap } from "@/lib/thought-state";
 import { v03TestSeams } from "@/lib/v03-test-seams";
 import {
@@ -717,6 +718,9 @@ export async function runDialogueTurn(
     }
   }
   if (v03TestSeams.afterUserMessageCreate) await v03TestSeams.afterUserMessageCreate();
+
+  // R2: typed gaps from the latest take, before the turn binds its state snapshot. Never blocks the dialogue.
+  if (isTakeDiagnosisEnabled()) await diagnoseLatestTake(reelId, complete);
 
   let follower = false;
   const { processing, call: reusable } = await ensureDialogueTurnBinding({

@@ -1,7 +1,8 @@
 export const SCRIPT_KINDS = ["manual", "restore", "ai_proposal", "accepted_ai", "from_take"] as const;
 export type ScriptKind = (typeof SCRIPT_KINDS)[number];
 
-export const SCRIPT_HEAD_KINDS: ScriptKind[] = ["manual", "restore", "accepted_ai", "from_take"];
+/** from_take is deliberately not a head kind: the base is stored from R1 but shown to the author only from R4. */
+export const SCRIPT_HEAD_KINDS: ScriptKind[] = ["manual", "restore", "accepted_ai"];
 
 export const SCRIPT_SOURCE_TYPES = ["transcript", "answer", "note", "script"] as const;
 export type ScriptSourceType = (typeof SCRIPT_SOURCE_TYPES)[number];

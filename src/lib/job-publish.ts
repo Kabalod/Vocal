@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { createBaseScriptFromTakeInTx } from "@/lib/scripts";
 import { prisma } from "@/lib/db";
 import {
   lockVocalReel,
@@ -119,6 +120,12 @@ export async function publishMediaJobResult(input: {
         takeId: input.takeId,
         originalId: original.id,
         originalText: original.text,
+      });
+      await createBaseScriptFromTakeInTx(tx, {
+        reelId: peek.reelId,
+        takeId: input.takeId,
+        transcriptId: original.id,
+        text: original.text,
       });
       await promoteWorkingTakeInTx(tx, input.takeId);
     }

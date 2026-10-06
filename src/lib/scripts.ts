@@ -183,7 +183,7 @@ export async function listAvailableSources(reelId: string): Promise<ScriptSource
     }
   }
   const scripts = await prisma.scriptVersion.findMany({
-    where: { reelId, kind: { not: "ai_proposal" } },
+    where: { reelId, kind: { notIn: ["ai_proposal", "from_take"] } },
     orderBy: { createdAt: "desc" },
   });
   for (const script of scripts) {
@@ -231,7 +231,7 @@ export async function resolveSources(reelId: string, refs: ScriptSourceRef[]): P
 export async function listScriptBundle(reelId: string): Promise<ScriptBundleDto> {
   const reel = await assertReel(reelId);
   const versions = await prisma.scriptVersion.findMany({
-    where: { reelId },
+    where: { reelId, kind: { not: "from_take" } },
     orderBy: { createdAt: "desc" },
   });
   return {
@@ -311,7 +311,7 @@ export async function getScriptVersion(reelId: string, scriptId: string): Promis
 export async function listScriptWorkspace(reelId: string, viewId?: string | null): Promise<ScriptWorkspaceDto> {
   const reel = await assertReel(reelId);
   const versions = await prisma.scriptVersion.findMany({
-    where: { reelId },
+    where: { reelId, kind: { not: "from_take" } },
     orderBy: { createdAt: "desc" },
   });
   const takeMap = await takeNumberMap(reelId);
@@ -813,10 +813,7 @@ export async function createBaseScriptFromTakeInTx(
       ] satisfies ScriptSourceRef[]),
     },
   });
-  const reel = await tx.reel.findFirst({ where: { id: input.reelId }, select: { selectedScriptId: true } });
-  if (reel && !reel.selectedScriptId) {
-    await tx.reel.update({ where: { id: input.reelId }, data: { selectedScriptId: created.id } });
-  }
+  void created;
   return true;
 }
 

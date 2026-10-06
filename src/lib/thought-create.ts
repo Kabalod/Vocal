@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { createBaseScriptFromTakeInTx } from "@/lib/scripts";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
 import { assertThoughtKeyNotDeleted } from "@/lib/data-deletion";
@@ -93,6 +94,12 @@ export async function createThoughtFromText(input: {
       await tx.take.update({
         where: { id: take.id },
         data: { selectedTranscriptId: transcript.id },
+      });
+      await createBaseScriptFromTakeInTx(tx, {
+        reelId: reel.id,
+        takeId: take.id,
+        transcriptId: transcript.id,
+        text: body,
       });
       await tx.reel.update({
         where: { id: reel.id },

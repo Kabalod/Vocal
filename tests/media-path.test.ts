@@ -84,7 +84,7 @@ test("media path: STT without analyze, title fallback, replay, lease, retired PO
   assert.equal(done.status, "done");
   assert.equal(await prisma.analysisResult.count({ where: { jobId: job.id } }), 0);
   assert.equal(await prisma.compareResult.count({ where: { reelId: reel.id } }), 0);
-  assert.equal(await prisma.scriptVersion.count({ where: { reelId: reel.id } }), 0);
+  assert.equal(await prisma.scriptVersion.count({ where: { reelId: reel.id, kind: { not: "from_take" } } }), 0);
   assert.equal(await prisma.review.count({ where: { takeId: take.id } }), 0);
   assert.equal((await getReel(reel.id))?.workingTakeId, take.id);
   assert.equal((await prisma.reel.findUniqueOrThrow({ where: { id: reel.id } })).title, "голос про кухню");

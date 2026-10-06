@@ -139,7 +139,9 @@ test("thought media create validates, is idempotent, and does not mint a script 
   const original = await prisma.transcriptRevision.findFirst({ where: { takeId: createdBody.take.id } });
   assert.equal(original?.text.trim(), "голос про смысл мысли");
   const scripts = await prisma.scriptVersion.findMany({ where: { reelId } });
-  assert.equal(scripts.length, 0);
+  // R1: only the from_take base exists (stored, not shown); nothing mints a script.
+  assert.equal(scripts.filter((row) => row.kind !== "from_take").length, 0);
+  assert.equal(scripts.filter((row) => row.kind === "from_take" && row.body === "голос про смысл мысли").length, 1);
   const reel = await prisma.reel.findUnique({ where: { id: reelId } });
   assert.equal(reel?.title, "Смысл мысли");
 

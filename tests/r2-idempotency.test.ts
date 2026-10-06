@@ -174,11 +174,9 @@ test("R2 retries do not duplicate thought, take, message, finals or export rows"
   assert.equal(completedAgain.finalTakeId, afterScripts?.finalTakeId);
   assert.equal(completedAgain.finalScriptId, afterScripts?.finalScriptId);
 
-  // The first export may lazily materialize originals and their from_take bases (R1); repeats must not add more.
-  await exportReel(reelId);
   const beforeExport = {
     takes: await prisma.take.count({ where: { reelId } }),
-    scripts: await prisma.scriptVersion.count({ where: { reelId } }),
+    scripts: await prisma.scriptVersion.count({ where: { reelId, kind: { not: "from_take" } } }), // export may lazily add from_take bases (R1); user-facing scripts must not change
     compares: await prisma.compareResult.count({ where: { reelId } }),
     keys: await prisma.thoughtCreateKey.count(),
   };
@@ -187,7 +185,7 @@ test("R2 retries do not duplicate thought, take, message, finals or export rows"
   assert.equal(exportA.reel.id, exportB.reel.id);
   assert.equal(exportA.takes.length, exportB.takes.length);
   assert.equal(await prisma.take.count({ where: { reelId } }), beforeExport.takes);
-  assert.equal(await prisma.scriptVersion.count({ where: { reelId } }), beforeExport.scripts);
+  assert.equal(await prisma.scriptVersion.count({ where: { reelId, kind: { not: "from_take" } } }), beforeExport.scripts);
   assert.equal(await prisma.compareResult.count({ where: { reelId } }), beforeExport.compares);
   assert.equal(await prisma.thoughtCreateKey.count(), beforeExport.keys);
 });

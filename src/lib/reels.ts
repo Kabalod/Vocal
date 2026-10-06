@@ -48,6 +48,9 @@ import {
   v06TestSeams,
 } from "@/lib/v06-working-take";
 
+/** The base stored from R1 (from_take) is not a script the author has: it must not light hasScript. */
+const userScriptsCount = { where: { kind: { not: "from_take" } } } as const;
+
 const reelInclude = {
   takes: {
     orderBy: { number: "asc" as const },
@@ -58,7 +61,7 @@ const reelInclude = {
       },
     },
   },
-  _count: { select: { scripts: true } },
+  _count: { select: { scripts: userScriptsCount } },
 } satisfies Prisma.ReelInclude;
 
 export class ReelError extends Error {
@@ -245,7 +248,7 @@ export async function listReels(query: ReelListQuery = {}): Promise<ReelListResu
           finalScriptId: true,
           createdAt: true,
           updatedAt: true,
-          _count: { select: { takes: true, scripts: true } },
+          _count: { select: { takes: true, scripts: userScriptsCount } },
         },
       }),
       prisma.reel.count({ where: { ownerUserId: ownerUserId(), NOT: { status: "archived" } } }),
