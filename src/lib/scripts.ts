@@ -776,3 +776,54 @@ export async function loadSourceTexts(reelId: string, refs: ScriptSourceRef[]): 
   }
   return out;
 }
+
+/** Base script of the cycle: the cleaned take transcript, no model call. One per original transcript. */
+export function cleanTakeTranscript(text: string): string {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+export async function createBaseScriptFromTakeInTx(
+  tx: Prisma.TransactionClient,
+  input: { reelId: string; takeId: string; transcriptId: string; text: string },
+): Promise<boolean> {
+  const body = cleanTakeTranscript(input.text);
+  if (!body || body.length > SCRIPT_BODY_MAX) return false;
+  const take = await tx.take.findFirst({ where: { id: input.takeId, reelId: input.reelId }, select: { number: true } });
+  if (!take) return false;
+  const existing = await tx.scriptVersion.findMany({
+    where: { reelId: input.reelId, kind: "from_take" },
+    select: { sourcesJson: true },
+  });
+  if (existing.some((row) => parseSourceRefs(safeJson(row.sourcesJson)).some((ref) => ref.id === input.transcriptId))) {
+    return false;
+  }
+  const created = await tx.scriptVersion.create({
+    data: {
+      reelId: input.reelId,
+      kind: "from_take",
+      body,
+      recordingJson: JSON.stringify(normalizeRecording(null)),
+      sourcesJson: JSON.stringify([
+        { type: "transcript", id: input.transcriptId, label: `Из дубля №${take.number}` },
+      ] satisfies ScriptSourceRef[]),
+    },
+  });
+  const reel = await tx.reel.findFirst({ where: { id: input.reelId }, select: { selectedScriptId: true } });
+  if (reel && !reel.selectedScriptId) {
+    await tx.reel.update({ where: { id: input.reelId }, data: { selectedScriptId: created.id } });
+  }
+  return true;
+}
+
+function safeJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}

@@ -91,7 +91,7 @@ test("final take migrates from selectedTakeId and completion keeps history", asy
   const saved = await saveManualScript(reel.id, {
     body: "Готовый сценарий для записи.",
     sources: [],
-    expectedHeadId: null,
+    expectedHeadId: undefined,
   });
   const scriptId = saved.headId;
   assert.ok(scriptId);
@@ -192,7 +192,7 @@ test("concurrent final take clear cannot complete a thought", async (t) => {
     const first = await saveManualScript(reel.id, {
       body: "Сценарий A",
       sources: [],
-      expectedHeadId: null,
+      expectedHeadId: undefined,
     });
     const second = await saveManualScript(reel.id, {
       body: "Сценарий B",

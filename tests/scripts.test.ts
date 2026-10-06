@@ -37,12 +37,15 @@ test("scripts: manual save, versions, generate, restore, sources, take link", as
   const saved = await saveManualScript(reel.id, {
     body: "Черновик: чай и подоконник.",
     sources: firstSources.map((item) => ({ type: item.type, id: item.id })),
-    expectedHeadId: null,
+    expectedHeadId: undefined,
   });
-  assert.equal(saved.versions.length, 1);
-  assert.equal(saved.headId, saved.versions[0].id);
-  assert.equal(saved.versions[0].kind, "manual");
-  assert.equal(saved.versions[0].sources.length >= 1, true);
+  // R1: the take transcript already gave a from_take base; the manual save is the second version.
+  assert.equal(saved.versions.length, 2);
+  assert.equal(saved.versions.filter((row) => row.kind === "from_take").length, 1);
+  const manual = saved.versions.find((row) => row.kind === "manual");
+  assert.ok(manual);
+  assert.equal(saved.headId, manual.id);
+  assert.equal(manual.sources.length >= 1, true);
   const afterSave = await getReel(reel.id);
   assert.equal(afterSave?.hasScript, true);
 

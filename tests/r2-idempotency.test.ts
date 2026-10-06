@@ -174,6 +174,8 @@ test("R2 retries do not duplicate thought, take, message, finals or export rows"
   assert.equal(completedAgain.finalTakeId, afterScripts?.finalTakeId);
   assert.equal(completedAgain.finalScriptId, afterScripts?.finalScriptId);
 
+  // The first export may lazily materialize originals and their from_take bases (R1); repeats must not add more.
+  await exportReel(reelId);
   const beforeExport = {
     takes: await prisma.take.count({ where: { reelId } }),
     scripts: await prisma.scriptVersion.count({ where: { reelId } }),

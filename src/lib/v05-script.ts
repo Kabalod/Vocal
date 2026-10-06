@@ -19,7 +19,7 @@ import {
   type ThoughtGap,
 } from "@/lib/thought-state";
 import { v05TestSeams } from "@/lib/v05-test-seams";
-import { SCRIPT_PROMPT_VERSION, type ScriptWorkspaceDto, type V05GenerateSnapshot, type V05WorldSnapshot } from "@/types/script";
+import { SCRIPT_PROMPT_VERSION, isHeadKind, type ScriptWorkspaceDto, type V05GenerateSnapshot, type V05WorldSnapshot } from "@/types/script";
 import type { CompleteJsonFn } from "@/types/review";
 import { z } from "zod";
 
@@ -708,7 +708,7 @@ export async function computeScriptTabState(reelId: string, workspace: {
   readyCount: number;
   draft: { id: string; body: string; updatedAt: string; stale?: boolean; baseVersionId: string | null; saveToken?: number } | null;
   viewing: { id: string; createdAt: string } | null;
-  versions: { id: string }[];
+  versions: { id: string; kind?: string }[];
 }): Promise<{
   phase: ScriptWorkspaceDto["phase"];
   stale: boolean;
@@ -725,7 +725,8 @@ export async function computeScriptTabState(reelId: string, workspace: {
       select: { id: true },
     }),
   );
-  const hasScript = workspace.readyCount > 0 || Boolean(workspace.draft?.body.trim());
+  // from_take is a base for the cycle, not a generated script: it does not move the V05 phase (until R4).
+  const hasScript = workspace.versions.some((row) => (row.kind === undefined || (isHeadKind(row.kind) && row.kind !== "from_take"))) || Boolean(workspace.draft?.body.trim());
   const current = await readV05World(reelId);
   const viewingStale = await computeViewingStale(reelId, workspace.viewing?.id ?? null, current);
   const draftStale = await computeDraftStale(reelId, workspace.draft, current);

@@ -50,14 +50,14 @@ test("script draft autosave does not create a ready version until finalize", asy
   const reel = await createReel({ title: "Черновик сценария" });
   const take = await createTake(reel.id, { inputType: "text", bodyText: "Первый текст мысли." });
   await ensureOriginalFromText(take.id, take.bodyText);
-  await saveManualScript(reel.id, { body: "Готовая версия один.", expectedHeadId: null });
+  await saveManualScript(reel.id, { body: "Готовая версия один.", expectedHeadId: undefined });
   for (let i = 2; i <= 21; i += 1) {
     const current = await listScriptWorkspace(reel.id);
     await saveManualScript(reel.id, { body: `Готовая версия ${i}.`, expectedHeadId: current.headId });
   }
 
   const listed = await listScriptWorkspace(reel.id);
-  assert.equal(listed.readyCount, 21);
+  assert.equal(listed.readyCount, 22); // 21 saved + the from_take base (R1)
   assert.equal(listed.versions.every((row) => !("body" in row)), true);
   assert.ok(listed.viewing?.body);
   const api = await getScripts(new Request("http://local/scripts"), { params: Promise.resolve({ id: reel.id }) });
@@ -77,13 +77,13 @@ test("script draft autosave does not create a ready version until finalize", asy
   assert.ok(oneJson.body);
 
   const opened = await openScriptDraft(reel.id, listed.headId);
-  assert.equal(opened.readyCount, 21);
+  assert.equal(opened.readyCount, 22);
   assert.ok(opened.draft);
   const patched = await patchScriptDraft(reel.id, {
     body: "Правка только в черновике.",
     expectedUpdatedAt: opened.draft!.updatedAt,
   });
-  assert.equal(patched.readyCount, 21);
+  assert.equal(patched.readyCount, 22);
   assert.equal(patched.draft?.body, "Правка только в черновике.");
 
   const again = await openScriptDraft(reel.id, older.id);
@@ -114,10 +114,10 @@ test("script draft autosave does not create a ready version until finalize", asy
   assert.equal(staleError instanceof ScriptError && staleError.code === "STALE", true);
   const afterParallel = await listScriptWorkspace(reel.id);
   assert.ok(afterParallel.draft?.body === "параллель А" || afterParallel.draft?.body === "параллель Б");
-  assert.equal(afterParallel.readyCount, 21);
+  assert.equal(afterParallel.readyCount, 22);
 
   const finalized = await finalizeScriptDraft(reel.id, { expectedUpdatedAt: afterParallel.draft!.updatedAt });
-  assert.equal(finalized.readyCount, 22);
+  assert.equal(finalized.readyCount, 23);
   assert.equal(finalized.draft, null);
   assert.equal(await prisma.scriptDraft.count({ where: { reelId: reel.id } }), 0);
 
@@ -145,7 +145,7 @@ test("draft finalize keeps latest body, rejects stale token, and transfer bumps 
   const reel = await createReel({ title: "Немедленное завершение" });
   const take = await createTake(reel.id, { inputType: "text", bodyText: "Исходный текст." });
   await ensureOriginalFromText(take.id, take.bodyText);
-  await saveManualScript(reel.id, { body: "Готовая версия.", expectedHeadId: null });
+  await saveManualScript(reel.id, { body: "Готовая версия.", expectedHeadId: undefined });
 
   const opened = await openScriptDraft(reel.id);
   assert.ok(opened.draft);
@@ -199,7 +199,7 @@ test("draft finalize keeps latest body, rejects stale token, and transfer bumps 
   assert.equal(afterOldPatch.readyCount, immediate.readyCount);
 });
 
-test("new transcribed take does not mint a script and leaves the draft", async (t) => {
+test("new transcribed take adds only its from_take base and leaves the draft and selection", async (t) => {
   const { prisma, url } = await withPostgresTestDb(t);
   process.env.DATABASE_URL = url;
     t.after(async () => {
@@ -220,7 +220,7 @@ test("new transcribed take does not mint a script and leaves the draft", async (
   assert.ok(ready.headId);
   await openScriptDraft(reel.id);
   const before = await listScriptWorkspace(reel.id);
-  assert.equal(before.readyCount, 1);
+  assert.equal(before.readyCount, 2); // from_take base of take 1 + the manual version
   assert.ok(before.draft);
 
   const take2 = await createTake(reel.id, {
@@ -231,11 +231,11 @@ test("new transcribed take does not mint a script and leaves the draft", async (
   await applyThoughtMediaFromTranscript(take2.id, "новый дубль про смысл");
 
   const after = await listScriptWorkspace(reel.id);
-  assert.equal(after.readyCount, 1);
+  assert.equal(after.readyCount, 3); // + from_take base of take 2
   assert.equal(after.selectedScriptId, ready.headId);
   assert.equal(after.draft?.body, before.draft?.body);
   const stored = await prisma.take.findUnique({ where: { id: take2.id } });
   assert.equal(stored?.scriptVersionId, ready.headId);
   await applyThoughtMediaFromTranscript(take2.id, "новый дубль про смысл");
-  assert.equal((await listScriptWorkspace(reel.id)).readyCount, 1);
+  assert.equal((await listScriptWorkspace(reel.id)).readyCount, 3);
 });

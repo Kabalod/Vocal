@@ -1,7 +1,7 @@
-export const SCRIPT_KINDS = ["manual", "restore", "ai_proposal", "accepted_ai"] as const;
+export const SCRIPT_KINDS = ["manual", "restore", "ai_proposal", "accepted_ai", "from_take"] as const;
 export type ScriptKind = (typeof SCRIPT_KINDS)[number];
 
-export const SCRIPT_HEAD_KINDS: ScriptKind[] = ["manual", "restore", "accepted_ai"];
+export const SCRIPT_HEAD_KINDS: ScriptKind[] = ["manual", "restore", "accepted_ai", "from_take"];
 
 export const SCRIPT_SOURCE_TYPES = ["transcript", "answer", "note", "script"] as const;
 export type ScriptSourceType = (typeof SCRIPT_SOURCE_TYPES)[number];
@@ -147,6 +147,11 @@ export function scriptOriginLabel(
   takeNumberByTranscriptId?: Map<string, number>,
 ): string {
   if (kind === "accepted_ai" || kind === "ai_proposal") return "Создана с Vocal";
+  if (kind === "from_take") {
+    const base = sources.find((item) => item.type === "transcript");
+    const numbered = base ? takeNumberByTranscriptId?.get(base.id) ?? Number(base.label?.match(/№\s*(\d+)/)?.[1]) : NaN;
+    return Number.isFinite(numbered) ? `Основа из дубля №${numbered}` : "Основа из дубля";
+  }
   const transcript = sources.find((item) => item.type === "transcript");
   if (transcript) {
     const numbered = takeNumberByTranscriptId?.get(transcript.id);

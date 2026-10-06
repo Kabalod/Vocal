@@ -33,12 +33,15 @@ const s2Tests = ["tests/s2-data-deletion.test.ts"];
 
 const s4Tests = ["tests/s4-restart.test.ts", "tests/s4-ops.test.ts"];
 
+const rTests = ["tests/r1-base-script.test.ts"];
+
 const dbTests = [
   ...authTests,
   ...i07Tests,
   ...s3Tests,
   ...s2Tests,
   ...s4Tests,
+  ...rTests,
   "tests/v04-01-union.test.ts",
   "tests/v04-02-envelope.test.ts",
   "tests/v04-03-slice.test.ts",

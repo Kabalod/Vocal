@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { ReelError } from "@/lib/reels";
+import { createBaseScriptFromTakeInTx } from "@/lib/scripts";
 import { TAKE_TEXT_MAX } from "@/types/reel";
 import { normalizeReelStatus } from "@/types/reel";
 import {
@@ -157,6 +158,12 @@ export async function saveOriginalIfAbsent(
       takeId,
       originalId: original.id,
       originalText: original.text,
+    });
+    await createBaseScriptFromTakeInTx(tx, {
+      reelId: peek.reelId,
+      takeId,
+      transcriptId: original.id,
+      text: original.text,
     });
     await promoteWorkingTakeInTx(tx, takeId);
     return original;

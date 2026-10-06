@@ -97,7 +97,7 @@ test("V06 prompt uses selected transcript not script; revision conflict 409; suf
   const script = await saveManualScript(reel.id, {
     body: "SCRIPT_MARKER не произнесён",
     sources: [],
-    expectedHeadId: null,
+    expectedHeadId: undefined,
   });
   assert.ok(script.headId);
   const take = await createTake(reel.id, { inputType: "audio", bodyText: "", originalName: "p.webm" });
@@ -162,7 +162,7 @@ test("V06 completion without script; export is final revision; reopen; owner; dr
   const script = await saveManualScript(reel.id, {
     body: "DRAFT_SCRIPT_KEEP",
     sources: [],
-    expectedHeadId: null,
+    expectedHeadId: undefined,
   });
   const scriptsBefore = await prisma.scriptVersion.count({ where: { reelId: reel.id } });
   const draftsBefore = await prisma.scriptDraft.count({ where: { reelId: reel.id } });
@@ -206,7 +206,8 @@ test("V06 completion without script; export is final revision; reopen; owner; dr
   const exported2 = await exportCanonicalTxt(reel.id);
   assert.match(exported2.text, /UNIQUE_SECOND/);
 
-  assert.equal(await prisma.scriptVersion.count({ where: { reelId: reel.id } }), scriptsBefore);
+  // R1: the second take gets its own from_take base; nothing else mints a script.
+  assert.equal(await prisma.scriptVersion.count({ where: { reelId: reel.id } }), scriptsBefore + 1);
   assert.equal(await prisma.scriptDraft.count({ where: { reelId: reel.id } }), draftsBefore);
 
   await runWithOwner({ id: "user-b", email: "b@test" }, async () => {
@@ -430,7 +431,7 @@ test("V06 completed export and archive preview use only selected revision", asyn
     idempotencyKey: "v06-strict-export",
   });
   const origin = reel.takes[0]!;
-  await saveManualScript(reel.id, { body: "SCRIPT_MUST_NOT_APPEAR", sources: [], expectedHeadId: null });
+  await saveManualScript(reel.id, { body: "SCRIPT_MUST_NOT_APPEAR", sources: [], expectedHeadId: undefined });
   await prisma.take.update({
     where: { id: origin.id },
     data: { bodyText: "BODYTEXT_MUST_NOT_APPEAR" },
