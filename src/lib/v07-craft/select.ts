@@ -36,7 +36,8 @@ export function compareCraftCards(left: CraftCard, right: CraftCard) {
 }
 
 export function cardMatchesCurrentGap(card: CraftCard, gap: ThoughtGap, contentMode: ContentMode) {
-  if (card.applicableGapKey !== gap.id) return false;
+  // K0: by gap type. A gap without a type (older data, free-form id) falls back to its id so fixtures keep working.
+  if (card.applicableGapKey !== (gap.kind ?? gap.id)) return false;
   return card.contentModes.includes(contentMode);
 }
 

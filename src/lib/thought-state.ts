@@ -27,10 +27,35 @@ export type ThoughtFact = {
   sourceId: string;
 };
 
+/**
+ * Closed list of gap types shared by the dialogue and the craft cards (K0).
+ * A card matches a gap by type, never by the free-form gap id.
+ * The function of the ending is deliberately absent: it is a rule of the closing reply (R4), not a gap card.
+ */
+export const GAP_KINDS = [
+  "no_episode",
+  "no_thesis",
+  "facts_vs_interpretation",
+  "no_mechanism",
+  "unclear_terms",
+  "repeat_unchecked",
+  "no_boundary",
+  "no_audience",
+  "multiple_topics",
+  "promise_unclear",
+] as const;
+export type GapKind = (typeof GAP_KINDS)[number];
+
+export function isGapKind(value: unknown): value is GapKind {
+  return typeof value === "string" && (GAP_KINDS as readonly string[]).includes(value);
+}
+
 export type ThoughtGap = {
   id: string;
   text: string;
   status: "open" | "resolved";
+  /** Optional: gaps made before K0 or by the author's correction have no type and match no card. */
+  kind?: GapKind;
 };
 
 export type ThoughtStatePatch = {
@@ -100,10 +125,14 @@ export function parseGaps(value: unknown): ThoughtGap[] {
     if (status !== "open" && status !== "resolved") {
       throw new ThoughtStateError("Статус пробела должен быть open или resolved.", "THOUGHT_STATE_GAP_STATUS");
     }
+    if (row.kind !== undefined && !isGapKind(row.kind)) {
+      throw new ThoughtStateError("Тип пробела неизвестен.", "THOUGHT_STATE_GAP_KIND");
+    }
     return {
       id: requireNonEmptyString(row.id, `openGaps[${index}].id`),
       text: requireNonEmptyString(row.text, `openGaps[${index}].text`),
       status: status as ThoughtGap["status"],
+      ...(row.kind !== undefined ? { kind: row.kind } : {}),
     };
   });
   uniqueIds(gaps.map((gap) => gap.id), "openGaps");

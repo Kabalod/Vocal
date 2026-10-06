@@ -33,7 +33,7 @@ import {
 import { isC00PolicyEnabled } from "@/lib/c00-policy";
 import { C00EnvelopeError } from "@/lib/c00-envelope";
 import type { C00SignalCandidate } from "@/lib/c00-signal";
-import { candidateFactId, getThoughtState, ThoughtStateError } from "@/lib/thought-state";
+import { candidateFactId, getThoughtState, ThoughtStateError, type ThoughtGap } from "@/lib/thought-state";
 import { v03TestSeams } from "@/lib/v03-test-seams";
 import {
   claimDialogueModelExecution,
@@ -378,7 +378,7 @@ function readStoredCraftSnapshot(raw: string): CraftSnapshot | null {
 }
 
 function resolveCraftSnapshot(
-  thought: { openGaps: { id: string; text: string; status: "open" | "resolved" }[]; decisions: string[] },
+  thought: { openGaps: ThoughtGap[]; decisions: string[] },
   locked: CraftSnapshot | null,
 ): CraftSnapshot {
   if (locked) return locked;
