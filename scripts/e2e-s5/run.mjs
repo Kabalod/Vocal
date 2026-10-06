@@ -1,5 +1,5 @@
 // S5 E2E (mock AI/STT, two users). Not part of npm test: needs `npm i playwright && npx playwright install chromium`
-// outside the repo, a production build without NEXT_PUBLIC_SUPABASE_*, a migrated Postgres schema and two servers:
+// outside the repo, a production build without NEXT_PUBLIC_SUPABASE_* and without VOCAL_UI_TEST_DB (build fails with it), a migrated Postgres schema and two servers:
 //   VOCAL_UI_TEST_DB=1 TEST_DATABASE_URL=<schema> VOCAL_AI_MOCK=1 VOCAL_STT_MOCK=1 VOCAL_TEST_USER_ID=user-a PORT=3101 next start -p 3101
 //   the same with VOCAL_TEST_USER_ID=user-b and port 3102 (different storage root).
 // Run: node run.mjs <scratch dir with shots/ and tiny.mp4>. Details: docs/audit/S5_REPORT.md.
