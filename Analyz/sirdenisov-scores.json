@@ -1,0 +1,494 @@
+{
+  "method": "Локальная оценка по рубрике v1.2 (якорь: сильный разговорный блог = 7–8). Те же веса, что в Vocal.",
+  "corpus": "Analyz/SirDenisov",
+  "totalFiles": 90,
+  "skippedCredit": 6,
+  "skippedEmpty": 11,
+  "usable": 79,
+  "overall": {
+    "min": 6.5,
+    "p25": 7.1,
+    "median": 7.5,
+    "p75": 7.8,
+    "max": 8.4,
+    "avg": 7.4
+  },
+  "buckets": [
+    {
+      "label": "0–3.9",
+      "min": 0,
+      "max": 3.9,
+      "n": 0
+    },
+    {
+      "label": "4.0–5.4",
+      "min": 4,
+      "max": 5.4,
+      "n": 0
+    },
+    {
+      "label": "5.5–6.4",
+      "min": 5.5,
+      "max": 6.4,
+      "n": 0
+    },
+    {
+      "label": "6.5–7.4",
+      "min": 6.5,
+      "max": 7.4,
+      "n": 37
+    },
+    {
+      "label": "7.5–8.4",
+      "min": 7.5,
+      "max": 8.4,
+      "n": 42
+    },
+    {
+      "label": "8.5–10",
+      "min": 8.5,
+      "max": 10,
+      "n": 0
+    }
+  ],
+  "byFormat": {
+    "story": 36,
+    "advice": 26,
+    "micro": 12,
+    "street": 4,
+    "performance": 1
+  },
+  "formatAvg": {
+    "story": 7.5,
+    "advice": 7.3,
+    "micro": 7.5,
+    "street": 7.6,
+    "performance": 7.5
+  },
+  "categoryAvg": [
+    {
+      "id": "hook",
+      "label": "Хук и удержание внимания",
+      "avg": 6.8
+    },
+    {
+      "id": "content",
+      "label": "Содержание и ценность",
+      "avg": 7.4
+    },
+    {
+      "id": "personality",
+      "label": "Живость и личность",
+      "avg": 7.8
+    },
+    {
+      "id": "audience",
+      "label": "Связь с аудиторией",
+      "avg": 6.5
+    },
+    {
+      "id": "ending",
+      "label": "Финал",
+      "avg": 7.4
+    },
+    {
+      "id": "focus",
+      "label": "Фокус и отсутствие воды",
+      "avg": 9
+    }
+  ],
+  "criterionAvg": [
+    {
+      "id": "hook_strength",
+      "name": "Сила начала",
+      "category": "Хук и удержание внимания",
+      "avg": 7.1,
+      "applicablePct": 100
+    },
+    {
+      "id": "topic_clarity",
+      "name": "Ясность темы",
+      "category": "Хук и удержание внимания",
+      "avg": 7.4,
+      "applicablePct": 99
+    },
+    {
+      "id": "reason_to_continue",
+      "name": "Причина продолжить смотреть",
+      "category": "Хук и удержание внимания",
+      "avg": 6,
+      "applicablePct": 99
+    },
+    {
+      "id": "intro_efficiency",
+      "name": "Отсутствие лишнего вступления",
+      "category": "Хук и удержание внимания",
+      "avg": 7.5,
+      "applicablePct": 99
+    },
+    {
+      "id": "main_idea",
+      "name": "Главная мысль",
+      "category": "Содержание и ценность",
+      "avg": 7.4,
+      "applicablePct": 99
+    },
+    {
+      "id": "story_payoff",
+      "name": "Посадка мысли",
+      "category": "Содержание и ценность",
+      "avg": 7.4,
+      "applicablePct": 99
+    },
+    {
+      "id": "clarity",
+      "name": "Ясность мысли",
+      "category": "Содержание и ценность",
+      "avg": 7.5,
+      "applicablePct": 84
+    },
+    {
+      "id": "argumentation",
+      "name": "Аргументация",
+      "category": "Содержание и ценность",
+      "avg": 7.1,
+      "applicablePct": 38
+    },
+    {
+      "id": "specificity",
+      "name": "Конкретность и примеры",
+      "category": "Содержание и ценность",
+      "avg": 7.7,
+      "applicablePct": 84
+    },
+    {
+      "id": "value",
+      "name": "Ценность для зрителя",
+      "category": "Содержание и ценность",
+      "avg": 7.5,
+      "applicablePct": 84
+    },
+    {
+      "id": "conversational",
+      "name": "Разговорность",
+      "category": "Живость и личность",
+      "avg": 9,
+      "applicablePct": 100
+    },
+    {
+      "id": "personal_position",
+      "name": "Личное отношение",
+      "category": "Живость и личность",
+      "avg": 7.3,
+      "applicablePct": 84
+    },
+    {
+      "id": "personal_experience",
+      "name": "Личный опыт и истории",
+      "category": "Живость и личность",
+      "avg": 7.1,
+      "applicablePct": 84
+    },
+    {
+      "id": "imagery",
+      "name": "Образность и выразительность",
+      "category": "Живость и личность",
+      "avg": 6.8,
+      "applicablePct": 84
+    },
+    {
+      "id": "unique_voice",
+      "name": "Уникальность голоса автора",
+      "category": "Живость и личность",
+      "avg": 7.5,
+      "applicablePct": 100
+    },
+    {
+      "id": "audience_understanding",
+      "name": "Понимание аудитории",
+      "category": "Связь с аудиторией",
+      "avg": 6.5,
+      "applicablePct": 84
+    },
+    {
+      "id": "problem_relevance",
+      "name": "Релевантность проблемы",
+      "category": "Связь с аудиторией",
+      "avg": 6.2,
+      "applicablePct": 84
+    },
+    {
+      "id": "direct_address",
+      "name": "Обращение к зрителю",
+      "category": "Связь с аудиторией",
+      "avg": 6.6,
+      "applicablePct": 84
+    },
+    {
+      "id": "dialogue",
+      "name": "Диалоговость",
+      "category": "Связь с аудиторией",
+      "avg": 6.7,
+      "applicablePct": 84
+    },
+    {
+      "id": "conclusion",
+      "name": "Сильный вывод",
+      "category": "Финал",
+      "avg": 7.7,
+      "applicablePct": 84
+    },
+    {
+      "id": "next_action",
+      "name": "Следующий шаг",
+      "category": "Финал",
+      "avg": 6.2,
+      "applicablePct": 84
+    },
+    {
+      "id": "focus",
+      "name": "Фокус и отсутствие воды",
+      "category": "Фокус и отсутствие воды",
+      "avg": 9,
+      "applicablePct": 100
+    }
+  ],
+  "top": [
+    {
+      "id": "Dak1sd4RUqP",
+      "overall": 8.4,
+      "format": "story",
+      "words": 382,
+      "first": "Я собрал его!",
+      "cats": {
+        "hook": 8.1,
+        "content": 8.6,
+        "personality": 8.5,
+        "audience": 7.7,
+        "ending": 8.3,
+        "focus": 9
+      }
+    },
+    {
+      "id": "Da55_baxKD5",
+      "overall": 8.3,
+      "format": "story",
+      "words": 216,
+      "first": "Сейчас зажмуримся и одержим одну из самых важных побед в своей жизни.",
+      "cats": {
+        "hook": 8.1,
+        "content": 8.2,
+        "personality": 8.6,
+        "audience": 7.4,
+        "ending": 8.3,
+        "focus": 9
+      }
+    },
+    {
+      "id": "DbGxR9BKo1i",
+      "overall": 8.3,
+      "format": "micro",
+      "words": 36,
+      "first": "Я уплываю и время несет меня с края...",
+      "cats": {
+        "hook": 8.1,
+        "content": 7.6,
+        "personality": 8.7,
+        "focus": 9
+      }
+    },
+    {
+      "id": "Da2n4u4x10C",
+      "overall": 8.2,
+      "format": "story",
+      "words": 265,
+      "first": "Я сегодня почувствовал себя девчонкой.",
+      "cats": {
+        "hook": 8.1,
+        "content": 8.2,
+        "personality": 8.7,
+        "audience": 6.6,
+        "ending": 8.3,
+        "focus": 9
+      }
+    },
+    {
+      "id": "DbY5akrtI8t",
+      "overall": 8.2,
+      "format": "story",
+      "words": 322,
+      "first": "Мы боимся проявляться не потому, что нас осудят.",
+      "cats": {
+        "hook": 8.8,
+        "content": 7.9,
+        "personality": 7.6,
+        "audience": 7.2,
+        "ending": 8.3,
+        "focus": 9
+      }
+    },
+    {
+      "id": "DR4rDz4iLa5",
+      "overall": 8.2,
+      "format": "street",
+      "words": 262,
+      "first": "У вашей мечты есть срок годности.",
+      "cats": {
+        "hook": 8.8,
+        "content": 8.1,
+        "personality": 8.5,
+        "audience": 6,
+        "ending": 8.3,
+        "focus": 9
+      }
+    },
+    {
+      "id": "DXb6UMxiCu1",
+      "overall": 8.2,
+      "format": "micro",
+      "words": 67,
+      "first": "Я знаю, что вы снимаете видео.",
+      "cats": {
+        "hook": 8.1,
+        "content": 7,
+        "personality": 8.7,
+        "focus": 9
+      }
+    },
+    {
+      "id": "DR9HQ37jWYf",
+      "overall": 8.1,
+      "format": "story",
+      "words": 180,
+      "first": "Сколько раз у меня были вот эти мысли?",
+      "cats": {
+        "hook": 8.8,
+        "content": 7.7,
+        "personality": 8.5,
+        "audience": 7.4,
+        "ending": 6.8,
+        "focus": 9
+      }
+    }
+  ],
+  "bottom": [
+    {
+      "id": "Davo4zgRrxG",
+      "overall": 6.5,
+      "format": "advice",
+      "words": 97,
+      "first": "Нам поговорить нужно.",
+      "cats": {
+        "hook": 6,
+        "content": 6.4,
+        "personality": 6.9,
+        "audience": 6,
+        "ending": 5.3,
+        "focus": 9
+      }
+    },
+    {
+      "id": "DYaF9pRtvTc",
+      "overall": 6.6,
+      "format": "advice",
+      "words": 97,
+      "first": "Вот если вы человек творческий, то вы обречены на то, чтобы свои задумки реализовывать.",
+      "cats": {
+        "hook": 6,
+        "content": 6.4,
+        "personality": 6.9,
+        "audience": 6.3,
+        "ending": 5.3,
+        "focus": 9
+      }
+    },
+    {
+      "id": "DVQHRfnEUWN",
+      "overall": 6.6,
+      "format": "micro",
+      "words": 8,
+      "first": "Ты сегодня не сдашься.",
+      "cats": {
+        "hook": 5.6,
+        "content": 6.4,
+        "personality": 7.7,
+        "focus": 7
+      }
+    },
+    {
+      "id": "DTDbHjHjdDc",
+      "overall": 6.7,
+      "format": "advice",
+      "words": 99,
+      "first": "как испытывать счастье каждый день.",
+      "cats": {
+        "hook": 6,
+        "content": 6.4,
+        "personality": 6.9,
+        "audience": 6,
+        "ending": 6.8,
+        "focus": 9
+      }
+    },
+    {
+      "id": "DYhwxPptHuk",
+      "overall": 6.8,
+      "format": "story",
+      "words": 87,
+      "first": "Ровно одна мышца у вас должна быть накачана.",
+      "cats": {
+        "hook": 6,
+        "content": 6.8,
+        "personality": 6.9,
+        "audience": 6.3,
+        "ending": 6.8,
+        "focus": 9
+      }
+    },
+    {
+      "id": "DVQId4bEZdI",
+      "overall": 6.8,
+      "format": "advice",
+      "words": 102,
+      "first": "Иногда вы будете двигаться вперед на вдохновении, иногда на мотивации, иногда на вере в себя, иногда на боли, на горе, на желании доказать что-то себе или другим.",
+      "cats": {
+        "hook": 6,
+        "content": 6.7,
+        "personality": 7,
+        "audience": 6,
+        "ending": 6.8,
+        "focus": 9
+      }
+    },
+    {
+      "id": "DVQHeIAEc1r",
+      "overall": 6.8,
+      "format": "story",
+      "words": 92,
+      "first": "что помогает мне просыпаться рано утром, идти в лес в 6 утра, тренироваться, медитировать, вести дневник, а потом остервенело набрасываться на свой список дел, пока каждое дело не ",
+      "cats": {
+        "hook": 6,
+        "content": 6.8,
+        "personality": 7,
+        "audience": 6,
+        "ending": 6.8,
+        "focus": 9
+      }
+    },
+    {
+      "id": "DVl2BDJEobs",
+      "overall": 6.8,
+      "format": "story",
+      "words": 114,
+      "first": "Здесь и сейчас наша будущая ностальгия.",
+      "cats": {
+        "hook": 6,
+        "content": 6.6,
+        "personality": 7,
+        "audience": 6,
+        "ending": 6.8,
+        "focus": 9
+      }
+    }
+  ]
+}

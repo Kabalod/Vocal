@@ -1,0 +1,26 @@
+{
+  "author": "doctor_komarovskiy",
+  "source_format": "text blocks delimited by --- doctor_komarovskiy__instagram_id ---",
+  "records": 83,
+  "empty_texts": 0,
+  "total_words": 26517,
+  "unique_instagram_ids": 83,
+  "exact_text_duplicates": 0,
+  "decisions": {
+    "FULL": 62,
+    "LIMITED": 20,
+    "SKIP": 1
+  },
+  "voices": {
+    "автор": 80,
+    "смесь": 3
+  },
+  "duplicate_count": 0,
+  "constitution": [
+    "один instagram_id анализируется как один ролик",
+    "нет в тексте признаётся валидным результатом",
+    "LIMITED используется для обрывов, смешанного голоса и доминирующей коммерческой задачи",
+    "SKIP не используется как положительное смысловое доказательство",
+    "выводы относятся только к предоставленным текстам и не являются внешней фактологической проверкой"
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "author": "Людмила Петрановская",
+  "source_format": "текстовые блоки с заголовком --- author__instagram_id ---",
+  "records": 93,
+  "empty_texts": 0,
+  "total_words": 25577,
+  "unique_instagram_ids": 93,
+  "exact_text_duplicates": 4,
+  "decisions": {
+    "FULL": 64,
+    "SKIP": 9,
+    "LIMITED": 20
+  },
+  "voices": {
+    "автор": 83,
+    "смесь": 7,
+    "гость": 3
+  },
+  "entry_types": {
+    "personal_observation_or_story": 8,
+    "fragment_or_technical": 5,
+    "claim_or_myth_response": 20,
+    "mechanism_explainer": 40,
+    "product_or_service_promo": 8,
+    "interview_or_dialogue": 6,
+    "practical_instruction_or_demo": 6
+  },
+  "constitution": [
+    "без оценки автора и психологического портрета",
+    "один ID — один ролик",
+    "нет в тексте — валидный результат",
+    "без объяснения просмотров и внешнего фактчекинга",
+    "чужая и смешанная речь ограничивает использование",
+    "гипотезы требуют контрпримеров",
+    "цитаты сохраняют исходный ASR"
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "author": "Алина Уколова / @alina_telling",
+  "status": "deep textual evidence, not external fact-checking",
+  "items": [
+    {
+      "instagram_id": "alina_telling__DbGcz9XIB4V",
+      "operation": "диагностическое переименование",
+      "quote": "Норма это статистическое понятие"
+    },
+    {
+      "instagram_id": "alina_telling__DTNjCaGiB0u",
+      "operation": "диагноз отсутствующего звена",
+      "quote": "Но самое главное – нет оффера."
+    },
+    {
+      "instagram_id": "alina_telling__DUsvIf-iLnp",
+      "operation": "типология на одном объекте",
+      "quote": "где сочетаются сразу три типа спроса."
+    },
+    {
+      "instagram_id": "alina_telling__DV8t66dCAyK",
+      "operation": "проверка механики через роли",
+      "quote": "Вот просто как вы себе представляете механику этой акции?"
+    },
+    {
+      "instagram_id": "alina_telling__DZsHhrRopA_",
+      "operation": "снятие событийной оболочки",
+      "quote": "Это же просто красиво завернутый классический оффер"
+    },
+    {
+      "instagram_id": "alina_telling__DTvAbvhCHyM",
+      "operation": "смена уровня категории на продукт",
+      "quote": "Внутри каждой этой, казалось бы, железобетонной категории"
+    },
+    {
+      "instagram_id": "alina_telling__DWocYnAjJdS",
+      "operation": "история в модель прямого и косвенного LTV",
+      "quote": "В модели продаж это называется экономика сарафанных клиентов."
+    },
+    {
+      "instagram_id": "alina_telling__DYXfeBwIa5m",
+      "operation": "смена единицы сравнения",
+      "quote": "три продавца будут давать уже 150%"
+    },
+    {
+      "instagram_id": "alina_telling__DaN27MMIUw1",
+      "operation": "удержание двух версий",
+      "quote": "неужели я так испорчена маркетингом в социальных сетях"
+    },
+    {
+      "instagram_id": "alina_telling__DYCiNiAIYAp",
+      "operation": "диалоговая аналогия",
+      "quote": "Ну представим, что мы продаем клубнику."
+    },
+    {
+      "instagram_id": "alina_telling__DYNDvI8ou96",
+      "operation": "открытая постановка выбора",
+      "quote": "какой из этих социальных лифтов сейчас наиболее вероятен?"
+    },
+    {
+      "instagram_id": "alina_telling__DWtxCyUiD1G",
+      "operation": "граница авторской атрибуции",
+      "quote": "По-моему, комментировать профессора только портить."
+    }
+  ],
+  "limitations": [
+    "выборка глубины сформирована из прежних кластеров и не является случайной",
+    "LIMITED и SKIP не используются как подтверждение авторской формулы",
+    "числа и внешние утверждения не проверены",
+    "описания, видео и следующие части серий отсутствуют"
+  ]
+}

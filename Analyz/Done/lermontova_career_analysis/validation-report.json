@@ -1,0 +1,29 @@
+{
+  "gateway_rows": 90,
+  "input_records": 90,
+  "ids_match_exactly": true,
+  "json_valid": [
+    "corpus-summary.json",
+    "semantic-evidence.json",
+    "validation-report.json"
+  ],
+  "jsonl_valid": [
+    "00_prompt0-gateway.jsonl",
+    "06_depth-analysis.jsonl",
+    "records-analysis.jsonl"
+  ],
+  "decision_sum": 90,
+  "counts": {
+    "FULL": 51,
+    "SKIP": 15,
+    "LIMITED": 24
+  },
+  "duplicate_targets_are_earlier": true,
+  "markdown_ids_exist": true,
+  "semantic_quotes_verbatim": true,
+  "clusters_minimum_three": true,
+  "hypothesis_statuses_present": true,
+  "vocal_non_transfer_block_present": true,
+  "devil_advocate_limits_hypothesis": true,
+  "source_unchanged": true
+}

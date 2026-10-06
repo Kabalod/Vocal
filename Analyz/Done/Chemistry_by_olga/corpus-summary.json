@@ -1,0 +1,32 @@
+{
+  "author": "chemistry_by_olga",
+  "source_records": 64,
+  "source_words": 155629,
+  "gateway_counts": {
+    "decision": {
+      "SKIP": 13,
+      "FULL": 22,
+      "LIMITED": 29
+    },
+    "entry_type": {
+      "unusable_or_fragment": 13,
+      "myth_or_risk_debunk": 19,
+      "long_live_dialogue": 18,
+      "product_or_event_promo": 9,
+      "other_full": 2,
+      "practical_demo_or_instruction": 3
+    },
+    "voice": {
+      "автор": 46,
+      "смесь": 18
+    },
+    "duplicates": 0
+  },
+  "constitution": {
+    "one_id_one_video": true,
+    "scoring_forbidden": true,
+    "personality_portrait_forbidden": true,
+    "view_inference_forbidden": true,
+    "not_in_text_is_valid": true
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "author": "ira_podrez",
+  "source_file": "ira_podrez_combined(1).json",
+  "records": 92,
+  "unique_instagram_ids": 92,
+  "empty_text_count": 0,
+  "word_count_total": 66206,
+  "decisions": {
+    "FULL": 83,
+    "LIMITED": 5,
+    "SKIP": 4
+  },
+  "voice_distribution": {
+    "автор": 89,
+    "смесь": 3,
+    "гость": 0
+  },
+  "exact_duplicate_records": 1,
+  "exact_duplicate_groups": [
+    [
+      "DbFdwuMo29C",
+      "DbJG50SNWwm"
+    ]
+  ],
+  "reels_scope_exclusions": [
+    {"instagram_id": "DcinpTbE6uB", "reason": "longform_live_not_reels"},
+    {"instagram_id": "DcJmqfliK0O", "reason": "longform_live_not_reels"},
+    {"instagram_id": "DcY1hGACPEY", "reason": "longform_live_not_reels"}
+  ],
+  "constitution": [
+    "не оценивать автора и не строить психологический портрет",
+    "не объяснять просмотры или популярность без метрик",
+    "один instagram_id = один ролик",
+    "нет в тексте и недостаточно данных являются валидными результатами",
+    "FULL — основная доказательная база; LIMITED — границы; SKIP — не положительное доказательство",
+    "цитаты только дословные; внешняя фактологическая проверка не проводилась"
+  ],
+  "limitations": [
+    "три длинных эфира исключены из Reels-анализа и вынесены в отдельный контур продуктовых гипотез",
+    "эфиры не используются в Reels-кластерах, корпусных подтверждениях и выборках глубокого Prompt 1–3",
+    "в корпусе нет метрик просмотров и данных о визуале, монтаже и голосовой подаче",
+    "часть коротких роликов входит в тематические серии, поэтому повторяемость не всегда независима"
+  ]
+}

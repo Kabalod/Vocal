@@ -1,0 +1,83 @@
+{
+  "author": "Наталья Ремиш",
+  "status": "textual evidence, not external fact-checking",
+  "items": [
+    {
+      "instagram_id": "natalia.remish__Da90XaiN2sb",
+      "hypothesis": "H1: различение понятий",
+      "quote": "Но здесь есть подмена."
+    },
+    {
+      "instagram_id": "natalia.remish__DbDFNafNdlH",
+      "hypothesis": "H1: эмпатия отделяется от уступчивости",
+      "quote": "Эмпатия нужна не для того, чтобы всех жалеть."
+    },
+    {
+      "instagram_id": "natalia.remish__DbYm4lGNAaX",
+      "hypothesis": "H1/H2: ярлык заменяется механизмом",
+      "quote": "То, что мы принимаем за эмпатию, не всегда эмпатия."
+    },
+    {
+      "instagram_id": "natalia.remish__DcyrECZthm9",
+      "hypothesis": "H2: поведение как симптом",
+      "quote": "Вспышки агрессии в этом возрасте это всегда симптом."
+    },
+    {
+      "instagram_id": "natalia.remish__DPoo9n1DVO4",
+      "hypothesis": "H2/H4: случай переводится в механизм",
+      "quote": "Так, что мы здесь наблюдаем?"
+    },
+    {
+      "instagram_id": "natalia.remish__DcyuPdPt3CP",
+      "hypothesis": "H3: пауза перед разговором",
+      "quote": "Сначала мы даем вспышке возможность улечься."
+    },
+    {
+      "instagram_id": "natalia.remish__DUAqmvojaHh",
+      "hypothesis": "H3: практическая пауза",
+      "quote": "Берем паузу, отползаем на кухню, наливаем себе чаек"
+    },
+    {
+      "instagram_id": "natalia.remish__DWUh8olt-L3",
+      "hypothesis": "H1: определение через отрицание",
+      "quote": "Половое воспитание – это не разговор про преспотивы и половой акт."
+    },
+    {
+      "instagram_id": "natalia.remish__DXuUxYXjYl2",
+      "hypothesis": "H1: короткое функциональное переопределение",
+      "quote": "Половое воспитание – это не разговоры про секс."
+    },
+    {
+      "instagram_id": "natalia.remish__DY2d-TkNm7B",
+      "hypothesis": "контрпример: режим личного рассказа",
+      "quote": "Почему на меня прыгнула горилла и как проходит трекинг гориллы?"
+    },
+    {
+      "instagram_id": "natalia.remish__DVrL1hHtFsf",
+      "hypothesis": "контрпример: предметная демонстрация",
+      "quote": "Открываем. Какой-то dry bag."
+    },
+    {
+      "instagram_id": "natalia.remish__DcNlsmmtQxI",
+      "hypothesis": "контрпример: комическое раскрытие",
+      "quote": "Это алкоголь."
+    },
+    {
+      "instagram_id": "natalia.remish__DYcG_SKtk8S",
+      "hypothesis": "H6: явная граница компетенции",
+      "quote": "Я Наталья Ремеш, не психолог, не мамолог, не гинеколог и не невролог"
+    },
+    {
+      "instagram_id": "natalia.remish__DcWVsc_NNbU",
+      "hypothesis": "H7: происхождение продукта",
+      "quote": "И так появилась болталка, которая потом стала Блабл Кидс."
+    }
+  ],
+  "limitations": [
+    "цитаты подтверждают наличие текстовой операции, но не истинность внешних утверждений",
+    "нет данных о просмотрах, удержании и коммерческом эффекте",
+    "транскрипты не показывают голос, монтаж и изображение",
+    "смешанный голос нельзя полностью атрибутировать автору",
+    "корпус не подтверждён как полная выборка публикаций"
+  ]
+}

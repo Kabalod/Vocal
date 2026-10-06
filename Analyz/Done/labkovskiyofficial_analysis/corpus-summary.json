@@ -1,0 +1,36 @@
+{
+  "author": "labkovskiyofficial (Михаил Лабковский — имя встречается в корпусе)",
+  "source_format": "plain-text blocks with one Instagram ID per transcript",
+  "records_total": 91,
+  "unique_instagram_ids": 91,
+  "semantic_empty_markers": 7,
+  "transcript_words": 8450,
+  "exact_duplicate_records": 12,
+  "decisions": {
+    "LIMITED": 12,
+    "FULL": 64,
+    "SKIP": 15
+  },
+  "voices": {
+    "смесь": 3,
+    "автор": 88
+  },
+  "entry_types": {
+    "interview_or_dialogue": 3,
+    "practical_instruction_or_demo": 19,
+    "claim_or_myth_response": 14,
+    "mechanism_explainer": 33,
+    "announcement_or_event": 5,
+    "fragment_or_technical": 15,
+    "personal_observation_or_story": 2
+  },
+  "constitution": [
+    "no author scoring or psychological portrait",
+    "no claims about views or popularity",
+    "one instagram_id equals one separately analyzed record",
+    "no external fact-checking",
+    "mixed voice is limited",
+    "verbatim quotes preserve ASR errors",
+    "Vocal transfers thought operations, not author imitation"
+  ]
+}

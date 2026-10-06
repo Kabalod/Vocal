@@ -1,0 +1,41 @@
+{
+  "author": "doctor_belokon",
+  "source_format": "text export; separator: --- doctor_belokon__<instagram_id> ---",
+  "records": 93,
+  "unique_instagram_ids": 93,
+  "empty_records": 14,
+  "word_count": 40443,
+  "exact_duplicates": 12,
+  "decisions": {
+    "SKIP": 39,
+    "FULL": 44,
+    "LIMITED": 10
+  },
+  "voices": {
+    "смесь": 12,
+    "автор": 75,
+    "гость": 6
+  },
+  "entry_types": {
+    "other": 2,
+    "mechanism_explainer": 12,
+    "fragment_or_technical": 31,
+    "interview_or_dialogue": 12,
+    "practical_instruction_or_demo": 12,
+    "claim_or_myth_response": 13,
+    "announcement_or_event": 1,
+    "personal_observation_or_story": 8,
+    "product_or_service_promo": 2
+  },
+  "constitution": [
+    "не оценивать автора",
+    "не строить психологический портрет",
+    "не объяснять просмотры без метрик",
+    "один instagram_id — один ролик",
+    "«нет в тексте» допустимо",
+    "не приписывать автору чужую речь",
+    "не проводить внешнюю фактологическую проверку",
+    "искать контрпримеры",
+    "переносить операции, а не стилизацию"
+  ]
+}

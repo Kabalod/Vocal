@@ -1,0 +1,19 @@
+{
+  "checks": {
+    "one_gateway_row_per_input": true,
+    "id_order_and_set_match": true,
+    "jsonl_valid": true,
+    "json_files_valid": true,
+    "decision_sum": 92,
+    "duplicate_references_valid": true,
+    "markdown_ids_exist": true,
+    "evidence_quotes_exact": true,
+    "clusters_minimum_three": true,
+    "vocal_non_transfer_block_present": true
+  },
+  "counts": {
+    "FULL": 54,
+    "LIMITED": 30,
+    "SKIP": 8
+  }
+}

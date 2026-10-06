@@ -1,0 +1,37 @@
+{
+  "author": "Наталья Ремиш",
+  "source_file": "natalia.remish_all_transcripts.txt",
+  "format_detected": "plain text; records separated by --- instagram_id ---",
+  "records": 92,
+  "unique_instagram_ids": 92,
+  "empty_texts": 0,
+  "word_count": 14862,
+  "exact_text_duplicates": 2,
+  "decisions": {
+    "FULL": 54,
+    "LIMITED": 30,
+    "SKIP": 8
+  },
+  "voices": {
+    "автор": 77,
+    "смесь": 15
+  },
+  "entry_types": {
+    "claim_or_myth_response": 24,
+    "product_or_service_promo": 6,
+    "fragment_or_technical": 8,
+    "interview_or_dialogue": 12,
+    "personal_observation_or_story": 15,
+    "practical_instruction_or_demo": 9,
+    "mechanism_explainer": 17,
+    "announcement_or_event": 1
+  },
+  "constitution_used": [
+    "не оценивать автора и не строить психологический портрет",
+    "один instagram_id считать одним роликом",
+    "не объяснять просмотры и не проводить внешнюю фактологическую проверку",
+    "не приписывать автору смешанную или гостевую речь",
+    "признавать отсутствие данных и искать контрпримеры",
+    "переносить в Vocal операции мысли, а не стилизацию автора"
+  ]
+}

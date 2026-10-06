@@ -1,0 +1,43 @@
+{
+  "author": "lermontova.career",
+  "records_total": 90,
+  "word_count_total": 15442,
+  "empty_text_count": 8,
+  "unique_instagram_ids": 90,
+  "decisions": {
+    "FULL": 51,
+    "SKIP": 15,
+    "LIMITED": 24
+  },
+  "voice": {
+    "автор": 85,
+    "смесь": 5
+  },
+  "exact_duplicates": {
+    "DI3Ex8woJIK": "DcGtXyuRzOT"
+  },
+  "near_duplicate_pairs": [
+    [
+      "DWdY4BmInf6",
+      "DXXHDHZjCeh"
+    ],
+    [
+      "DZhLnIzxCx0",
+      "DZu3G-GsYtr"
+    ],
+    [
+      "DZuz9hQMkd1",
+      "DZVTki8smPP"
+    ]
+  ],
+  "constitution": [
+    "не оценивать автора",
+    "не строить психологический портрет",
+    "не объяснять просмотры",
+    "один ID — один ролик",
+    "нет в тексте — валидно",
+    "не приписывать чужую речь",
+    "искать контрпримеры",
+    "цитировать дословно"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "author": "Ирина Хакамада",
+  "source_format": "text blocks: instagram_id + transcript",
+  "records": 91,
+  "empty_texts": 1,
+  "word_count": 8601,
+  "unique_instagram_ids": 91,
+  "exact_text_duplicates": 0,
+  "decisions": {
+    "FULL": 80,
+    "SKIP": 8,
+    "LIMITED": 3
+  },
+  "voices": {
+    "автор": 49,
+    "смесь": 42
+  },
+  "duplicate_links": 0,
+  "constitution": [
+    "не оценивать автора",
+    "не строить психологический портрет",
+    "не объяснять просмотры",
+    "один instagram_id — один ролик",
+    "не достраивать отсутствующее",
+    "отделять смешанный голос",
+    "искать контрпримеры",
+    "цитировать дословно",
+    "не проводить внешнюю фактологическую проверку"
+  ]
+}

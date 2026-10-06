@@ -1,0 +1,42 @@
+{
+  "author": "marysstories",
+  "records_total": 95,
+  "empty_texts": 10,
+  "words_total_source": 15902,
+  "unique_instagram_ids": 95,
+  "decisions": {
+    "FULL": 53,
+    "SKIP": 17,
+    "LIMITED": 25
+  },
+  "voices": {
+    "автор": 77,
+    "смесь": 18
+  },
+  "entry_types": {
+    "mechanism_explainer": 27,
+    "personal_observation_or_story": 13,
+    "fragment_or_technical": 17,
+    "interview_or_dialogue": 16,
+    "product_or_service_promo": 9,
+    "claim_or_myth_response": 4,
+    "practical_instruction_or_demo": 9
+  },
+  "exact_duplicates": 1,
+  "duplicate_pairs": [
+    {
+      "duplicate": "DYNLcsNoNth",
+      "original": "DUvLOxsiB-8"
+    }
+  ],
+  "constitution": [
+    "не оценивать автора",
+    "не строить психологический портрет",
+    "не объяснять просмотры без метрик",
+    "один instagram_id — один ролик",
+    "не приписывать автору чужую речь",
+    "нет в тексте — валидный результат",
+    "проверять гипотезы контрпримерами",
+    "цитаты только дословные"
+  ]
+}
