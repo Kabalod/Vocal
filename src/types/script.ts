@@ -127,6 +127,10 @@ export interface ScriptWorkspaceDto {
   draftStale: boolean;
   canGenerate: boolean;
   blockReason: string | null;
+  /** R4: what the generated version changed and why (human phrases); empty for versions without a record. */
+  viewingChanges: string[];
+  /** R4: "I understood it like this", built from the thought state without a model call; null when there is nothing to say. */
+  understanding: string | null;
   nextQuestion: ScriptNextQuestionDto | null;
 }
 

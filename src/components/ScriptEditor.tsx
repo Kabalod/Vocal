@@ -366,6 +366,21 @@ export function ScriptEditor({
       ) : (
         <ShellLoading label="Загрузка версий…" />
       )}
+      {workspace?.understanding && !generating && !thoughtCompleted ? (
+        <div className="vocal-card p-4" data-script-understanding>
+          <p className="text-sm">{workspace.understanding}</p>
+        </div>
+      ) : null}
+      {workspace && workspace.viewingChanges.length > 0 ? (
+        <div className="vocal-card space-y-2 p-4" data-script-changes>
+          <p className="text-sm font-medium">Что изменено и почему</p>
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            {workspace.viewingChanges.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {snap.mode === "ready" ? (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">

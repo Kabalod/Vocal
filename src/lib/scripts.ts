@@ -349,6 +349,8 @@ export async function listScriptWorkspace(reelId: string, viewId?: string | null
     draftStale: Boolean(draftDto?.stale),
     canGenerate: false,
     blockReason: null as string | null,
+    viewingChanges: await viewingChangesFor(viewingRow?.id ?? null),
+    understanding: null as string | null,
     nextQuestion: null as { text: string; gapId: string | null } | null,
   };
   const { computeScriptTabState } = await import("@/lib/v05-script");
@@ -820,6 +822,22 @@ export async function createBaseScriptFromTakeInTx(
 function safeJson(raw: string): unknown {
   try {
     return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+async function viewingChangesFor(versionId: string | null): Promise<string[]> {
+  if (!versionId) return [];
+  const call = await prisma.aiCall.findFirst({
+    where: { kind: "script", status: "done", resultJson: { contains: versionId } },
+    select: { resultJson: true },
+  });
+  if (!call?.resultJson) return [];
+  try {
+    const parsed = JSON.parse(call.resultJson) as { versionId?: string; changes?: unknown };
+    if (parsed.versionId !== versionId || !Array.isArray(parsed.changes)) return [];
+    return parsed.changes.filter((item): item is string => typeof item === "string" && item.trim().length > 0).slice(0, 3);
   } catch {
     return [];
   }

@@ -524,6 +524,7 @@ async function freezeThoughtPrompt(
       openGaps: thought.openGaps,
     })}`,
     craftHint,
+    offTopicHint(await offTopicStreak(threadId)),
     isC00PolicyEnabled() ? c00ReplyGuide : V03_HEAD_DIALOGUE_REPLY_GUIDE,
   ]
     .filter(Boolean)
@@ -540,6 +541,35 @@ export async function buildThoughtMaterialContext(reelId: string): Promise<strin
   const thread = await ensureReelThread(reelId);
   const { prompt } = await freezeThoughtPrompt(reelId, thread.id, "");
   return prompt;
+}
+
+/** R3: how many of the latest assistant replies in a row were redirect_to_task (the author keeps leaving the thought). */
+export const OFF_TOPIC_STREAK_HINT_AT = 2;
+
+export async function offTopicStreak(threadId: string): Promise<number> {
+  const rows = await prisma.dialogueMessage.findMany({
+    where: { threadId, role: "assistant", status: "done" },
+    orderBy: { createdAt: "desc" },
+    take: 6,
+    select: { payloadJson: true },
+  });
+  let streak = 0;
+  for (const row of rows) {
+    let action: unknown;
+    try {
+      action = (JSON.parse(row.payloadJson) as { action?: { action?: unknown } }).action?.action;
+    } catch {
+      action = undefined;
+    }
+    if (action !== "redirect_to_task") break;
+    streak += 1;
+  }
+  return streak;
+}
+
+export function offTopicHint(streak: number): string {
+  if (streak < OFF_TOPIC_STREAK_HINT_AT) return "";
+  return `Автор уже ${streak} раза подряд уходит от мысли. Не добавляй тему ухода в thoughtUpdate. Коротко верни к самому важному открытому пробелу и предложи либо продолжить эту мысль, либо отложить её.`;
 }
 
 async function recentStoredText(threadId: string): Promise<string> {

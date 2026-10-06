@@ -19,13 +19,25 @@ import {
   type ThoughtGap,
 } from "@/lib/thought-state";
 import { v05TestSeams } from "@/lib/v05-test-seams";
+import { getThoughtState } from "@/lib/thought-state";
 import { SCRIPT_PROMPT_VERSION, type ScriptWorkspaceDto, type V05GenerateSnapshot, type V05WorldSnapshot } from "@/types/script";
 import type { CompleteJsonFn } from "@/types/review";
 import { z } from "zod";
 
+export const SCRIPT_CHANGES_MAX = 3;
+export const SCRIPT_CHANGE_CHARS_MAX = 200;
+
 const scriptSchema = z.object({
   script: z.string().min(1),
+  /** R4: one to three human phrases: what changed against the take and why. Optional, never blocks the script. */
+  changes: z.array(z.string()).optional(),
 });
+
+/** R4: internal ids and craft card ids must never reach the author's text. */
+export function scriptLeaksInternalIds(text: string, ids: (string | null | undefined)[]): boolean {
+  if (/craft_[a-z0-9_]+/i.test(text)) return true;
+  return ids.some((id) => Boolean(id) && text.includes(id as string));
+}
 
 export class ScriptReadinessError extends ScriptError {
   constructor(
@@ -717,6 +729,7 @@ export async function computeScriptTabState(reelId: string, workspace: {
   canGenerate: boolean;
   blockReason: string | null;
   nextQuestion: { text: string; gapId: string | null } | null;
+  understanding: string | null;
 }> {
   const readiness = await evaluateScriptReadiness(reelId);
   const generating = Boolean(
@@ -739,7 +752,27 @@ export async function computeScriptTabState(reelId: string, workspace: {
     canGenerate: readiness.ready && !generating,
     blockReason: readiness.ready ? null : readiness.blockReason,
     nextQuestion: readiness.ready ? null : readiness.nextQuestion,
+    understanding: readiness.ready ? await buildUnderstanding(reelId) : null,
   };
+}
+
+export const UNDERSTANDING_FACTS_MAX = 3;
+
+/** R4: one human reply "I understood it like this", from the thought state only. No model, no ids. */
+export function composeUnderstanding(thought: { position: string; intent: string; facts: { text: string }[] }): string | null {
+  const head = thought.position.trim() || thought.intent.trim();
+  const facts = thought.facts.map((fact) => fact.text.trim()).filter(Boolean).slice(-UNDERSTANDING_FACTS_MAX);
+  const parts = [head, ...facts].filter(Boolean);
+  if (parts.length === 0) return null;
+  return `Я понял так: ${parts.map((part) => part.replace(/[.\s]+$/, "")).join("; ")}. Собрать сценарий?`;
+}
+
+async function buildUnderstanding(reelId: string): Promise<string | null> {
+  try {
+    return composeUnderstanding(await getThoughtState(reelId));
+  } catch {
+    return null;
+  }
 }
 
 async function persistKeepSnapshot(input: { reelId: string; snapshotJson: string; turnKey: string }, db: ScriptDb = prisma) {
@@ -886,11 +919,11 @@ async function lockThoughtWorld(tx: Prisma.TransactionClient, reelId: string) {
 }
 
 function buildUserPrompt(context: Awaited<ReturnType<typeof getReelContext>>, texts: { label: string; text: string }[]) {
-  return `Собери черновик прямой речи только из материалов автора ниже. Не придумывай факты, события и выводы. Портрет — только тон, не сюжет.
+  return `Собери черновик прямой речи только из материалов автора ниже. Основа — последний дубль автора; ответы автора уточняют его. Сохраняй формулировки автора, меняй только то, что нужно для ясности. Не придумывай факты, события и выводы. Портрет — только тон, не сюжет.
 Тон портрета (не факты мысли): ${JSON.stringify(context.live.publicForScript)}
 Структурированные основания мысли и выбранный материал:
 ${texts.map((item, index) => `${index + 1}. ${item.label}\n${item.text}`).join("\n\n")}
-JSON: {"script":""}`;
+JSON: {"script":"","changes":["что изменил и почему, одна короткая фраза"]}. changes — от одной до трёх фраз без цитат и служебных идентификаторов.`;
 }
 
 export async function generateV05Script(
@@ -1013,7 +1046,7 @@ export async function generateV05Script(
         const raw = await gatewayComplete(complete, {
           model: LLM_MODEL,
           system:
-            "Ты собираешь черновик сценария — текст прямой речи для следующего дубля. Только материал автора. Не используй портрет как источник событий. Не копируй чужие истории. Не добавляй CTA. Верни только JSON.",
+            "Ты собираешь черновик сценария — текст прямой речи для следующего дубля. Только материал автора. Не используй портрет как источник событий. Не копируй чужие истории и цитаты. Не добавляй CTA. Не вставляй служебные идентификаторы. Верни только JSON.",
           user: userPrompt,
           label: "script",
         });
@@ -1027,6 +1060,20 @@ export async function generateV05Script(
         if (!parsed.success) {
           throw new ScriptError("Пустой или некорректный ответ модели не сохранён как сценарий.", "LLM_INVALID");
         }
+
+        if (scriptLeaksInternalIds(parsed.data.script, [reelId, frozen.world.workingTakeId, frozen.world.selectedTranscriptId])) {
+          throw new ScriptError("Ответ модели содержит служебные данные и не сохранён как сценарий.", "LLM_INVALID");
+        }
+        // Changes are an aid, not the result: trim, drop the overlong or leaking ones, keep at most three.
+        const changes = (parsed.data.changes ?? [])
+          .map((item) => item.trim())
+          .filter(
+            (item) =>
+              item.length > 0 &&
+              item.length <= SCRIPT_CHANGE_CHARS_MAX &&
+              !scriptLeaksInternalIds(item, [reelId, frozen.world.workingTakeId, frozen.world.selectedTranscriptId]),
+          )
+          .slice(0, SCRIPT_CHANGES_MAX);
 
         const version = await prisma.$transaction(async (tx) => {
           await lockThoughtWorld(tx, reelId);
@@ -1052,7 +1099,7 @@ export async function generateV05Script(
             data: {
               status: "done",
               responseText: raw.text,
-              resultJson: JSON.stringify({ versionId: created.id }),
+              resultJson: JSON.stringify({ versionId: created.id, changes }),
               promptTokens: raw.usage?.promptTokens ?? null,
               completionTokens: raw.usage?.completionTokens ?? null,
             },
