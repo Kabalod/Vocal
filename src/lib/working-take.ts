@@ -164,6 +164,8 @@ export async function commitDialogueReply(input: {
   execGeneration?: number | null;
   c00Signal?: C00SignalCandidate | null;
   freezeThoughtSlice?: boolean;
+  /** Parts of the model update that were dropped (counted in the reply payload). */
+  discarded?: string[];
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "DialogueThread" WHERE id = ${input.threadId} FOR UPDATE`;
@@ -220,6 +222,7 @@ export async function commitDialogueReply(input: {
             userMessageId: input.userMessageId,
             aiCallId: input.callId,
             idempotencyKey: input.turnKey,
+            ...(input.discarded?.length ? { discardedUpdates: input.discarded } : {}),
           }),
           status: "done",
         },

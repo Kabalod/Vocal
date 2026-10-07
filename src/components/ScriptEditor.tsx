@@ -366,6 +366,12 @@ export function ScriptEditor({
       ) : (
         <ShellLoading label="Загрузка версий…" />
       )}
+      {workspace?.base && !thoughtCompleted ? (
+        <div className="vocal-card space-y-2 p-4" data-script-base>
+          <p className="text-sm font-medium">{workspace.base.label}</p>
+          <p className="max-h-48 overflow-y-auto whitespace-pre-wrap text-sm text-muted">{workspace.base.text}</p>
+        </div>
+      ) : null}
       {workspace?.understanding && !generating && !thoughtCompleted ? (
         <div className="vocal-card p-4" data-script-understanding>
           <p className="text-sm">{workspace.understanding}</p>
@@ -390,7 +396,7 @@ export function ScriptEditor({
               disabled={generating || thoughtCompleted || !workspace?.canGenerate}
               onClick={() => void generate(keyStateRef.current.nextExplicitKey).catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."))}
             >
-              {generating ? "Собираем…" : workspace?.readyCount ? "Собрать новую версию" : "Собрать сценарий"}
+              {generating ? "Собираем…" : "Сгенерировать сценарий"}
             </button>
             <button
               type="button"

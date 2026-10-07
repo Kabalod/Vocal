@@ -489,6 +489,7 @@ async function freezeThoughtPrompt(
     "content_sufficient требует checkedInTranscript и whyNoGaps. Не выбирай content_sufficient для исправления факта и не комбинируй его с c00Signal. content_sufficient допустим только после audio/video дубля с непустой выбранной расшифровкой.",
     "После обработанного дубля основной результат — один вопрос или content_sufficient. redirect_to_task — только если автор ушёл от задачи мысли. Не используй текст сценария как произнесённый материал.",
     "thoughtUpdate.fact равен null, если нет нового проверенного факта из текущего сообщения автора. Никогда не возвращай fact с пустым text; не закрывай gap без принятого факта.",
+    'Форма факта строго такая: {"text":"…","sourceType":"dialogue_message","sourceId":"<id текущего сообщения автора>"}. Без других ключей. Если факта нет, fact равен null и closeGapIds пуст.',
     "Если автор явно исправляет факт текущей мысли, сначала верни c00Signal, затем ask_question про позицию автора. Не подменяй исправление вопросом про цель ролика, аудиторию или общий смысл, пока слот не помечен сигналом.",
     "c00Signal: evidenceUserMessageIds = id текущего сообщения; thoughtStateRevisionSeen = текущая revision; targetId = id исправляемого факта из состояния мысли. Для «это сказал X, не я» / чужой говорящий — wrong_speaker. Для «я этого не говорил» — author_negation. Одной фразы «это неправда» недостаточно. operation для снятия ошибочного факта — clear_slot. Если автор ничего не исправляет, не выдумывай correction.",
     "Идентификаторы (id мысли, дубля, ревизии, сообщений, фактов, пробелов) служебные: используй их только в полях gapId, sourceId, evidenceRefs, targetId и evidenceUserMessageIds и никогда не упоминай в тексте вопроса или реплики для автора.",
@@ -619,6 +620,36 @@ async function authorSafeReply(input: {
   await store(rawText);
   return { reply: parseAgentReply(neutral), rawText };
 }
+
+/**
+ * An invalid thoughtUpdate never fails a turn (it is dropped and counted in parseAgentReply). Only when the action
+ * itself, the question, is invalid does the turn regenerate, once; a second invalid answer is the turn's error.
+ */
+async function parseReplyRegeneratingInvalidQuestion(input: {
+  callId: string;
+  responseText: string;
+  userPrompt: string;
+  complete: CompleteJsonFn;
+}): Promise<{ reply: ReturnType<typeof parseAgentReply>; responseText: string }> {
+  try {
+    return { reply: parseAgentReply(parseJsonObject(input.responseText)), responseText: input.responseText };
+  } catch (firstError) {
+    const regenerate = firstError instanceof AgentActionError ? firstError.code === "AGENT_ACTION_INVALID" : true;
+    if (!regenerate) throw firstError;
+    const again = await gatewayComplete(input.complete, {
+      model: LLM_MODEL,
+      system: thoughtDialogueSystemPrompt(),
+      user: input.userPrompt + INVALID_QUESTION_NOTE,
+      label: "dialogue",
+    });
+    const reply = parseAgentReply(parseJsonObject(again.text));
+    await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: again.text } });
+    return { reply, responseText: again.text };
+  }
+}
+
+const INVALID_QUESTION_NOTE =
+  "\n\nПредыдущий ответ не прошёл проверку формата действия. Верни ровно одно корректное действие в JSON ещё раз.";
 
 async function recentStoredText(threadId: string): Promise<string> {
   const rows = await prisma.dialogueMessage.findMany({
@@ -852,6 +883,7 @@ export async function runDialogueTurn(
         c00Signal: mergeClassifiedActionSignal(classified, safeResume.reply.c00Signal),
         freezeThoughtSlice: blocksOrdinaryThoughtPatch(text, classified),
         rawText: safeResume.rawText,
+        discarded: safeResume.reply.discarded,
         promptTokens: reusable.promptTokens,
         completionTokens: reusable.completionTokens,
       });
@@ -957,7 +989,13 @@ export async function runDialogueTurn(
     if (await isDialogueTurnComplete(thread.id, userMessage.id, key)) {
       return listDialoguePage(reelId);
     }
-    const reply = parseAgentReply(parseJsonObject(call.responseText));
+    const parsedReply = await parseReplyRegeneratingInvalidQuestion({
+      callId: call.id,
+      responseText: call.responseText,
+      userPrompt,
+      complete,
+    });
+    const reply = parsedReply.reply;
     assertCraftNotAuthorEvidence({
       cardIds: craft.cardIds,
       action: reply.action,
@@ -968,7 +1006,7 @@ export async function runDialogueTurn(
       reelId,
       callId: call.id,
       reply,
-      rawText: call.responseText,
+      rawText: parsedReply.responseText,
       userPrompt,
       complete,
       knownIds: [reelId, userMessage.id, material.workingTakeId, material.transcriptRevisionId, ...thoughtFacts.map((fact) => fact.id)],
@@ -987,6 +1025,7 @@ export async function runDialogueTurn(
       c00Signal: mergeClassifiedActionSignal(classified, safe.reply.c00Signal),
       freezeThoughtSlice: blocksOrdinaryThoughtPatch(text, classified),
       rawText: safe.rawText,
+      discarded: safe.reply.discarded,
       promptTokens: call.promptTokens,
       completionTokens: call.completionTokens,
       execOwnerId: execClaim?.ownerId ?? null,

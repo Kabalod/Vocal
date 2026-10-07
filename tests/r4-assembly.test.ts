@@ -12,7 +12,9 @@ test("R4: composeUnderstanding speaks in one human reply and carries no ids", as
     intent: "",
     facts: [{ text: "Я неделю вставал в шесть." }, { text: "" }, { text: "Мотивация пропала на третий день" }],
   });
-  assert.equal(text, "Я понял так: Привычка важнее мотивации; Я неделю вставал в шесть; Мотивация пропала на третий день. Собрать сценарий?");
+  assert.equal(text, "Я понял так: Привычка важнее мотивации; Мотивация пропала на третий день. Собрать сценарий?");
+  const noPosition = composeUnderstanding({ position: "", intent: "", facts: [{ text: "Раз." }, { text: "Два." }, { text: "Три." }] });
+  assert.equal(noPosition, "Я понял так: Два; Три. Собрать сценарий?");
 });
 
 test("R4: the leak check rejects card ids and internal ids", async () => {
@@ -78,4 +80,30 @@ test("R4: generate stores the changes, shows them for that version, and refuses 
 
   const again = await listScriptWorkspace(reel.id, generated.viewing?.id ?? null);
   assert.deepEqual(again.viewingChanges, ["Убрал повтор.", "Оставил вашу формулировку."]);
+});
+
+test("R4: the base of the latest take is shown with the button, as the author said it, without technical names", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+  });
+  const { createThoughtFromText } = await import("../src/lib/thought-create");
+  const { createTake } = await import("../src/lib/reels");
+  const { ensureOriginalFromText } = await import("../src/lib/transcripts");
+  const { listScriptWorkspace } = await import("../src/lib/scripts");
+
+  const { reel } = await createThoughtFromText({ title: "Основа в интерфейсе", body: "Первый дубль  про чай.", idempotencyKey: "r4-base" });
+  const first = await listScriptWorkspace(reel.id);
+  assert.deepEqual(first.base, { text: "Первый дубль про чай.", label: "Ваш дубль №1, как он записан" });
+  assert.equal(first.readyCount, 0, "showing the base does not make it a script");
+  assert.equal(first.phase, "ready_to_generate");
+
+  const second = await createTake(reel.id, { inputType: "text", bodyText: "Второй дубль про кофе." });
+  await ensureOriginalFromText(second.id, second.bodyText);
+  const after = await listScriptWorkspace(reel.id);
+  assert.equal(after.base?.text, "Второй дубль про кофе.", "the base is always the latest take");
+  assert.equal(after.base?.label, "Ваш дубль №2, как он записан");
+  assert.equal(JSON.stringify(after.base).includes("from_take"), false);
 });

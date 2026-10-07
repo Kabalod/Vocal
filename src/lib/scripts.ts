@@ -351,6 +351,7 @@ export async function listScriptWorkspace(reelId: string, viewId?: string | null
     blockReason: null as string | null,
     viewingChanges: await viewingChangesFor(viewingRow?.id ?? null),
     understanding: null as string | null,
+    base: await latestBaseFor(reelId, takeMap),
     nextQuestion: null as { text: string; gapId: string | null } | null,
   };
   const { computeScriptTabState } = await import("@/lib/v05-script");
@@ -841,4 +842,16 @@ async function viewingChangesFor(versionId: string | null): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+async function latestBaseFor(reelId: string, takeMap: Map<string, number>): Promise<{ text: string; label: string } | null> {
+  const row = await prisma.scriptVersion.findFirst({
+    where: { reelId, kind: "from_take" },
+    orderBy: { createdAt: "desc" },
+    select: { body: true, sourcesJson: true },
+  });
+  if (!row?.body.trim()) return null;
+  const transcript = parseSources(row.sourcesJson).find((item) => item.type === "transcript");
+  const number = transcript ? takeMap.get(transcript.id) : undefined;
+  return { text: row.body, label: number ? `Ваш дубль №${number}, как он записан` : "Ваш последний дубль, как он записан" };
 }

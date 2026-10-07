@@ -76,10 +76,22 @@ export type ThoughtUpdate = z.infer<typeof thoughtUpdateSchema>;
 
 export const emptyThoughtUpdate = (): ThoughtUpdate => ({ fact: null, closeGapIds: [] });
 
+/** Why a part of the model's thoughtUpdate was dropped instead of failing the turn. Counted per reply. */
+export const DISCARD_REASONS = [
+  "update_shape",
+  "gap_without_fact",
+  "several_gaps",
+  "answered_gap_mismatch",
+  "redirect_state",
+] as const;
+export type DiscardReason = (typeof DISCARD_REASONS)[number];
+
 export function parseAgentReply(raw: unknown): {
   action: AgentAction;
   thoughtUpdate: ThoughtUpdate;
   c00Signal: C00SignalCandidate | null;
+  /** Dropped parts of the update. A valid question is never failed because of a bad update. */
+  discarded: DiscardReason[];
 } {
   if (!raw || typeof raw !== "object") {
     throw new AgentActionError("Модель вернула недопустимое действие.", "AGENT_ACTION_INVALID");
@@ -97,28 +109,30 @@ export function parseAgentReply(raw: unknown): {
     throw new AgentActionError("Нужен id пробела или причина уточнения.", "AGENT_ACTION_INVALID");
   }
   if (thoughtUpdate === undefined) {
-    return { action: parsed.data, thoughtUpdate: emptyThoughtUpdate(), c00Signal };
+    return { action: parsed.data, thoughtUpdate: emptyThoughtUpdate(), c00Signal, discarded: [] };
   }
+  // The question is valid from here on. An invalid update is never applied, but it does not fail the turn:
+  // the invalid part is dropped and counted. A gap is never closed without an accepted fact.
   const update = thoughtUpdateSchema.safeParse(thoughtUpdate);
   if (!update.success) {
-    throw new AgentActionError("Модель вернула недопустимое обновление состояния.", "AGENT_ACTION_INVALID");
+    return { action: parsed.data, thoughtUpdate: emptyThoughtUpdate(), c00Signal, discarded: ["update_shape"] };
   }
-  if (update.data.closeGapIds.length && !update.data.fact) {
-    throw new AgentActionError("Нельзя закрыть пробел без принятого факта.", "ACTION_GAP");
+  const discarded: DiscardReason[] = [];
+  let next: ThoughtUpdate = update.data;
+  if (parsed.data.action === "redirect_to_task" && (next.fact || next.closeGapIds.length)) {
+    return { action: parsed.data, thoughtUpdate: emptyThoughtUpdate(), c00Signal, discarded: ["redirect_state"] };
   }
-  if (parsed.data.action === "redirect_to_task" && (update.data.fact || update.data.closeGapIds.length)) {
-    throw new AgentActionError("redirect_to_task не меняет состояние мысли.", "ACTION_REDIRECT_STATE");
+  if (next.closeGapIds.length && !next.fact) {
+    discarded.push("gap_without_fact");
+    next = { fact: null, closeGapIds: [] };
+  } else if (next.closeGapIds.length > 1) {
+    discarded.push("several_gaps");
+    next = { fact: next.fact, closeGapIds: [] };
+  } else if (next.answeredGapId && next.closeGapIds[0] !== next.answeredGapId) {
+    discarded.push("answered_gap_mismatch");
+    next = { fact: next.fact, closeGapIds: [] };
   }
-  if (update.data.closeGapIds.length > 1) {
-    throw new AgentActionError("Одним ответом можно закрыть только один пробел.", "ACTION_GAP");
-  }
-  if (update.data.answeredGapId && update.data.closeGapIds[0] !== update.data.answeredGapId) {
-    throw new AgentActionError("answeredGapId должен совпадать с закрываемым пробелом.", "ACTION_GAP");
-  }
-  if (update.data.answeredGapId && !update.data.closeGapIds.length) {
-    throw new AgentActionError("answeredGapId без закрытия пробела недопустим.", "ACTION_GAP");
-  }
-  return { action: parsed.data, thoughtUpdate: update.data, c00Signal };
+  return { action: parsed.data, thoughtUpdate: next, c00Signal, discarded };
 }
 
 export function parseAgentAction(raw: unknown): AgentAction {

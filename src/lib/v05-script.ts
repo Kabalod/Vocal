@@ -757,12 +757,15 @@ export async function computeScriptTabState(reelId: string, workspace: {
   };
 }
 
-export const UNDERSTANDING_FACTS_MAX = 3;
+/** Not a list of answers: the position plus the latest fact, or the latest two facts when there is no position. */
+export const UNDERSTANDING_FACTS_WITH_POSITION = 1;
+export const UNDERSTANDING_FACTS_WITHOUT_POSITION = 2;
 
 /** R4: one human reply "I understood it like this", from the thought state only. No model, no ids. */
 export function composeUnderstanding(thought: { position: string; intent: string; facts: { text: string }[] }): string | null {
   const head = thought.position.trim() || thought.intent.trim();
-  const facts = thought.facts.map((fact) => fact.text.trim()).filter(Boolean).slice(-UNDERSTANDING_FACTS_MAX);
+  const limit = head ? UNDERSTANDING_FACTS_WITH_POSITION : UNDERSTANDING_FACTS_WITHOUT_POSITION;
+  const facts = thought.facts.map((fact) => fact.text.trim()).filter(Boolean).slice(-limit);
   const parts = [head, ...facts].filter(Boolean);
   if (parts.length === 0) return null;
   return `Я понял так: ${parts.map((part) => part.replace(/[.\s]+$/, "")).join("; ")}. Собрать сценарий?`;

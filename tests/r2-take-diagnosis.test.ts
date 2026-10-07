@@ -181,7 +181,6 @@ test("R2: typed diagnosis gaps do not block the script button; an untyped gap st
   const typed = await listScriptWorkspace(made.reel.id);
   assert.equal(typed.canGenerate, true);
   assert.equal(typed.phase, "ready_to_generate");
-
   await applyThoughtState({
     reelId: made.reel.id,
     expectedRevision: 1,
@@ -195,4 +194,27 @@ test("R2: typed diagnosis gaps do not block the script button; an untyped gap st
   const blocked = await listScriptWorkspace(made.reel.id);
   assert.equal(blocked.phase, "not_ready");
   assert.equal(blocked.nextQuestion?.gapId, "old");
+});
+
+test("R2: the script button builds a script while a typed gap is open (regression of the live NOT_READY finding)", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+  });
+  const { createThoughtFromText } = await import("../src/lib/thought-create");
+  const { applyThoughtState, getThoughtState } = await import("../src/lib/thought-state");
+  const { generateV05Script } = await import("../src/lib/v05-script");
+  const made = await createThoughtFromText({ title: "Сборка с пробелом", body: "Я хочу сказать, что чай остыл.", idempotencyKey: "r2-ready-gen" });
+  await applyThoughtState({
+    reelId: made.reel.id,
+    expectedRevision: 0,
+    patch: { openGaps: [{ id: "gap_no_episode", text: "Нет случая.", status: "open", kind: "no_episode" }] },
+  });
+  const built = await generateV05Script(made.reel.id, { idempotencyKey: "r2-ready-gen-1" }, (async () => ({
+    text: JSON.stringify({ script: "Чай остыл.", changes: ["Оставил вашу формулировку."] }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  })) as never);
+  assert.equal(built.viewing?.body, "Чай остыл.");
+  assert.equal((await getThoughtState(made.reel.id)).openGaps[0].status, "open", "building a script does not close a gap");
 });

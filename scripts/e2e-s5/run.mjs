@@ -46,7 +46,7 @@ for (const [vp, size] of [["1280", { width: 1280, height: 800 }], ["390", { widt
   }, p);
   await step(vp, "04 script: build by button", async () => {
     await p.getByRole("tab", { name: "Сценарий" }).click();
-    await p.getByRole("button", { name: "Собрать сценарий" }).click();
+    await p.getByRole("button", { name: "Сгенерировать сценарий" }).click();
     await p.waitForTimeout(4000);
     await p.screenshot({ path: `${S}/shots/${vp}-04-script.png` });
     const txt = await p.locator("main").innerText();

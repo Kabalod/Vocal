@@ -129,6 +129,8 @@ export interface ScriptWorkspaceDto {
   blockReason: string | null;
   /** R4: what the generated version changed and why (human phrases); empty for versions without a record. */
   viewingChanges: string[];
+  /** R4: the stored base of the latest take, shown to the author together with the generate button. */
+  base: { text: string; label: string } | null;
   /** R4: "I understood it like this", built from the thought state without a model call; null when there is nothing to say. */
   understanding: string | null;
   nextQuestion: ScriptNextQuestionDto | null;
