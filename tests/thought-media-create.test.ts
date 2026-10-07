@@ -161,3 +161,32 @@ test("thought media create validates, is idempotent, and does not mint a script 
   assert.equal(title, fallbackThoughtTitle("Первая фраза. Дальше текст."));
   assert.equal((await prisma.reel.findUnique({ where: { id: titleReel.id } }))?.title, "Первая фраза");
 });
+
+test("parallel creates with one key never fail and never duplicate (stress: 12 pairs, mixed sizes)", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  process.env.VOCAL_SKIP_JOB_ENQUEUE = "1";
+  t.after(async () => {
+    delete process.env.VOCAL_SKIP_JOB_ENQUEUE;
+    await prisma.$disconnect();
+    await resetPrismaClient();
+  });
+  const { POST } = await import("../src/app/api/thoughts/media/route");
+  const post = (key: string, size: number) => {
+    const form = new FormData();
+    form.set("file", new File([new Uint8Array(size).fill(7)], "clip.webm", { type: "audio/webm" }));
+    form.set("inputType", "audio");
+    form.set("idempotencyKey", key);
+    return POST(new Request("http://vocal.local/api/thoughts/media", { method: "POST", body: form }));
+  };
+  for (let i = 0; i < 12; i += 1) {
+    const size = 1024 * (1 + (i % 4) * 200);
+    // Three requests with the same key at once: one creates, the others replay.
+    const responses = await Promise.all([post(`stress-${i}`, size), post(`stress-${i}`, size), post(`stress-${i}`, size)]);
+    for (const response of responses) assert.ok([200, 201].includes(response.status), `pair ${i}: status ${response.status}`);
+    const ids = await Promise.all(responses.map(async (response) => (await response.json()).reel.id as string));
+    assert.equal(new Set(ids).size, 1, `pair ${i}: one thought`);
+  }
+  assert.equal(await prisma.reel.count(), 12);
+  assert.equal(await prisma.take.count(), 12);
+  assert.equal(await prisma.job.count(), 12);
+});

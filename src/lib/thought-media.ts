@@ -1,4 +1,5 @@
 import path from "node:path";
+import { enqueueByKey } from "@/lib/write-queue";
 import { assertThoughtKeyNotDeleted } from "@/lib/data-deletion";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -107,6 +108,19 @@ export async function createThoughtFromMedia(input: {
     throw new ReelError("Нужен ключ повтора запроса.", "IDEMPOTENCY_REQUIRED");
   }
   assertThoughtMediaFile(input.file, input.inputType);
+  // Two requests with one key are serialized in this process (one app instance, S0.1): the second then finds the first
+  // one's thought, take and job and replays them instead of racing on the unique key and failing with a 500.
+  return enqueueByKey(`thought-media:${ownerUserId()}:${idempotencyKey}`, () =>
+    createThoughtFromMediaOnce({ ...input, idempotencyKey }),
+  );
+}
+
+async function createThoughtFromMediaOnce(input: {
+  file: File;
+  inputType: TakeInputType;
+  idempotencyKey: string;
+}): Promise<{ reel: ReelDto; take: TakeDto; job: JobDto; created: boolean }> {
+  const idempotencyKey = input.idempotencyKey;
 
   const existing = await loadByKey(idempotencyKey);
   if (existing?.take?.mediaStatus === "ready" && existing.job) {
