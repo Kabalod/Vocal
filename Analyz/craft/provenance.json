@@ -1,0 +1,492 @@
+{
+ "version": "k2-1",
+ "note": "Происхождение кандидатов: семейства принципов, авторы, id роликов. Только в разборе; в рантайм не попадает.",
+ "candidates": {
+  "cand_p01": {
+   "family": "narrow_categorical",
+   "principleHeadings": {
+    "chemistry_by_olga": [
+     "Факт реален, катастрофический вывод — нет"
+    ],
+    "marysstories": [
+     "GP3. Условный ответ вместо бинарного"
+    ],
+    "doctor_belokon": [
+     "Сузить категоричное утверждение",
+     "Оператор границы вывода"
+    ],
+    "doctor_komarovskiy": [
+     "Условное опровержение вместо бинарного",
+     "Шкала между крайностями"
+    ],
+    "labkovskiyofficial": [
+     "Контроль эпистемической уверенности"
+    ],
+    "ludmila.petranovskaya": [
+     "Сгенерировать реалистичный остаток"
+    ]
+   },
+   "authorsQuoteVerified": [
+    "chemistry_by_olga",
+    "marysstories"
+   ],
+   "authorsUnverified": [
+    "doctor_belokon",
+    "doctor_komarovskiy",
+    "labkovskiyofficial",
+    "ludmila.petranovskaya"
+   ],
+   "hadunkin": null,
+   "evidenceReelIds": [
+    "C1cLekwt5kQ",
+    "C9PpQYjN0OT",
+    "DAHUH-ktuFs",
+    "DWmRFd-jAla",
+    "Daj83coIAHM",
+    "DZDRhKVolvp"
+   ],
+   "basis": "families"
+  },
+  "cand_p02": {
+   "family": "separate_concepts",
+   "principleHeadings": {
+    "chemistry_by_olga": [
+     "Перепутаны понятия"
+    ],
+    "alina_telling": [
+     "Диагностическое переименование"
+    ],
+    "doctor_belokon": [
+     "Развести смешиваемые категории",
+     "Разделить конкурирующие тезисы"
+    ],
+    "doctor_komarovskiy": [
+     "Одно опорное различение"
+    ],
+    "irina_hakamada": [
+     "Функциональное противопоставление"
+    ],
+    "ludmila.petranovskaya": [
+     "Развести смешанные понятия"
+    ]
+   },
+   "authorsQuoteVerified": [
+    "chemistry_by_olga"
+   ],
+   "authorsUnverified": [
+    "alina_telling",
+    "doctor_belokon",
+    "doctor_komarovskiy",
+    "irina_hakamada",
+    "ludmila.petranovskaya"
+   ],
+   "hadunkin": null,
+   "evidenceReelIds": [
+    "C7or6uoN6vm",
+    "C9PpQYjN0OT"
+   ],
+   "basis": "families"
+  },
+  "cand_p03": {
+   "family": "check_premise",
+   "principleHeadings": {
+    "hadunkin": [
+     "Вынеси аксиому «мир так устроен» в поле, где возможен отказ."
+    ],
+    "lermontova.career": [
+     "Уточнить проблему через контраст"
+    ],
+    "alina_telling": [
+     "Уточнение исходной рамки через механизм"
+    ],
+    "irina_hakamada": [
+     "Проверка рамки вопроса"
+    ],
+    "labkovskiyofficial": [
+     "Проверка предпосылки вопроса"
+    ],
+    "ludmila.petranovskaya": [
+     "Остановить автоматическую рамку"
+    ],
+    "natalia.remish": [
+     "Проверка смысловой подмены"
+    ]
+   },
+   "authorsQuoteVerified": [
+    "lermontova.career"
+   ],
+   "authorsUnverified": [
+    "alina_telling",
+    "irina_hakamada",
+    "labkovskiyofficial",
+    "ludmila.petranovskaya",
+    "natalia.remish"
+   ],
+   "hadunkin": "принципы сформулированы пересказом, цитаты не дословны (0 из 6)",
+   "evidenceReelIds": [
+    "DaS5xcOsJmM",
+    "DboIv5kMB4f",
+    "DbJHNvOMPGw",
+    "Da_EDoTIxjG",
+    "DZxeSOiID-Q"
+   ],
+   "basis": "families"
+  },
+  "cand_p04": {
+   "family": "abstraction_to_model",
+   "principleHeadings": {
+    "ira_podrez": [
+     "Вынести абстракцию в простую модель"
+    ],
+    "lermontova.career": [
+     "Перевести абстракцию в модель"
+    ],
+    "alina_telling": [
+     "Тест числа на модель",
+     "Аналогия как карта механизма",
+     "Мини-модель с числами"
+    ],
+    "doctor_belokon": [
+     "Перевести число в решение"
+    ],
+    "irina_hakamada": [
+     "Заземляющая модель"
+    ],
+    "ludmila.petranovskaya": [
+     "Материализовать механизм сценой"
+    ]
+   },
+   "authorsQuoteVerified": [
+    "ira_podrez",
+    "lermontova.career"
+   ],
+   "authorsUnverified": [
+    "alina_telling",
+    "doctor_belokon",
+    "irina_hakamada",
+    "ludmila.petranovskaya"
+   ],
+   "hadunkin": null,
+   "evidenceReelIds": [
+    "Da0czvdsi1s",
+    "DY4y8zQoAp-",
+    "DbfLCIxBytn"
+   ],
+   "basis": "families"
+  },
+  "cand_p05": {
+   "family": "case_to_rule",
+   "principleHeadings": {
+    "ira_podrez": [
+     "Получить правило из личного эпизода"
+    ],
+    "alina_telling": [
+     "Частный случай → скрытая категория → правило"
+    ],
+    "doctor_belokon": [
+     "Случай → механизм → правило",
+     "Личный опыт → общий вопрос"
+    ],
+    "irina_hakamada": [
+     "Случай в переносимое правило"
+    ],
+    "natalia.remish": [
+     "Частный случай как иллюстрация, а не доказательство"
+    ]
+   },
+   "authorsQuoteVerified": [
+    "ira_podrez"
+   ],
+   "authorsUnverified": [
+    "alina_telling",
+    "doctor_belokon",
+    "irina_hakamada",
+    "natalia.remish"
+   ],
+   "hadunkin": null,
+   "evidenceReelIds": [
+    "Db-S6X-octp",
+    "Db5Al1QsHiw",
+    "DbTpNbep1lR"
+   ],
+   "basis": "families"
+  },
+  "cand_p06": {
+   "family": "redefine_by_criterion",
+   "principleHeadings": {
+    "hadunkin": [
+     "Переопредели слово, из-за которого лозунг казался обязательным."
+    ],
+    "ira_podrez": [
+     "Переопределить слово через критерий"
+    ],
+    "alina_telling": [
+     "Типология по функции"
+    ],
+    "irina_hakamada": [
+     "Диагноз в действие"
+    ],
+    "labkovskiyofficial": [
+     "Развилка по критерию",
+     "Перевод профессионального ярлыка в наблюдение"
+    ]
+   },
+   "authorsQuoteVerified": [
+    "ira_podrez"
+   ],
+   "authorsUnverified": [
+    "alina_telling",
+    "irina_hakamada",
+    "labkovskiyofficial"
+   ],
+   "hadunkin": "принципы сформулированы пересказом, цитаты не дословны (0 из 6)",
+   "evidenceReelIds": [
+    "DbsjCebBI-P",
+    "DW_C0IPjFoO",
+    "DbEDiLEtfun"
+   ],
+   "basis": "families"
+  },
+  "cand_p07": {
+   "family": "unfold_vague",
+   "principleHeadings": {
+    "hadunkin": [
+     "Сними популярную причину, поставь скрытый механизм."
+    ],
+    "marysstories": [
+     "GP2. От ярлыка к механизму"
+    ],
+    "ira_podrez": [
+     "Заменить очевидную причину промежуточным механизмом",
+     "Развернуть расплывчатую формулировку до мотива и цены"
+    ],
+    "alina_telling": [
+     "Диагноз отсутствующего звена"
+    ],
+    "doctor_belokon": [
+     "Объект → устройство → выбор"
+    ],
+    "ludmila.petranovskaya": [
+     "Построить дерево причин вместо одного рецепта"
+    ],
+    "natalia.remish": [
+     "От поведения к проверяемому механизму"
+    ]
+   },
+   "authorsQuoteVerified": [
+    "ira_podrez",
+    "marysstories"
+   ],
+   "authorsUnverified": [
+    "alina_telling",
+    "doctor_belokon",
+    "ludmila.petranovskaya",
+    "natalia.remish"
+   ],
+   "hadunkin": "принципы сформулированы пересказом, цитаты не дословны (0 из 6)",
+   "evidenceReelIds": [
+    "DbvHWcIhkfw",
+    "DbQ2_7ihCj1",
+    "DcBQm01It5r"
+   ],
+   "basis": "ira_podrez_longform"
+  },
+  "cand_p08": {
+   "family": "unfold_vague",
+   "principleHeadings": {
+    "hadunkin": [
+     "Сними популярную причину, поставь скрытый механизм."
+    ],
+    "marysstories": [
+     "GP2. От ярлыка к механизму"
+    ],
+    "ira_podrez": [
+     "Заменить очевидную причину промежуточным механизмом",
+     "Развернуть расплывчатую формулировку до мотива и цены"
+    ],
+    "alina_telling": [
+     "Диагноз отсутствующего звена"
+    ],
+    "doctor_belokon": [
+     "Объект → устройство → выбор"
+    ],
+    "ludmila.petranovskaya": [
+     "Построить дерево причин вместо одного рецепта"
+    ],
+    "natalia.remish": [
+     "От поведения к проверяемому механизму"
+    ]
+   },
+   "authorsQuoteVerified": [
+    "ira_podrez",
+    "marysstories"
+   ],
+   "authorsUnverified": [
+    "alina_telling",
+    "doctor_belokon",
+    "ludmila.petranovskaya",
+    "natalia.remish"
+   ],
+   "hadunkin": "принципы сформулированы пересказом, цитаты не дословны (0 из 6)",
+   "evidenceReelIds": [
+    "DbQ2_7ihCj1",
+    "DcBMs-IoUuW"
+   ],
+   "basis": "ira_podrez_longform"
+  },
+  "cand_p09": {
+   "family": "case_to_rule",
+   "principleHeadings": {
+    "ira_podrez": [
+     "Получить правило из личного эпизода"
+    ],
+    "alina_telling": [
+     "Частный случай → скрытая категория → правило"
+    ],
+    "doctor_belokon": [
+     "Случай → механизм → правило",
+     "Личный опыт → общий вопрос"
+    ],
+    "irina_hakamada": [
+     "Случай в переносимое правило"
+    ],
+    "natalia.remish": [
+     "Частный случай как иллюстрация, а не доказательство"
+    ]
+   },
+   "authorsQuoteVerified": [
+    "ira_podrez"
+   ],
+   "authorsUnverified": [
+    "alina_telling",
+    "doctor_belokon",
+    "irina_hakamada",
+    "natalia.remish"
+   ],
+   "hadunkin": null,
+   "evidenceReelIds": [
+    "DcBQm01It5r",
+    "DcBMs-IoUuW",
+    "DcsbfVwzciw"
+   ],
+   "basis": "ira_podrez_longform"
+  },
+  "cand_p10": {
+   "family": "unfold_vague",
+   "principleHeadings": {
+    "hadunkin": [
+     "Сними популярную причину, поставь скрытый механизм."
+    ],
+    "marysstories": [
+     "GP2. От ярлыка к механизму"
+    ],
+    "ira_podrez": [
+     "Заменить очевидную причину промежуточным механизмом",
+     "Развернуть расплывчатую формулировку до мотива и цены"
+    ],
+    "alina_telling": [
+     "Диагноз отсутствующего звена"
+    ],
+    "doctor_belokon": [
+     "Объект → устройство → выбор"
+    ],
+    "ludmila.petranovskaya": [
+     "Построить дерево причин вместо одного рецепта"
+    ],
+    "natalia.remish": [
+     "От поведения к проверяемому механизму"
+    ]
+   },
+   "authorsQuoteVerified": [
+    "ira_podrez",
+    "marysstories"
+   ],
+   "authorsUnverified": [
+    "alina_telling",
+    "doctor_belokon",
+    "ludmila.petranovskaya",
+    "natalia.remish"
+   ],
+   "hadunkin": "принципы сформулированы пересказом, цитаты не дословны (0 из 6)",
+   "evidenceReelIds": [],
+   "basis": "ira_podrez_longform"
+  },
+  "cand_p11": {
+   "family": "abstraction_to_model",
+   "principleHeadings": {
+    "ira_podrez": [
+     "Вынести абстракцию в простую модель"
+    ],
+    "lermontova.career": [
+     "Перевести абстракцию в модель"
+    ],
+    "alina_telling": [
+     "Тест числа на модель",
+     "Аналогия как карта механизма",
+     "Мини-модель с числами"
+    ],
+    "doctor_belokon": [
+     "Перевести число в решение"
+    ],
+    "irina_hakamada": [
+     "Заземляющая модель"
+    ],
+    "ludmila.petranovskaya": [
+     "Материализовать механизм сценой"
+    ]
+   },
+   "authorsQuoteVerified": [
+    "ira_podrez",
+    "lermontova.career"
+   ],
+   "authorsUnverified": [
+    "alina_telling",
+    "doctor_belokon",
+    "irina_hakamada",
+    "ludmila.petranovskaya"
+   ],
+   "hadunkin": null,
+   "evidenceReelIds": [],
+   "basis": "ira_podrez_longform"
+  },
+  "cand_p12": {
+   "family": "check_premise",
+   "principleHeadings": {
+    "hadunkin": [
+     "Вынеси аксиому «мир так устроен» в поле, где возможен отказ."
+    ],
+    "lermontova.career": [
+     "Уточнить проблему через контраст"
+    ],
+    "alina_telling": [
+     "Уточнение исходной рамки через механизм"
+    ],
+    "irina_hakamada": [
+     "Проверка рамки вопроса"
+    ],
+    "labkovskiyofficial": [
+     "Проверка предпосылки вопроса"
+    ],
+    "ludmila.petranovskaya": [
+     "Остановить автоматическую рамку"
+    ],
+    "natalia.remish": [
+     "Проверка смысловой подмены"
+    ]
+   },
+   "authorsQuoteVerified": [
+    "lermontova.career"
+   ],
+   "authorsUnverified": [
+    "alina_telling",
+    "irina_hakamada",
+    "labkovskiyofficial",
+    "ludmila.petranovskaya",
+    "natalia.remish"
+   ],
+   "hadunkin": "принципы сформулированы пересказом, цитаты не дословны (0 из 6)",
+   "evidenceReelIds": [],
+   "basis": "ira_podrez_longform"
+  }
+ }
+}

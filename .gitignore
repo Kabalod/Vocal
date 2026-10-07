@@ -62,3 +62,6 @@ tsconfig.tsbuildinfo
 .codex
 tmp-backup-dir.txt
 /backups/
+
+# Owner-supplied raw transcripts for authors missing from the repo (K3 verification only)
+Analyz/_private_raw/
