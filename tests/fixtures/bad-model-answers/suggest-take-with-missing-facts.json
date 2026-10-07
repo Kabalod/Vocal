@@ -1,0 +1,36 @@
+{
+ "name": "suggest-take-with-missing-facts",
+ "origin": "observed live 2026-10-07 (30-turn measurement, ACTION_EVIDENCE): evidenceRefs point at facts that do not exist",
+ "responses": [
+  "{\"action\":\"suggest_take\",\"mainIdea\":\"страх справиться\",\"takeTask\":\"рассказать о первом заказе\",\"evidenceRefs\":[\"fact_missing\"]}"
+ ],
+ "expect": {
+  "turnFails": false,
+  "modelCalls": 1,
+  "questionIsNot": "рассказать о первом заказе",
+  "takeTaskStored": false,
+  "factsAdded": 0,
+  "gapsClosed": 0,
+  "discarded": [
+   "downgrade_evidence"
+  ]
+ },
+ "setup": {
+  "gaps": [
+   {
+    "id": "gap_no_thesis",
+    "text": "Нет вывода.",
+    "status": "open",
+    "kind": "no_thesis"
+   },
+   {
+    "id": "gap_no_episode",
+    "text": "Нет случая.",
+    "status": "open",
+    "kind": "no_episode"
+   }
+  ],
+  "priorAuthorTurn": true
+ },
+ "author": "Это был небольшой заказ на сайт."
+}

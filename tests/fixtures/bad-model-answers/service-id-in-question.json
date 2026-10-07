@@ -1,0 +1,35 @@
+{
+ "name": "service-id-in-question",
+ "origin": "shape guarded since R3; not seen live (the guard did not fire in R5)",
+ "responses": [
+  "{\"action\":\"ask_question\",\"question\":\"Что вы думаете про __REEL__?\",\"clarificationReason\":\"нужно уточнение\",\"whyUnknown\":\"нет\"}",
+  "{\"action\":\"ask_question\",\"question\":\"Что вы думаете про __REEL__ ещё?\",\"clarificationReason\":\"нужно уточнение\",\"whyUnknown\":\"нет\"}"
+ ],
+ "expect": {
+  "turnFails": false,
+  "modelCalls": 2,
+  "questionIsNot": "Что вы думаете про __REEL__?",
+  "questionHasNoId": true,
+  "factsAdded": 0,
+  "gapsClosed": 0,
+  "discarded": []
+ },
+ "setup": {
+  "gaps": [
+   {
+    "id": "gap_no_thesis",
+    "text": "Нет вывода.",
+    "status": "open",
+    "kind": "no_thesis"
+   },
+   {
+    "id": "gap_no_episode",
+    "text": "Нет случая.",
+    "status": "open",
+    "kind": "no_episode"
+   }
+  ],
+  "priorAuthorTurn": true
+ },
+ "author": "Это был небольшой заказ на сайт."
+}

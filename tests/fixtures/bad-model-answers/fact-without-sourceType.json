@@ -1,0 +1,35 @@
+{
+ "name": "fact-without-sourceType",
+ "origin": "observed live 2026-10-07 (12-turn measurement, 3 turns): fact had text and the right sourceId but no sourceType; the real author answer was lost",
+ "responses": [
+  "{\"action\":\"ask_question\",\"question\":\"Что было дальше?\",\"clarificationReason\":\"нужно продолжение\",\"whyUnknown\":\"дальше не сказано\",\"thoughtUpdate\":{\"fact\":{\"text\":\"Меня три раза звали на встречи.\",\"sourceId\":\"__AUTHOR__\"},\"closeGapIds\":[]}}"
+ ],
+ "expect": {
+  "turnFails": false,
+  "modelCalls": 1,
+  "questionIs": "Что было дальше?",
+  "factsAdded": 1,
+  "factText": "Меня три раза звали на встречи.",
+  "factSourceIsAuthorMessage": true,
+  "gapsClosed": 0,
+  "discarded": []
+ },
+ "setup": {
+  "gaps": [
+   {
+    "id": "gap_no_thesis",
+    "text": "Нет вывода.",
+    "status": "open",
+    "kind": "no_thesis"
+   },
+   {
+    "id": "gap_no_episode",
+    "text": "Нет случая.",
+    "status": "open",
+    "kind": "no_episode"
+   }
+  ],
+  "priorAuthorTurn": true
+ },
+ "author": "Это был небольшой заказ на сайт."
+}

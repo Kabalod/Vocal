@@ -1,0 +1,38 @@
+{
+ "name": "fact-with-foreign-sourceId",
+ "origin": "shape guarded since R2: sourceId names an earlier author message; the server replaces it and counts the replacement (not seen live in R5: 0 of 13 facts)",
+ "responses": [
+  "{\"action\":\"ask_question\",\"question\":\"Что было дальше?\",\"clarificationReason\":\"нужно продолжение\",\"whyUnknown\":\"дальше не сказано\",\"thoughtUpdate\":{\"fact\":{\"text\":\"Время не исчезает.\",\"sourceType\":\"dialogue_message\",\"sourceId\":\"__OLDER__\"},\"closeGapIds\":[]}}"
+ ],
+ "expect": {
+  "turnFails": false,
+  "modelCalls": 1,
+  "questionIs": "Что было дальше?",
+  "factsAdded": 1,
+  "factText": "Время не исчезает.",
+  "factSourceIsAuthorMessage": true,
+  "factIdIsServerMade": true,
+  "gapsClosed": 0,
+  "discarded": [
+   "fact_source_replaced"
+  ]
+ },
+ "setup": {
+  "gaps": [
+   {
+    "id": "gap_no_thesis",
+    "text": "Нет вывода.",
+    "status": "open",
+    "kind": "no_thesis"
+   },
+   {
+    "id": "gap_no_episode",
+    "text": "Нет случая.",
+    "status": "open",
+    "kind": "no_episode"
+   }
+  ],
+  "priorAuthorTurn": true
+ },
+ "author": "Это был небольшой заказ на сайт."
+}
