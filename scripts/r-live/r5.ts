@@ -190,7 +190,11 @@ async function main() {
   const states = await prisma.thoughtState.findMany({ select: { factsJson: true } });
   const facts = states.flatMap((s) => JSON.parse(s.factsJson) as { sourceType: string; sourceId: string }[]);
   const factsWithoutAuthorReply = facts.filter((f) => f.sourceType !== "dialogue_message" || !userIds.has(f.sourceId)).length;
-  const failed = results.filter((r) => r.outcome !== "ok");
+  const failedByThrow = results.filter((r) => r.outcome !== "ok");
+  const errorRows = msgs.filter((m) => m.role === "assistant" && m.status === "error");
+  const errorKinds = errorRows.reduce<Record<string, number>>((a, m) => ((a[m.body.slice(0, 60)] = (a[m.body.slice(0, 60)] ?? 0) + 1), a), {});
+  // A turn is failed if the call threw OR an error message was stored for it (timeouts are stored, not thrown).
+  const failed = failedByThrow.length >= errorRows.length ? failedByThrow : errorRows.map((_, i) => ({ dialogue: "", turn: i, outcome: "stored_error" }));
   const calls = await prisma.aiCall.findMany({ select: { kind: true, status: true, promptTokens: true, completionTokens: true } });
   const sum: Record<string, { calls: number; prompt: number; completion: number }> = {};
   for (const c of calls) {
@@ -207,6 +211,7 @@ async function main() {
     failedTurns: failed.length,
     failedShare: +(failed.length / Math.max(1, results.length)).toFixed(3),
     failedByOutcome: failed.reduce<Record<string, number>>((a, r) => ((a[r.outcome] = (a[r.outcome] ?? 0) + 1), a), {}),
+    storedErrorMessages: errorKinds,
     criterion1_failedShareAtMost25pct: failed.length / Math.max(1, results.length) <= 0.25,
     discardedUpdates: discarded,
     discardedFactsShare: +(((discarded.fact_invalid ?? 0)) / Math.max(1, results.length)).toFixed(3),
