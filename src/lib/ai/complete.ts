@@ -27,7 +27,10 @@ function mockedCompleteJson(label?: string): { text: string; usage: { promptToke
   }
   if (label === "script") {
     return {
-      text: JSON.stringify({ script: "Мок прямой речи для следующего дубля." }),
+      text: JSON.stringify({
+        script: "Мок прямой речи для следующего дубля.",
+        changes: ["Убрал повтор и оставил ваши слова.", "Добавил короткий переход к выводу."],
+      }),
       usage: { promptTokens: 1, completionTokens: 1 },
     };
   }

@@ -372,7 +372,7 @@ export function ScriptEditor({
           <p className="max-h-48 overflow-y-auto whitespace-pre-wrap text-sm text-muted">{workspace.base.text}</p>
         </div>
       ) : null}
-      {workspace?.understanding && !generating && !thoughtCompleted ? (
+      {workspace?.understanding && !generating && !thoughtCompleted && (workspace.readyCount === 0 || workspace.stale) ? (
         <div className="vocal-card p-4" data-script-understanding>
           <p className="text-sm">{workspace.understanding}</p>
         </div>
