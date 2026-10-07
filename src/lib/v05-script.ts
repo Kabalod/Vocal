@@ -484,7 +484,8 @@ function evaluateReadiness(material: V05Material): {
       nextQuestion: { text: "Какую точную расшифровку рабочего дубля использовать?", gapId: null },
     };
   }
-  const openGaps = material.thought.openGaps.filter((gap) => gap.status === "open");
+  // R2: typed gaps come from the take diagnosis and are questions for the author, not a block. Untyped gaps still block.
+  const openGaps = material.thought.openGaps.filter((gap) => gap.status === "open" && !gap.kind);
   if (openGaps.length > 0) {
     const gap = openGaps[0];
     return {

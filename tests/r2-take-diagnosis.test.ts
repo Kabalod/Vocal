@@ -162,3 +162,37 @@ test("R2: the dialogue turn diagnoses the take first, and a failed diagnosis doe
   assert.ok(reply.messages.some((row) => row.kind === "question"), "the dialogue works without a diagnosis");
   assert.equal((await getThoughtState(failing.reel.id)).openGaps.length, 0);
 });
+
+test("R2: typed diagnosis gaps do not block the script button; an untyped gap still does", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+  });
+  const { createThoughtFromText } = await import("../src/lib/thought-create");
+  const { applyThoughtState } = await import("../src/lib/thought-state");
+  const { listScriptWorkspace } = await import("../src/lib/scripts");
+  const made = await createThoughtFromText({ title: "Кнопка", body: "Я хочу сказать, что чай остыл.", idempotencyKey: "r2-ready" });
+  await applyThoughtState({
+    reelId: made.reel.id,
+    expectedRevision: 0,
+    patch: { openGaps: [{ id: "gap_no_episode", text: "Нет случая.", status: "open", kind: "no_episode" }] },
+  });
+  const typed = await listScriptWorkspace(made.reel.id);
+  assert.equal(typed.canGenerate, true);
+  assert.equal(typed.phase, "ready_to_generate");
+
+  await applyThoughtState({
+    reelId: made.reel.id,
+    expectedRevision: 1,
+    patch: {
+      openGaps: [
+        { id: "gap_no_episode", text: "Нет случая.", status: "open", kind: "no_episode" },
+        { id: "old", text: "Какая ваша позиция?", status: "open" },
+      ],
+    },
+  });
+  const blocked = await listScriptWorkspace(made.reel.id);
+  assert.equal(blocked.phase, "not_ready");
+  assert.equal(blocked.nextQuestion?.gapId, "old");
+});
