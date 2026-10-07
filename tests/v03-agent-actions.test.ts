@@ -900,6 +900,11 @@ test("the server owns the fact source: a fact without sourceType is kept, a fore
   const newest = second.facts.find((fact) => fact.text === "Потом я переехал.");
   assert.equal(newest?.sourceId, secondUser.id, "a sourceId pointing at another message is replaced, never stored");
   assert.equal(second.facts.filter((fact) => fact.sourceId === firstUser.id).length, 1, "the earlier message still owns only its own fact");
+  assert.equal(
+    (await discardedUpdates(prisma, reel.id)).filter((reason) => reason === "fact_source_replaced").length,
+    2,
+    "both foreign or invented sourceIds were counted (the first reply invented 'msg', the second named an older message)",
+  );
 
   const emptyText = await sendDialogueMessage(reel.id, { text: "И ещё.", idempotencyKey: "v03-fact-src-3" }, async () => ({
     text: JSON.stringify({

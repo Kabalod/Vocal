@@ -4,7 +4,7 @@
 // Run: DATABASE_URL=$TEST_DATABASE_URL DIRECT_URL=$TEST_DATABASE_URL node --env-file=.env --import tsx scripts/r-live/r5.ts
 // Pause 3-5 s between turns, one retry after a 429. Prints counters, ids and the two off-topic examples (our own short
 // replies and the model's question), never keys, prompts or the raw take texts.
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { resetPrismaClient } from "../../src/lib/db";
 import { closePostgresTestDb, openPostgresTestDb } from "../../tests/helpers/postgres-test-db";
@@ -135,6 +135,31 @@ async function main() {
     }
   }
 
+  const mdArg = process.argv.find((a) => a.startsWith("--md="))?.slice(5);
+  if (mdArg) {
+    const lines = [
+      "# R5: диалоги целиком",
+      "",
+      "Реплики автора здесь заранее подготовленные (список в `R5_REPORT.md`), модель их не генерировала. Первое сообщение сырых дублей (текст из Analyz) не приводится, только id.",
+      "",
+    ];
+    let idx = 0;
+    for (const [label, reelId] of plans.map((p, i) => [p.label, reelIds[i]] as const)) {
+      idx += 1;
+      if (!reelId) continue;
+      const thread = await prisma.dialogueThread.findUnique({ where: { reelId } });
+      const rows = thread ? await prisma.dialogueMessage.findMany({ where: { threadId: thread.id }, orderBy: { createdAt: "asc" } }) : [];
+      lines.push(`## ${idx}. ${label}`, "");
+      for (const row of rows) {
+        if (row.role === "user") lines.push(`**Автор:** ${row.body}`, "");
+        else if (row.status === "done") lines.push(`**Vocal** (${row.kind}): ${row.body}`, "");
+        else if (row.status === "error") lines.push(`**Vocal** [ошибка хода]: ${row.body}`, "");
+      }
+      const ws = scripts[label] ?? [];
+      lines.push(`_Сборка сценария: ${ws.join(", ") || "не выполнялась"}_`, "");
+    }
+    writeFileSync(mdArg, lines.join("\n"));
+  }
   const msgs = await prisma.dialogueMessage.findMany({ select: { role: true, id: true, body: true, payloadJson: true, status: true } });
   const assistant = msgs.filter((m) => m.role === "assistant" && m.status === "done");
   const userIds = new Set(msgs.filter((m) => m.role === "user").map((m) => m.id));
@@ -164,6 +189,11 @@ async function main() {
     criterion1_failedShareAtMost25pct: failed.length / Math.max(1, results.length) <= 0.25,
     discardedUpdates: discarded,
     discardedFactsShare: +(((discarded.fact_invalid ?? 0)) / Math.max(1, results.length)).toFixed(3),
+    factSourceReplaced: discarded.fact_source_replaced ?? 0,
+    factSourceReplacedShareOfFacts: +(((discarded.fact_source_replaced ?? 0)) / Math.max(1, facts.length)).toFixed(3),
+    downgrades: { evidence: discarded.downgrade_evidence ?? 0, gap: discarded.downgrade_gap ?? 0 },
+    updatesDroppedAtCommit: discarded.update_dropped_at_commit ?? 0,
+    neutralQuestionsAfterIdLeak: assistant.filter((m) => /служебными данными заменён/.test(m.payloadJson)).length,
     scripts,
     criterion2_allScriptsOkWithChanges: allScripts.length > 0 && allScripts.every((s) => /^ok\(changes=[1-9]/.test(s)),
     leaksToAuthor: leaks,

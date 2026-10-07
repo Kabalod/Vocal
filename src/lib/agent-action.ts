@@ -84,6 +84,8 @@ export const DISCARD_REASONS = [
   "answered_gap_mismatch",
   "redirect_state",
   "fact_invalid",
+  /** Counter only: the model named another message as the source; the server set the author's current message. */
+  "fact_source_replaced",
   "downgrade_evidence",
   "downgrade_gap",
   "update_dropped_at_commit",
@@ -136,6 +138,10 @@ export function parseAgentReply(raw: unknown, ctx?: { authorMessageId: string | 
     if (rawUpdate.fact !== null && rawUpdate.fact !== undefined) {
       const fact = normalizeFactForAuthorMessage(rawUpdate.fact, ctx.authorMessageId);
       if (!fact) discarded.push("fact_invalid");
+      else {
+        const claimed = (rawUpdate.fact as { sourceId?: unknown }).sourceId;
+        if (typeof claimed === "string" && claimed.trim() && claimed !== ctx.authorMessageId) discarded.push("fact_source_replaced");
+      }
       candidate = { ...rawUpdate, fact };
     }
   }
