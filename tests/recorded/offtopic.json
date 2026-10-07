@@ -1,0 +1,122 @@
+{
+ "name": "offtopic",
+ "description": "Оффтоп: корректный redirect_to_task и поломанный (без currentTask, как наблюдалось в R5); автор отвечает случаем, а модель закрывает пробел и в том же ответе задаёт вопрос про него же (ссылка снимается, факт сохраняется)",
+ "note": "Ответы написаны Claude вручную на реальные promptText (запись: VOCAL_AI_RECORD_PROMPTS). Это проверка нашего кода на заданных ответах; она НЕ доказывает поведение рабочей модели Groq.",
+ "thought": {
+  "title": "Первый клиент",
+  "body": "Мой первый клиент написал мне через знакомых, и я чуть не отказался, потому что боялся не справиться."
+ },
+ "answers": [
+  {
+   "label": "take-diagnosis",
+   "response": {
+    "contentMode": "personal_story",
+    "gaps": [
+     {
+      "kind": "no_episode",
+      "text": "Нет конкретного случая, на котором держится мысль."
+     }
+    ]
+   }
+  },
+  {
+   "label": "dialogue",
+   "userContains": [
+    "Ответ автора: уточни"
+   ],
+   "response": {
+    "action": "ask_question",
+    "question": "О каком одном конкретном случае с первым клиентом вы думаете?",
+    "gapId": "gap_no_episode",
+    "whyUnknown": "случая нет",
+    "thoughtUpdate": {
+     "fact": null,
+     "closeGapIds": []
+    }
+   }
+  },
+  {
+   "label": "dialogue",
+   "userContains": [
+    "Ответ автора: А какая сегодня погода?"
+   ],
+   "response": {
+    "action": "redirect_to_task",
+    "currentTask": "вернуться к истории про первого клиента"
+   }
+  },
+  {
+   "label": "dialogue",
+   "userContains": [
+    "Ответ автора: Расскажи анекдот."
+   ],
+   "response": "{\"action\":\"redirect_to_task\"}"
+  },
+  {
+   "label": "dialogue",
+   "userContains": [
+    "Ответ автора: Это был небольшой заказ на сайт для кофейни."
+   ],
+   "response": {
+    "action": "ask_question",
+    "question": "Что вы почувствовали, когда пришло это сообщение?",
+    "gapId": "gap_no_episode",
+    "whyUnknown": "нет реакции",
+    "thoughtUpdate": {
+     "fact": {
+      "text": "Это был небольшой заказ на сайт для кофейни.",
+      "sourceType": "dialogue_message",
+      "sourceId": "__AUTHOR_MESSAGE_ID__"
+     },
+     "closeGapIds": [
+      "gap_no_episode"
+     ],
+     "answeredGapId": "gap_no_episode"
+    }
+   }
+  }
+ ],
+ "turns": [
+  {
+   "author": "уточни",
+   "expect": {
+    "questionIs": "О каком одном конкретном случае с первым клиентом вы думаете?",
+    "discarded": [],
+    "factsAdded": 0,
+    "gapsClosed": 0
+   }
+  },
+  {
+   "author": "А какая сегодня погода?",
+   "expect": {
+    "questionIs": "вернуться к истории про первого клиента",
+    "discarded": [],
+    "factsAdded": 0,
+    "gapsClosed": 0
+   }
+  },
+  {
+   "author": "Расскажи анекдот.",
+   "expect": {
+    "questionStartsWith": "Это в сторону от нашей мысли, давайте вернёмся к ней. ",
+    "discarded": [
+     "redirect_invalid"
+    ],
+    "factsAdded": 0,
+    "gapsClosed": 0
+   }
+  },
+  {
+   "author": "Это был небольшой заказ на сайт для кофейни.",
+   "expect": {
+    "questionIs": "Что вы почувствовали, когда пришло это сообщение?",
+    "discarded": [
+     "question_gap_detached"
+    ],
+    "factsAdded": 1,
+    "factText": "Это был небольшой заказ на сайт для кофейни.",
+    "gapsClosed": 1
+   }
+  }
+ ]
+}

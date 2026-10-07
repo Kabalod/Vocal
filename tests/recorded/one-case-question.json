@@ -1,0 +1,83 @@
+{
+ "name": "one-case-question",
+ "description": "Абстрактный дубль: вопрос про один конкретный случай, автор отвечает случаем, факт принят сервером, пробел закрыт, следующий вопрос про вывод",
+ "note": "Ответы написаны Claude вручную на реальные promptText (запись: VOCAL_AI_RECORD_PROMPTS). Это проверка нашего кода на заданных ответах; она НЕ доказывает поведение рабочей модели Groq.",
+ "thought": {
+  "title": "Мотивация и привычка",
+  "body": "Мотивация приходит и уходит, а привычка остаётся."
+ },
+ "answers": [
+  {
+   "label": "take-diagnosis",
+   "response": {
+    "contentMode": "personal_story",
+    "gaps": [
+     {
+      "kind": "no_episode",
+      "text": "Нет конкретного случая, на котором держится мысль."
+     }
+    ]
+   }
+  },
+  {
+   "label": "dialogue",
+   "userContains": [
+    "Ответ автора: уточни"
+   ],
+   "response": {
+    "action": "ask_question",
+    "question": "Какой один случай из вашей жизни это показывает?",
+    "gapId": "gap_no_episode",
+    "whyUnknown": "случая нет",
+    "thoughtUpdate": {
+     "fact": null,
+     "closeGapIds": []
+    }
+   }
+  },
+  {
+   "label": "dialogue",
+   "userContains": [
+    "Ответ автора: Я неделю вставал в шесть утра, и на третий день мотивация пропала."
+   ],
+   "response": {
+    "action": "ask_question",
+    "question": "Что из этого случая вы бы сказали человеку в похожем положении?",
+    "clarificationReason": "нужен вывод",
+    "whyUnknown": "вывода нет",
+    "thoughtUpdate": {
+     "fact": {
+      "text": "Я неделю вставал в шесть утра, и на третий день мотивация пропала.",
+      "sourceType": "dialogue_message",
+      "sourceId": "__AUTHOR_MESSAGE_ID__"
+     },
+     "closeGapIds": [
+      "gap_no_episode"
+     ],
+     "answeredGapId": "gap_no_episode"
+    }
+   }
+  }
+ ],
+ "turns": [
+  {
+   "author": "уточни",
+   "expect": {
+    "questionIs": "Какой один случай из вашей жизни это показывает?",
+    "discarded": [],
+    "factsAdded": 0,
+    "gapsClosed": 0
+   }
+  },
+  {
+   "author": "Я неделю вставал в шесть утра, и на третий день мотивация пропала.",
+   "expect": {
+    "questionIs": "Что из этого случая вы бы сказали человеку в похожем положении?",
+    "discarded": [],
+    "factsAdded": 1,
+    "factText": "Я неделю вставал в шесть утра, и на третий день мотивация пропала.",
+    "gapsClosed": 1
+   }
+  }
+ ]
+}

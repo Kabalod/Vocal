@@ -1,0 +1,137 @@
+{
+ "name": "repeat-after-dont-know",
+ "description": "После «не знаю» модель повторяет вопрос дословно; сервер перегенерирует один раз (ответ сужен до одного случая), при втором повторе заменяет нейтральным",
+ "note": "Ответы написаны Claude вручную на реальные promptText (запись: VOCAL_AI_RECORD_PROMPTS). Это проверка нашего кода на заданных ответах; она НЕ доказывает поведение рабочей модели Groq.",
+ "thought": {
+  "title": "Цели",
+  "body": "Мне кажется, что постановка целей помогает мне двигаться вперёд."
+ },
+ "answers": [
+  {
+   "label": "take-diagnosis",
+   "response": {
+    "contentMode": "personal_story",
+    "gaps": [
+     {
+      "kind": "no_mechanism",
+      "text": "Не объяснено, почему цели помогают."
+     },
+     {
+      "kind": "no_thesis",
+      "text": "Не видна позиция автора."
+     }
+    ]
+   }
+  },
+  {
+   "label": "dialogue",
+   "userContains": [
+    "Ответ автора: уточни"
+   ],
+   "response": {
+    "action": "ask_question",
+    "question": "Почему, по вашему мнению, цели помогают двигаться вперёд?",
+    "gapId": "gap_no_mechanism",
+    "whyUnknown": "причины нет",
+    "thoughtUpdate": {
+     "fact": null,
+     "closeGapIds": []
+    }
+   }
+  },
+  {
+   "label": "dialogue",
+   "userContains": [
+    "Ответ автора: Не знаю."
+   ],
+   "response": {
+    "action": "ask_question",
+    "question": "Почему, по вашему мнению, цели помогают двигаться вперёд?",
+    "gapId": "gap_no_mechanism",
+    "whyUnknown": "причины нет",
+    "thoughtUpdate": {
+     "fact": null,
+     "closeGapIds": []
+    }
+   }
+  },
+  {
+   "label": "dialogue",
+   "userContains": [
+    "Ответ автора: Не знаю.",
+    "Ты повторяешь недавний вопрос"
+   ],
+   "response": {
+    "action": "ask_question",
+    "question": "Какой один случай показывает, как цели помогли вам двигаться вперёд?",
+    "gapId": "gap_no_mechanism",
+    "whyUnknown": "нужен случай",
+    "thoughtUpdate": {
+     "fact": null,
+     "closeGapIds": []
+    }
+   }
+  },
+  {
+   "label": "dialogue",
+   "userContains": [
+    "Ответ автора: Да."
+   ],
+   "response": {
+    "action": "ask_question",
+    "question": "Какой один случай показывает, как цели помогли вам двигаться вперёд?",
+    "gapId": "gap_no_mechanism",
+    "whyUnknown": "нужен случай",
+    "thoughtUpdate": {
+     "fact": null,
+     "closeGapIds": []
+    }
+   }
+  },
+  {
+   "label": "dialogue",
+   "userContains": [
+    "Ответ автора: Да.",
+    "Ты повторяешь недавний вопрос"
+   ],
+   "response": {
+    "action": "ask_question",
+    "question": "Какой один случай показывает, как цели помогли вам двигаться вперёд?",
+    "gapId": "gap_no_mechanism",
+    "whyUnknown": "нужен случай",
+    "thoughtUpdate": {
+     "fact": null,
+     "closeGapIds": []
+    }
+   }
+  }
+ ],
+ "turns": [
+  {
+   "author": "уточни",
+   "expect": {
+    "questionIs": "Почему, по вашему мнению, цели помогают двигаться вперёд?",
+    "discarded": []
+   }
+  },
+  {
+   "author": "Не знаю.",
+   "expect": {
+    "questionIs": "Какой один случай показывает, как цели помогли вам двигаться вперёд?",
+    "discarded": [
+     "question_repeat_regenerated"
+    ]
+   }
+  },
+  {
+   "author": "Да.",
+   "expect": {
+    "questionIsNot": "Какой один случай показывает, как цели помогли вам двигаться вперёд?",
+    "questionIsNotAlso": "Почему, по вашему мнению, цели помогают двигаться вперёд?",
+    "discarded": [
+     "question_repeat_replaced"
+    ]
+   }
+  }
+ ]
+}

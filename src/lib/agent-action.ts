@@ -89,6 +89,7 @@ export const DISCARD_REASONS = [
   "redirect_invalid",
   "question_repeat_regenerated",
   "question_repeat_replaced",
+  "question_gap_detached",
   "downgrade_evidence",
   "downgrade_gap",
   "update_dropped_at_commit",
