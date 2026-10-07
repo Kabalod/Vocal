@@ -397,15 +397,17 @@ test("a mistaken fact on не знаю or повтори is dropped, counted, an
   const before = await getThoughtState(reel.id);
   const actionsBefore = (await committedAssistantActions(prisma, reel.id)).length;
   const phrases = ["Я не знаю", "Не знаю ответа", "Можешь повторить?", "Я не понял вопрос"];
+  // Different questions per turn: an identical question four times would (rightly) be varied by the repeat rule.
+  const sceneQuestions = ["Что именно там случилось?", "Когда это было?", "Кто там был рядом?", "Что вы почувствовали тогда?"];
   for (const [index, text] of phrases.entries()) {
     const page = await sendDialogueMessage(reel.id, { text, idempotencyKey: `v03-non-fact-a-${index}` }, async () => {
       const update = await thoughtUpdateForUserText(prisma, reel.id, text, ["gap_open"]);
       return {
-        text: askQuestionJson("Где происходит сцена?", update),
+        text: askQuestionJson(sceneQuestions[index], update),
         usage: { promptTokens: 1, completionTokens: 1 },
       };
     });
-    assert.ok(page.messages.some((item) => item.body === "Где происходит сцена?"));
+    assert.ok(page.messages.some((item) => item.body === sceneQuestions[index]));
   }
   const after = await getThoughtState(reel.id);
   assert.deepEqual(after.facts, before.facts, "a command or «не знаю» never becomes a fact");
@@ -677,6 +679,7 @@ test("ask_question accepts an open gap; a closed or missing gap id is downgraded
   }));
   assert.ok(page.messages.some((item) => item.body.includes("происходит сцена")));
 
+  const neutral: string[] = [];
   for (const [key, gapId, shown] of [
     ["v03-gap-closed", "gap_closed", "Повторить закрытое?"],
     ["v03-gap-missing", "gap_missing", "Пробела нет?"],
@@ -686,10 +689,14 @@ test("ask_question accepts an open gap; a closed or missing gap id is downgraded
       usage: { promptTokens: 1, completionTokens: 1 },
     }));
     assert.equal(downgraded.messages.some((item) => item.body === shown), false, "the model text about a dead gap is not shown");
-    assert.equal(downgraded.messages.at(-1)?.body, "Что для вас здесь главное своими словами?", "a neutral question about the open gap");
+    neutral.push(downgraded.messages.at(-1)?.body ?? "");
   }
+  assert.equal(neutral[0], "Что для вас здесь главное своими словами?", "a neutral question about the open gap");
+  assert.notEqual(neutral[1], neutral[0], "the second downgrade is varied, not a verbatim repeat");
   const { prisma } = await import("../src/lib/db");
-  assert.deepEqual(await discardedUpdates(prisma as never, reel.id), ["downgrade_gap", "downgrade_gap"]);
+  const reasons = await discardedUpdates(prisma as never, reel.id);
+  assert.equal(reasons.filter((reason) => reason === "downgrade_gap").length, 2);
+  assert.ok(reasons.every((reason) => reason === "downgrade_gap" || reason === "question_repeat_replaced"));
 });
 
 test("redirect_to_task stays on the current thought without changing status", async (t) => {

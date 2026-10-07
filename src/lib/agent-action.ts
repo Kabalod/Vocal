@@ -86,6 +86,9 @@ export const DISCARD_REASONS = [
   "fact_invalid",
   /** Counter only: the model named another message as the source; the server set the author's current message. */
   "fact_source_replaced",
+  "redirect_invalid",
+  "question_repeat_regenerated",
+  "question_repeat_replaced",
   "downgrade_evidence",
   "downgrade_gap",
   "update_dropped_at_commit",

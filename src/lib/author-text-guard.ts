@@ -40,9 +40,63 @@ const NEUTRAL_QUESTIONS: Record<GapKind, string> = {
   promise_unclear: "Что зритель поймёт после этого ролика?",
 };
 
-/** A model-free replacement for a reply that leaked ids: one neutral question about the first open gap. */
-export function neutralQuestionReply(openGaps: ThoughtGap[]): Record<string, unknown> {
-  const gap = openGaps.filter((row) => row.status === "open").sort((a, b) => a.id.localeCompare(b.id))[0] ?? null;
+const CONTENT_TOKEN_MIN = 3;
+export const REPEAT_SIMILARITY = 0.7;
+
+function contentTokens(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/ё/g, "е")
+      .replace(/[^a-zа-я0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((word) => word.length >= CONTENT_TOKEN_MIN),
+  );
+}
+
+/** R5: two questions that say the same thing (Jaccard of content words), including a verbatim repeat. */
+export function questionsAreNearDuplicates(a: string, b: string): boolean {
+  const left = contentTokens(a);
+  const right = contentTokens(b);
+  if (left.size === 0 || right.size === 0) return a.trim().toLowerCase() === b.trim().toLowerCase();
+  let shared = 0;
+  for (const word of left) if (right.has(word)) shared += 1;
+  return shared / (left.size + right.size - shared) >= REPEAT_SIMILARITY;
+}
+
+export const REPEAT_QUESTION_NOTE =
+  "\n\nТы повторяешь недавний вопрос. После неинформативного ответа не повторяй вопрос дословно: сузь его до одного конкретного случая («какой один случай…») или предложи продолжить. Верни ответ заново.";
+
+const VARIETY_FALLBACKS = [
+  GENERIC_NEUTRAL_QUESTION,
+  "Какой один конкретный случай вы бы рассказали?",
+  "Хотите продолжить с этой мыслью или записать следующий дубль?",
+];
+
+/**
+ * A model-free replacement for a reply that leaked ids or repeated itself: one neutral question about the first open gap
+ * whose question is not a near duplicate of the questions to avoid.
+ */
+export function neutralQuestionReply(
+  openGaps: ThoughtGap[],
+  avoidQuestions: string[] = [],
+  avoidGapIds: string[] = [],
+): Record<string, unknown> {
+  const open = openGaps.filter((row) => row.status === "open").sort((a, b) => a.id.localeCompare(b.id));
+  const fresh = (question: string) => !avoidQuestions.some((old) => questionsAreNearDuplicates(question, old));
+  const askable = (row: ThoughtGap) => fresh(row.kind ? NEUTRAL_QUESTIONS[row.kind] : GENERIC_NEUTRAL_QUESTION);
+  // Prefer a gap nobody asked about lately; otherwise any gap whose question is fresh.
+  const gap = open.find((row) => !avoidGapIds.includes(row.id) && askable(row)) ?? open.find(askable) ?? null;
+  if (!gap && avoidQuestions.length) {
+    const question = VARIETY_FALLBACKS.find(fresh) ?? VARIETY_FALLBACKS[VARIETY_FALLBACKS.length - 1];
+    return {
+      action: "ask_question",
+      question,
+      clarificationReason: "нужно уточнение задачи",
+      whyUnknown: "вопрос повторялся и заменён нейтральным",
+      thoughtUpdate: { fact: null, closeGapIds: [] },
+    };
+  }
   const question = gap?.kind ? NEUTRAL_QUESTIONS[gap.kind] : GENERIC_NEUTRAL_QUESTION;
   return {
     action: "ask_question",

@@ -4,7 +4,7 @@
 // Run: DATABASE_URL=$TEST_DATABASE_URL DIRECT_URL=$TEST_DATABASE_URL node --env-file=.env --import tsx scripts/r-live/r5.ts
 // Pause 3-5 s between turns, one retry after a 429. Prints counters, ids and the two off-topic examples (our own short
 // replies and the model's question), never keys, prompts or the raw take texts.
-import { readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { resetPrismaClient } from "../../src/lib/db";
 import { closePostgresTestDb, openPostgresTestDb } from "../../tests/helpers/postgres-test-db";
@@ -55,6 +55,13 @@ const WITH_OFF_TOPIC: { title: string; body: string; answers: string[] }[] = [
   { title: "Утренний кофе", body: "Я перестал пить кофе по утрам и заметил, что хуже всего первые три дня, дальше легче.", answers: ["Я пил по три чашки, и голова болела с понедельника по среду.", OFF_TOPIC[2], OFF_TOPIC[0], "К четвергу я заметил, что просыпаюсь без будильника.", "Главное пережить первые три дня без исключений."] },
 ];
 
+// Options for focused re-runs (not the whole R5): --only=offtopic|repeats  --turns=N  --no-scripts  --raw=<file>
+const argOf = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
+const ONLY = argOf("only");
+const TURNS = Number(argOf("turns") ?? "0");
+const NO_SCRIPTS = process.argv.includes("--no-scripts");
+const RAW_FILE = argOf("raw");
+
 async function main() {
   const db = await openPostgresTestDb();
   await resetPrismaClient(); // the app client must follow the isolated schema
@@ -74,6 +81,18 @@ async function main() {
     ...WITH_OFF_TOPIC.map((o) => ({ label: `offtopic:${o.title}`, title: o.title, body: o.body, answers: o.answers })),
   ];
 
+  const { defaultCompleteJson } = await import("../../src/lib/ai/complete");
+  // Raw model answers go to a file OUTSIDE the test schema, so they survive the cleanup.
+  let currentDialogue = "";
+  const complete = async (args: Parameters<typeof defaultCompleteJson>[0]) => {
+    const result = await defaultCompleteJson(args);
+    if (RAW_FILE) appendFileSync(RAW_FILE, JSON.stringify({ dialogue: currentDialogue, label: args.label ?? "chat", text: result.text }) + "\n");
+    return result;
+  };
+  if (ONLY) {
+    const keep = (label: string) => (ONLY === "offtopic" ? label.startsWith("offtopic") : ONLY === "repeats" ? /DYSu2FDuQyw|DW6nB5hDPPa/.test(label) : true);
+    for (let i = plans.length - 1; i >= 0; i -= 1) if (!keep(plans[i].label)) plans.splice(i, 1);
+  }
   if (process.argv.includes("--dry")) {
     console.log(JSON.stringify(plans.map((p) => ({ label: p.label, words: p.body.split(/\s+/).length, turns: p.answers.length + 1 })), null, 1));
     await closePostgresTestDb(db);
@@ -97,14 +116,16 @@ async function main() {
       console.log(`stopped before dialogue ${n}: token cap ${TOKEN_CAP} reached (${spent})`);
       break;
     }
+    currentDialogue = plan.label;
     const made = await createThoughtFromText({ title: plan.title, body: plan.body, idempotencyKey: `r5-${n}` });
     reelIds.push(made.reel.id);
-    const turns = ["уточни", ...plan.answers];
+    const allTurns = ["уточни", ...plan.answers];
+    const turns = TURNS > 0 ? allTurns.slice(0, TURNS) : allTurns;
     for (let i = 0; i < turns.length; i += 1) {
       let outcome = "ok";
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
-          await sendDialogueMessage(made.reel.id, { text: turns[i], idempotencyKey: `r5-${n}-t${i}-${attempt}` });
+          await sendDialogueMessage(made.reel.id, { text: turns[i], idempotencyKey: `r5-${n}-t${i}-${attempt}` }, complete);
           outcome = "ok";
           break;
         } catch (error) {
@@ -125,9 +146,9 @@ async function main() {
       await sleep(3000 + Math.floor(Math.random() * 2000));
     }
     scripts[plan.label] = [];
-    for (let build = 1; build <= 2; build += 1) {
+    for (let build = 1; build <= (NO_SCRIPTS ? 0 : 2); build += 1) {
       try {
-        const ws = await generateV05Script(made.reel.id, { idempotencyKey: `r5-${n}-script-${build}` });
+        const ws = await generateV05Script(made.reel.id, { idempotencyKey: `r5-${n}-script-${build}` }, complete);
         scripts[plan.label].push(`ok(changes=${ws.viewingChanges.length})`);
       } catch (error) {
         scripts[plan.label].push((error as { code?: string }).code ?? "error");
