@@ -37,6 +37,8 @@ import {
   actionLeaksServiceId,
   neutralQuestionReply,
   questionsAreNearDuplicates,
+  stripOffTopicPhrase,
+  withOffTopicPhrase,
   REGENERATE_NOTE,
   REPEAT_QUESTION_NOTE,
 } from "@/lib/author-text-guard";
@@ -646,9 +648,10 @@ async function repairInvalidRedirect(input: {
   if (!raw || typeof raw !== "object" || (raw as { action?: unknown }).action !== "redirect_to_task") return null;
   const state = await getThoughtState(input.reelId);
   const neutral = neutralQuestionReply(state.openGaps);
-  const responseText = JSON.stringify(neutral);
+  const phrased = { ...neutral, question: withOffTopicPhrase(String(neutral.question)) };
+  const responseText = JSON.stringify(phrased);
   await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText } });
-  const parsed = parseAgentReply(neutral, { authorMessageId: input.authorMessageId });
+  const parsed = parseAgentReply(phrased, { authorMessageId: input.authorMessageId });
   return { reply: { ...parsed, discarded: ["redirect_invalid"] }, responseText };
 }
 
@@ -799,8 +802,10 @@ async function varyRepeatedQuestion(input: {
     }
   });
   const recentBodies = recent.map((row) => row.body);
-  const repeats = (question: string) => recentBodies.some((old) => questionsAreNearDuplicates(question, old));
+  const repeats = (question: string) =>
+    recentBodies.some((old) => questionsAreNearDuplicates(stripOffTopicPhrase(question), stripOffTopicPhrase(old)));
   if (!repeats(input.reply.action.question)) return { reply: input.reply, rawText: input.rawText };
+  const fromRedirect = input.reply.discarded.includes("redirect_invalid");
 
   // A question the server itself made (an off-topic return, a downgrade) is varied without another model call.
   const serverMade = input.reply.discarded.some((reason) => reason === "redirect_invalid" || reason.startsWith("downgrade_"));
@@ -822,8 +827,14 @@ async function varyRepeatedQuestion(input: {
   }
   const state = await getThoughtState(input.reelId);
   const { thoughtUpdate } = input.reply;
+  const varied = neutralQuestionReply(
+    state.openGaps,
+    recentBodies.map(stripOffTopicPhrase),
+    [...recentGapIds, ...(input.reply.action.action === "ask_question" && input.reply.action.gapId ? [input.reply.action.gapId] : [])],
+  );
   const replaced = {
-    ...neutralQuestionReply(state.openGaps, recentBodies, [...recentGapIds, ...(input.reply.action.action === "ask_question" && input.reply.action.gapId ? [input.reply.action.gapId] : [])]),
+    ...varied,
+    ...(fromRedirect ? { question: withOffTopicPhrase(String(varied.question)) } : {}),
     thoughtUpdate: {
       fact: thoughtUpdate.fact,
       closeGapIds: thoughtUpdate.closeGapIds,

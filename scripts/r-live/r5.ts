@@ -190,11 +190,18 @@ async function main() {
   const states = await prisma.thoughtState.findMany({ select: { factsJson: true } });
   const facts = states.flatMap((s) => JSON.parse(s.factsJson) as { sourceType: string; sourceId: string }[]);
   const factsWithoutAuthorReply = facts.filter((f) => f.sourceType !== "dialogue_message" || !userIds.has(f.sourceId)).length;
-  const failedByThrow = results.filter((r) => r.outcome !== "ok");
+  // Turn classes (R report rule): ok / error (the model answered and the answer failed) / NOT EXECUTED (the provider did
+  // not answer: timeout, rate limit, our own budget stop). Not-executed turns are neither a success nor a turn error and
+  // are excluded from the error share; any of them makes the run incomplete. Stored error rows are the source of truth:
+  // a failed turn leaves exactly one assistant error message, thrown or not.
+  const NOT_EXECUTED = /вовремя|timeout|429|rate.?limit|лимит|limit/i;
   const errorRows = msgs.filter((m) => m.role === "assistant" && m.status === "error");
-  const errorKinds = errorRows.reduce<Record<string, number>>((a, m) => ((a[m.body.slice(0, 60)] = (a[m.body.slice(0, 60)] ?? 0) + 1), a), {});
-  // A turn is failed if the call threw OR an error message was stored for it (timeouts are stored, not thrown).
-  const failed = failedByThrow.length >= errorRows.length ? failedByThrow : errorRows.map((_, i) => ({ dialogue: "", turn: i, outcome: "stored_error" }));
+  const notExecutedRows = errorRows.filter((m) => NOT_EXECUTED.test(m.body));
+  const turnErrorRows = errorRows.filter((m) => !NOT_EXECUTED.test(m.body));
+  const countBy = (rows: typeof errorRows) =>
+    rows.reduce<Record<string, number>>((a, m) => ((a[m.body.slice(0, 60)] = (a[m.body.slice(0, 60)] ?? 0) + 1), a), {});
+  const executedTurns = Math.max(1, results.length - notExecutedRows.length);
+  const failed = turnErrorRows;
   const calls = await prisma.aiCall.findMany({ select: { kind: true, status: true, promptTokens: true, completionTokens: true } });
   const sum: Record<string, { calls: number; prompt: number; completion: number }> = {};
   for (const c of calls) {
@@ -208,13 +215,16 @@ async function main() {
   console.log(JSON.stringify({
     dialogues: Object.keys(scripts).length,
     turns: results.length,
+    executedTurns,
+    notExecutedTurns: notExecutedRows.length,
+    notExecutedKinds: countBy(notExecutedRows),
+    runComplete: notExecutedRows.length === 0,
     failedTurns: failed.length,
-    failedShare: +(failed.length / Math.max(1, results.length)).toFixed(3),
-    failedByOutcome: failed.reduce<Record<string, number>>((a, r) => ((a[r.outcome] = (a[r.outcome] ?? 0) + 1), a), {}),
-    storedErrorMessages: errorKinds,
-    criterion1_failedShareAtMost25pct: failed.length / Math.max(1, results.length) <= 0.25,
+    failedShareOfExecuted: +(failed.length / executedTurns).toFixed(3),
+    failedKinds: countBy(turnErrorRows),
+    criterion1_failedShareAtMost25pct: notExecutedRows.length > 0 ? "not evaluated (run incomplete)" : failed.length / executedTurns <= 0.25,
     discardedUpdates: discarded,
-    discardedFactsShare: +(((discarded.fact_invalid ?? 0)) / Math.max(1, results.length)).toFixed(3),
+    discardedFactsShare: +(((discarded.fact_invalid ?? 0)) / executedTurns).toFixed(3),
     factSourceReplaced: discarded.fact_source_replaced ?? 0,
     factSourceReplacedShareOfFacts: +(((discarded.fact_source_replaced ?? 0)) / Math.max(1, facts.length)).toFixed(3),
     downgrades: { evidence: discarded.downgrade_evidence ?? 0, gap: discarded.downgrade_gap ?? 0 },

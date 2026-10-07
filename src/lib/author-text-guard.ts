@@ -25,6 +25,17 @@ export function actionLeaksServiceId(action: AgentAction, knownIds: (string | nu
 export const REGENERATE_NOTE =
   "\n\nПредыдущий ответ содержал служебные идентификаторы. Идентификаторы служебные: не упоминай их в тексте для автора. Верни ответ заново.";
 
+/** R5: said first when the server itself returns the author from an off-topic message. No model call. */
+export const OFF_TOPIC_RETURN_PHRASE = "Это в сторону от нашей мысли, давайте вернёмся к ней.";
+
+export function withOffTopicPhrase(question: string): string {
+  return `${OFF_TOPIC_RETURN_PHRASE} ${question}`;
+}
+
+export function stripOffTopicPhrase(question: string): string {
+  return question.startsWith(OFF_TOPIC_RETURN_PHRASE) ? question.slice(OFF_TOPIC_RETURN_PHRASE.length).trim() : question;
+}
+
 export const GENERIC_NEUTRAL_QUESTION = "Что для вас здесь главное своими словами?";
 
 const NEUTRAL_QUESTIONS: Record<GapKind, string> = {
