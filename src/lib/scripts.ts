@@ -640,7 +640,11 @@ export async function restoreScript(
   return listScriptBundle(reelId);
 }
 
-export async function setFinalScript(reelId: string, scriptId: string | null): Promise<ScriptBundleDto> {
+export async function setFinalScript(
+  reelId: string,
+  scriptId: string | null,
+  opts: { expectedFinalScriptId?: string | null } = {},
+): Promise<ScriptBundleDto> {
   await assertReel(reelId);
   if (scriptId) {
     const row = await prisma.scriptVersion.findFirst({ where: { id: scriptId, reelId } });
@@ -673,7 +677,9 @@ export async function setFinalScript(reelId: string, scriptId: string | null): P
     if (reel.finalScriptId === scriptId) {
       return listScriptBundle(reelId);
     }
-    if (reel.finalScriptId !== snapshot.finalScriptId) {
+    // An explicit token (what the caller saw) makes a two-tab race deterministic; without it the value read on arrival is used.
+    const expectedFinal = opts.expectedFinalScriptId !== undefined ? opts.expectedFinalScriptId : snapshot.finalScriptId;
+    if (reel.finalScriptId !== expectedFinal) {
       throw new ScriptError("Карточка уже изменилась. Обновите данные и повторите.", "STALE", 409);
     }
     await prisma.reel.update({
