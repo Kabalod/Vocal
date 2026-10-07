@@ -134,27 +134,34 @@ test("content_sufficient is allowed on a transcribed audio take", async (t) => {
   assert.equal((await prisma.reel.findUniqueOrThrow({ where: { id: reel.id } })).status, "idea");
 });
 
-test("suggest_take requires fact ids from this thought", async (t) => {
-  await withPostgresTestDb(t);
+test("suggest_take with unknown fact ids is downgraded to a neutral question and stores nothing", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();
   const { reel } = await createThoughtFromText({
     title: "V03 suggest",
     body: "Хочу сказать про тихий вечер.",
     idempotencyKey: "v03-suggest",
   });
-  await assert.rejects(
-    () =>
-      sendDialogueMessage(reel.id, { text: "снимай", idempotencyKey: "v03-sug-bad" }, async () => ({
-        text: JSON.stringify({
-          action: "suggest_take",
-          mainIdea: "тихий вечер",
-          takeTask: "сказать про вечер спокойно",
-          evidenceRefs: ["fact_missing"],
-        }),
-        usage: { promptTokens: 1, completionTokens: 1 },
-      })),
-    (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_EVIDENCE",
-  );
+  const before = await getThoughtState(reel.id);
+  const page = await sendDialogueMessage(reel.id, { text: "снимай", idempotencyKey: "v03-sug-bad" }, async () => ({
+    text: JSON.stringify({
+      action: "suggest_take",
+      mainIdea: "тихий вечер",
+      takeTask: "сказать про вечер спокойно",
+      evidenceRefs: ["fact_missing"],
+    }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  assert.equal(page.messages.some((item) => item.body.includes("сказать про вечер спокойно")), false, "the invalid take task is not shown");
+  assert.ok(page.messages.some((item) => item.kind === "question"), "a neutral question is shown instead");
+  const after = await getThoughtState(reel.id);
+  assert.equal(after.takeTask, before.takeTask, "the invalid take task is never stored");
+  assert.deepEqual(after.facts, before.facts);
+  assert.deepEqual(await discardedUpdates(prisma, reel.id), ["downgrade_evidence"]);
+  const replay = await sendDialogueMessage(reel.id, { text: "снимай", idempotencyKey: "v03-sug-bad" }, async () => {
+    throw new Error("replay must not call the model");
+  });
+  assert.equal(replay.messages.at(-1)?.body, page.messages.at(-1)?.body, "a replay returns the stored downgraded reply");
 });
 
 test("user reply becomes a fact and then suggest_take can cite it", async (t) => {
@@ -364,7 +371,7 @@ test("unknown and repeat replies do not create facts or close gaps", async (t) =
   assert.equal(state.openGaps.find((gap) => gap.id === "gap_open")?.status, "open");
 });
 
-test("a mistaken fact on не знаю or повтори is rejected", async (t) => {
+test("a mistaken fact on не знаю or повтори is dropped, counted, and the question is still shown", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();
   const { reel } = await createThoughtFromText({
@@ -391,19 +398,20 @@ test("a mistaken fact on не знаю or повтори is rejected", async (t)
   const actionsBefore = (await committedAssistantActions(prisma, reel.id)).length;
   const phrases = ["Я не знаю", "Не знаю ответа", "Можешь повторить?", "Я не понял вопрос"];
   for (const [index, text] of phrases.entries()) {
-    await assert.rejects(
-      () =>
-        sendDialogueMessage(reel.id, { text, idempotencyKey: `v03-non-fact-a-${index}` }, async () => {
-          const update = await thoughtUpdateForUserText(prisma, reel.id, text, ["gap_open"]);
-          return {
-            text: askQuestionJson("Где происходит сцена?", update),
-            usage: { promptTokens: 1, completionTokens: 1 },
-          };
-        }),
-      (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_EVIDENCE",
-    );
+    const page = await sendDialogueMessage(reel.id, { text, idempotencyKey: `v03-non-fact-a-${index}` }, async () => {
+      const update = await thoughtUpdateForUserText(prisma, reel.id, text, ["gap_open"]);
+      return {
+        text: askQuestionJson("Где происходит сцена?", update),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+    });
+    assert.ok(page.messages.some((item) => item.body === "Где происходит сцена?"));
   }
-  await assertStateAndActionUnchanged(prisma, reel.id, before, actionsBefore);
+  const after = await getThoughtState(reel.id);
+  assert.deepEqual(after.facts, before.facts, "a command or «не знаю» never becomes a fact");
+  assert.deepEqual(after.openGaps, before.openGaps, "and never closes a gap");
+  assert.equal((await committedAssistantActions(prisma, reel.id)).length, actionsBefore + phrases.length);
+  assert.deepEqual(await discardedUpdates(prisma, reel.id), phrases.map(() => "update_dropped_at_commit"));
 });
 
 test("off-topic answer does not close the current gap", async (t) => {
@@ -639,7 +647,7 @@ test("strict action schemas reject extra fields", () => {
   }
 });
 
-test("ask_question accepts an open gap and rejects closed or missing ids", async (t) => {
+test("ask_question accepts an open gap; a closed or missing gap id is downgraded to a neutral question", async (t) => {
   await withPostgresTestDb(t);
   await resetPrismaClient();
   const { reel } = await createThoughtFromText({
@@ -669,32 +677,19 @@ test("ask_question accepts an open gap and rejects closed or missing ids", async
   }));
   assert.ok(page.messages.some((item) => item.body.includes("происходит сцена")));
 
-  await assert.rejects(
-    () =>
-      sendDialogueMessage(reel.id, { text: "закрытый", idempotencyKey: "v03-gap-closed" }, async () => ({
-        text: JSON.stringify({
-          action: "ask_question",
-          question: "Повторить закрытое?",
-          gapId: "gap_closed",
-          whyUnknown: "не должно пройти",
-        }),
-        usage: { promptTokens: 1, completionTokens: 1 },
-      })),
-    (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_GAP",
-  );
-  await assert.rejects(
-    () =>
-      sendDialogueMessage(reel.id, { text: "нет такого", idempotencyKey: "v03-gap-missing" }, async () => ({
-        text: JSON.stringify({
-          action: "ask_question",
-          question: "Пробела нет?",
-          gapId: "gap_missing",
-          whyUnknown: "не должно пройти",
-        }),
-        usage: { promptTokens: 1, completionTokens: 1 },
-      })),
-    (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_GAP",
-  );
+  for (const [key, gapId, shown] of [
+    ["v03-gap-closed", "gap_closed", "Повторить закрытое?"],
+    ["v03-gap-missing", "gap_missing", "Пробела нет?"],
+  ] as const) {
+    const downgraded = await sendDialogueMessage(reel.id, { text: key, idempotencyKey: key }, async () => ({
+      text: JSON.stringify({ action: "ask_question", question: shown, gapId, whyUnknown: "не должно пройти" }),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    }));
+    assert.equal(downgraded.messages.some((item) => item.body === shown), false, "the model text about a dead gap is not shown");
+    assert.equal(downgraded.messages.at(-1)?.body, "Что для вас здесь главное своими словами?", "a neutral question about the open gap");
+  }
+  const { prisma } = await import("../src/lib/db");
+  assert.deepEqual(await discardedUpdates(prisma as never, reel.id), ["downgrade_gap", "downgrade_gap"]);
 });
 
 test("redirect_to_task stays on the current thought without changing status", async (t) => {
@@ -745,7 +740,7 @@ test("redirect_to_task with a fact is dropped, counted and does not change state
   assert.deepEqual(await discardedUpdates(prisma, reel.id), ["redirect_state"]);
 });
 
-test("closing a different gap than the current question is rejected", async (t) => {
+test("closing a different gap than the current question drops the update, counts it, and shows the question", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();
   const { reel } = await createThoughtFromText({
@@ -774,18 +769,19 @@ test("closing a different gap than the current question is rejected", async (t) 
   }));
   const before = await getThoughtState(reel.id);
   const actionsBefore = (await committedAssistantActions(prisma, reel.id)).length;
-  await assert.rejects(
-    () =>
-      sendDialogueMessage(reel.id, { text: "Сцена на кухне.", idempotencyKey: "v03-wrong-gap-a" }, async () => {
-        const update = await thoughtUpdateForUserText(prisma, reel.id, "Сцена на кухне.", ["gap_B"]);
-        return {
-          text: askQuestionJson("ещё вопрос", { fact: update.fact, closeGapIds: ["gap_B"] }),
-          usage: { promptTokens: 1, completionTokens: 1 },
-        };
-      }),
-    (error: unknown) => error instanceof AgentActionError && error.code === "ACTION_GAP",
-  );
-  await assertStateAndActionUnchanged(prisma, reel.id, before, actionsBefore);
+  const page = await sendDialogueMessage(reel.id, { text: "Сцена на кухне.", idempotencyKey: "v03-wrong-gap-a" }, async () => {
+    const update = await thoughtUpdateForUserText(prisma, reel.id, "Сцена на кухне.", ["gap_B"]);
+    return {
+      text: askQuestionJson("ещё вопрос", { fact: update.fact, closeGapIds: ["gap_B"] }),
+      usage: { promptTokens: 1, completionTokens: 1 },
+    };
+  });
+  assert.ok(page.messages.some((item) => item.body === "ещё вопрос"));
+  const after = await getThoughtState(reel.id);
+  assert.deepEqual(after.openGaps, before.openGaps, "the wrong gap is not closed");
+  assert.deepEqual(after.facts, before.facts, "the invalid update is not applied at all");
+  assert.equal((await committedAssistantActions(prisma, reel.id)).length, actionsBefore + 1);
+  assert.deepEqual(await discardedUpdates(prisma, reel.id), ["update_dropped_at_commit"]);
 });
 
 test("closing several unrelated gaps in one answer drops the closure, keeps the question and counts it", async (t) => {
@@ -857,28 +853,67 @@ test("closing a gap without an accepted fact never closes it, and the question i
   assert.deepEqual(await discardedUpdates(prisma, reel.id), ["gap_without_fact"]);
 });
 
-test("an invalid fact shape is dropped as a whole and counted; the question is shown", async (t) => {
+test("the server owns the fact source: a fact without sourceType is kept, a foreign sourceId is never stored", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();
   const { reel } = await createThoughtFromText({
-    title: "V03 bad fact shape",
-    body: "Форма факта.",
-    idempotencyKey: "v03-bad-shape",
+    title: "V03 fact source",
+    body: "Источник факта.",
+    idempotencyKey: "v03-fact-source",
   });
   const before = await getThoughtState(reel.id);
-  const page = await sendDialogueMessage(reel.id, { text: "Это было в марте.", idempotencyKey: "v03-bad-shape-1" }, async () => ({
+  const noType = await sendDialogueMessage(reel.id, { text: "Это было в марте.", idempotencyKey: "v03-fact-src-1" }, async () => ({
     text: JSON.stringify({
       action: "ask_question",
       question: "Что было дальше?",
       clarificationReason: "нужно продолжение",
       whyUnknown: "дальше не сказано",
-      thoughtUpdate: { fact: { text: "Это было в марте.", sourceId: "msg" }, closeGapIds: [] },
+      thoughtUpdate: { fact: { id: "fact_invented", text: "Это было в марте.", sourceId: "msg" }, closeGapIds: [] },
     }),
     usage: { promptTokens: 1, completionTokens: 1 },
   }));
-  assert.ok(page.messages.some((item) => item.body === "Что было дальше?"));
-  assert.deepEqual((await getThoughtState(reel.id)).facts, before.facts, "an invalid update is never applied");
-  assert.deepEqual(await discardedUpdates(prisma, reel.id), ["update_shape"]);
+  assert.ok(noType.messages.some((item) => item.body === "Что было дальше?"));
+  const first = await getThoughtState(reel.id);
+  const added = first.facts.filter((fact) => !before.facts.some((old) => old.id === fact.id));
+  assert.equal(added.length, 1, "a fact without sourceType and with extra keys is kept");
+  const firstUser = await prisma.dialogueMessage.findFirstOrThrow({ where: { body: "Это было в марте.", role: "user" } });
+  assert.equal(added[0].sourceType, "dialogue_message");
+  assert.equal(added[0].sourceId, firstUser.id, "the server set the source to the author's message");
+  assert.equal(added[0].id, `fact_${firstUser.id}`, "and the id, not the invented one");
+
+  const foreign = await sendDialogueMessage(reel.id, { text: "Потом я переехал.", idempotencyKey: "v03-fact-src-2" }, async () => ({
+    text: JSON.stringify({
+      action: "ask_question",
+      question: "Куда?",
+      clarificationReason: "нужно место",
+      whyUnknown: "места нет",
+      thoughtUpdate: {
+        fact: { text: "Потом я переехал.", sourceType: "dialogue_message", sourceId: firstUser.id },
+        closeGapIds: [],
+      },
+    }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  assert.ok(foreign.messages.some((item) => item.body === "Куда?"));
+  const second = await getThoughtState(reel.id);
+  const secondUser = await prisma.dialogueMessage.findFirstOrThrow({ where: { body: "Потом я переехал.", role: "user" } });
+  const newest = second.facts.find((fact) => fact.text === "Потом я переехал.");
+  assert.equal(newest?.sourceId, secondUser.id, "a sourceId pointing at another message is replaced, never stored");
+  assert.equal(second.facts.filter((fact) => fact.sourceId === firstUser.id).length, 1, "the earlier message still owns only its own fact");
+
+  const emptyText = await sendDialogueMessage(reel.id, { text: "И ещё.", idempotencyKey: "v03-fact-src-3" }, async () => ({
+    text: JSON.stringify({
+      action: "ask_question",
+      question: "Что ещё?",
+      clarificationReason: "нужно продолжение",
+      whyUnknown: "не сказано",
+      thoughtUpdate: { fact: { text: "   " }, closeGapIds: [] },
+    }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  }));
+  assert.ok(emptyText.messages.some((item) => item.body === "Что ещё?"));
+  assert.equal((await getThoughtState(reel.id)).facts.length, second.facts.length, "a fact with an empty text is discarded");
+  assert.ok((await discardedUpdates(prisma, reel.id)).includes("fact_invalid"));
 });
 
 test("an invalid question regenerates once; an invalid update never does", async (t) => {

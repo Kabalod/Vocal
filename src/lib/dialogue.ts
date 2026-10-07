@@ -21,7 +21,7 @@ import {
   type DialogueMaterialSnapshot,
 } from "@/lib/working-take";
 import { v01TestSeams } from "@/lib/v01-test-seams";
-import { AgentActionError, parseAgentReply } from "@/lib/agent-action";
+import { AgentActionError, parseAgentReply, type DiscardReason } from "@/lib/agent-action";
 import {
   blocksOrdinaryThoughtPatch,
   c00ClassifySeam,
@@ -592,6 +592,7 @@ async function authorSafeReply(input: {
   userPrompt: string | null;
   complete: CompleteJsonFn;
   knownIds: (string | null | undefined)[];
+  authorMessageId: string;
 }): Promise<{ reply: ReturnType<typeof parseAgentReply>; rawText: string }> {
   if (!actionLeaksServiceId(input.reply.action, input.knownIds)) return { reply: input.reply, rawText: input.rawText };
   const store = async (rawText: string) => {
@@ -605,7 +606,7 @@ async function authorSafeReply(input: {
         user: input.userPrompt + REGENERATE_NOTE,
         label: "dialogue",
       });
-      const retried = parseAgentReply(parseJsonObject(again.text));
+      const retried = parseAgentReply(parseJsonObject(again.text), { authorMessageId: input.authorMessageId });
       if (!actionLeaksServiceId(retried.action, input.knownIds)) {
         await store(again.text);
         return { reply: retried, rawText: again.text };
@@ -618,7 +619,7 @@ async function authorSafeReply(input: {
   const neutral = neutralQuestionReply(state.openGaps);
   const rawText = JSON.stringify(neutral);
   await store(rawText);
-  return { reply: parseAgentReply(neutral), rawText };
+  return { reply: parseAgentReply(neutral, { authorMessageId: input.authorMessageId }), rawText };
 }
 
 /**
@@ -630,9 +631,11 @@ async function parseReplyRegeneratingInvalidQuestion(input: {
   responseText: string;
   userPrompt: string;
   complete: CompleteJsonFn;
+  authorMessageId: string;
 }): Promise<{ reply: ReturnType<typeof parseAgentReply>; responseText: string }> {
+  const ctx = { authorMessageId: input.authorMessageId };
   try {
-    return { reply: parseAgentReply(parseJsonObject(input.responseText)), responseText: input.responseText };
+    return { reply: parseAgentReply(parseJsonObject(input.responseText), ctx), responseText: input.responseText };
   } catch (firstError) {
     const regenerate = firstError instanceof AgentActionError ? firstError.code === "AGENT_ACTION_INVALID" : true;
     if (!regenerate) throw firstError;
@@ -642,7 +645,7 @@ async function parseReplyRegeneratingInvalidQuestion(input: {
       user: input.userPrompt + INVALID_QUESTION_NOTE,
       label: "dialogue",
     });
-    const reply = parseAgentReply(parseJsonObject(again.text));
+    const reply = parseAgentReply(parseJsonObject(again.text), ctx);
     await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: again.text } });
     return { reply, responseText: again.text };
   }
@@ -650,6 +653,79 @@ async function parseReplyRegeneratingInvalidQuestion(input: {
 
 const INVALID_QUESTION_NOTE =
   "\n\nПредыдущий ответ не прошёл проверку формата действия. Верни ровно одно корректное действие в JSON ещё раз.";
+
+/**
+ * "Downgrade, do not fail": a suggest_take that cites facts which do not exist, or a question about a gap that is not
+ * open, becomes a neutral question about the first open gap. The invalid references are never accepted or stored. The
+ * valid part of the update (a fact from the author's own message) is kept. The replaced reply is stored as the call
+ * response so a replay is deterministic.
+ */
+async function downgradeInvalidReply(input: {
+  reelId: string;
+  callId: string;
+  reply: ReturnType<typeof parseAgentReply>;
+  rawText: string;
+  authorMessageId: string;
+}): Promise<{ reply: ReturnType<typeof parseAgentReply>; rawText: string }> {
+  const { action } = input.reply;
+  const state = await getThoughtState(input.reelId);
+  let reason: DiscardReason | null = null;
+  if (action.action === "suggest_take") {
+    const factIds = new Set(state.facts.map((fact) => fact.id));
+    // The fact this very answer creates may be cited in the same turn.
+    if (input.reply.thoughtUpdate.fact) factIds.add(candidateFactId(input.authorMessageId));
+    if (action.evidenceRefs.some((id) => !factIds.has(id))) reason = "downgrade_evidence";
+  } else if (action.action === "ask_question" && action.gapId) {
+    const gap = state.openGaps.find((row) => row.id === action.gapId);
+    if (!gap || gap.status !== "open") reason = "downgrade_gap";
+  }
+  if (!reason) return { reply: input.reply, rawText: input.rawText };
+  const { thoughtUpdate, c00Signal } = input.reply;
+  const replaced = {
+    ...neutralQuestionReply(state.openGaps),
+    thoughtUpdate: {
+      fact: thoughtUpdate.fact,
+      closeGapIds: thoughtUpdate.closeGapIds,
+      ...(thoughtUpdate.answeredGapId ? { answeredGapId: thoughtUpdate.answeredGapId } : {}),
+    },
+    ...(c00Signal ? { c00Signal } : {}),
+  };
+  const rawText = JSON.stringify(replaced);
+  await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+  const parsed = parseAgentReply(replaced, { authorMessageId: input.authorMessageId });
+  return { reply: { ...parsed, discarded: [...input.reply.discarded, reason] }, rawText };
+}
+
+/**
+ * A commit may still refuse the update (the gap is not the current question, a command became a fact, ...). That is not
+ * a reason to fail the turn: the update is dropped, counted, and the commit is retried once with the action unchanged.
+ */
+async function commitDroppingBadUpdate(input: Parameters<typeof commitDialogueReply>[0]): Promise<void> {
+  try {
+    await commitDialogueReply(input);
+  } catch (error) {
+    if (!(error instanceof AgentActionError) || (error.code !== "ACTION_GAP" && error.code !== "ACTION_EVIDENCE")) throw error;
+    let base: Record<string, unknown> = {};
+    try {
+      base = parseJsonObject(input.rawText) as Record<string, unknown>;
+    } catch {
+      base = {};
+    }
+    const { c00Signal: _signal, thoughtUpdate: _update, ...action } = base;
+    void _signal;
+    void _update;
+    const rawText = JSON.stringify({ ...action, thoughtUpdate: { fact: null, closeGapIds: [] } });
+    await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+    await commitDialogueReply({
+      ...input,
+      thoughtUpdate: { fact: null, closeGapIds: [] },
+      c00Signal: null,
+      freezeThoughtSlice: true,
+      rawText,
+      discarded: [...(input.discarded ?? []), "update_dropped_at_commit"],
+    });
+  }
+}
 
 async function recentStoredText(threadId: string): Promise<string> {
   const rows = await prisma.dialogueMessage.findMany({
@@ -848,21 +924,29 @@ export async function runDialogueTurn(
       if (await isDialogueTurnComplete(thread.id, userMessage.id, key)) {
         return listDialoguePage(reelId);
       }
-      const reply = parseAgentReply(parseJsonObject(reusable.responseText));
+      const reply = parseAgentReply(parseJsonObject(reusable.responseText), { authorMessageId: userMessage.id });
       assertCraftNotAuthorEvidence({
         cardIds: readStoredCraftSnapshot(reusable.inputSnapshotJson)?.cardIds ?? [],
         action: reply.action,
         thoughtUpdate: reply.thoughtUpdate,
         c00Signal: reply.c00Signal,
       });
-      const safeResume = await authorSafeReply({
+      const downgradedResume = await downgradeInvalidReply({
         reelId,
         callId: reusable.id,
         reply,
         rawText: reusable.responseText,
+        authorMessageId: userMessage.id,
+      });
+      const safeResume = await authorSafeReply({
+        reelId,
+        callId: reusable.id,
+        reply: downgradedResume.reply,
+        rawText: downgradedResume.rawText,
         userPrompt: null,
         complete,
         knownIds: [reelId, userMessage.id],
+        authorMessageId: userMessage.id,
       });
       const classified = await classifiedCorrectionSignal({
         reelId,
@@ -870,7 +954,7 @@ export async function runDialogueTurn(
         userMessageId: userMessage.id,
         complete,
       });
-      await commitDialogueReply({
+      await commitDroppingBadUpdate({
         reelId,
         threadId: thread.id,
         snapshot: await snapshotForResume(reusable.inputSnapshotJson, reelId, thread.id),
@@ -994,6 +1078,7 @@ export async function runDialogueTurn(
       responseText: call.responseText,
       userPrompt,
       complete,
+      authorMessageId: userMessage.id,
     });
     const reply = parsedReply.reply;
     assertCraftNotAuthorEvidence({
@@ -1002,17 +1087,25 @@ export async function runDialogueTurn(
       thoughtUpdate: reply.thoughtUpdate,
       c00Signal: reply.c00Signal,
     });
-    const safe = await authorSafeReply({
+    const downgraded = await downgradeInvalidReply({
       reelId,
       callId: call.id,
       reply,
       rawText: parsedReply.responseText,
+      authorMessageId: userMessage.id,
+    });
+    const safe = await authorSafeReply({
+      reelId,
+      callId: call.id,
+      reply: downgraded.reply,
+      rawText: downgraded.rawText,
       userPrompt,
       complete,
       knownIds: [reelId, userMessage.id, material.workingTakeId, material.transcriptRevisionId, ...thoughtFacts.map((fact) => fact.id)],
+      authorMessageId: userMessage.id,
     });
     const classified = await classifiedPromise;
-    await commitDialogueReply({
+    await commitDroppingBadUpdate({
       reelId,
       threadId: thread.id,
       snapshot: material,

@@ -83,10 +83,26 @@ export const DISCARD_REASONS = [
   "several_gaps",
   "answered_gap_mismatch",
   "redirect_state",
+  "fact_invalid",
+  "downgrade_evidence",
+  "downgrade_gap",
+  "update_dropped_at_commit",
 ] as const;
 export type DiscardReason = (typeof DISCARD_REASONS)[number];
 
-export function parseAgentReply(raw: unknown): {
+/**
+ * The server, not the model, owns where a fact comes from: sourceType and sourceId are set from the author's current
+ * message and every other key is dropped. A fact is discarded only if its text is not a non-empty string or there
+ * is no author message.
+ */
+export function normalizeFactForAuthorMessage(fact: unknown, authorMessageId: string | null): ThoughtUpdate["fact"] {
+  if (!fact || typeof fact !== "object" || !authorMessageId) return null;
+  const text = (fact as { text?: unknown }).text;
+  if (typeof text !== "string" || !text.trim()) return null;
+  return { text: text.trim(), sourceType: "dialogue_message", sourceId: authorMessageId };
+}
+
+export function parseAgentReply(raw: unknown, ctx?: { authorMessageId: string | null }): {
   action: AgentAction;
   thoughtUpdate: ThoughtUpdate;
   c00Signal: C00SignalCandidate | null;
@@ -113,11 +129,20 @@ export function parseAgentReply(raw: unknown): {
   }
   // The question is valid from here on. An invalid update is never applied, but it does not fail the turn:
   // the invalid part is dropped and counted. A gap is never closed without an accepted fact.
-  const update = thoughtUpdateSchema.safeParse(thoughtUpdate);
-  if (!update.success) {
-    return { action: parsed.data, thoughtUpdate: emptyThoughtUpdate(), c00Signal, discarded: ["update_shape"] };
-  }
   const discarded: DiscardReason[] = [];
+  let candidate: unknown = thoughtUpdate;
+  if (ctx && thoughtUpdate && typeof thoughtUpdate === "object") {
+    const rawUpdate = thoughtUpdate as Record<string, unknown>;
+    if (rawUpdate.fact !== null && rawUpdate.fact !== undefined) {
+      const fact = normalizeFactForAuthorMessage(rawUpdate.fact, ctx.authorMessageId);
+      if (!fact) discarded.push("fact_invalid");
+      candidate = { ...rawUpdate, fact };
+    }
+  }
+  const update = thoughtUpdateSchema.safeParse(candidate);
+  if (!update.success) {
+    return { action: parsed.data, thoughtUpdate: emptyThoughtUpdate(), c00Signal, discarded: [...discarded, "update_shape"] };
+  }
   let next: ThoughtUpdate = update.data;
   if (parsed.data.action === "redirect_to_task" && (next.fact || next.closeGapIds.length)) {
     return { action: parsed.data, thoughtUpdate: emptyThoughtUpdate(), c00Signal, discarded: ["redirect_state"] };
