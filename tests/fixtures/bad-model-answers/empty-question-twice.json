@@ -1,0 +1,34 @@
+{
+ "name": "empty-question-twice",
+ "origin": "the second invalid answer is the turn's error: one regeneration only",
+ "responses": [
+  "{\"action\":\"ask_question\",\"question\":\"\"}",
+  "{\"action\":\"ask_question\",\"question\":\"\"}"
+ ],
+ "expect": {
+  "turnFails": true,
+  "modelCalls": 2,
+  "errorCode": "AGENT_ACTION_INVALID",
+  "factsAdded": 0,
+  "gapsClosed": 0,
+  "discarded": []
+ },
+ "setup": {
+  "gaps": [
+   {
+    "id": "gap_no_thesis",
+    "text": "Нет вывода.",
+    "status": "open",
+    "kind": "no_thesis"
+   },
+   {
+    "id": "gap_no_episode",
+    "text": "Нет случая.",
+    "status": "open",
+    "kind": "no_episode"
+   }
+  ],
+  "priorAuthorTurn": true
+ },
+ "author": "Это был небольшой заказ на сайт."
+}

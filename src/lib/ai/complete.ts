@@ -1,6 +1,7 @@
 import { LLM_MODEL } from "@/lib/config";
 import { aiAttemptTimeoutMs, chatCompletionModel, createXaiChatCompletion, getGroq, usesXaiChat, withRetry } from "@/lib/groq";
 import type { CompleteJsonFn } from "@/types/review";
+import { recordedComplete, recordedStandActive } from "@/lib/ai/recorded";
 
 function parseJsonObject(text: string): unknown {
   try {
@@ -57,6 +58,11 @@ function mockedCompleteJson(label?: string): { text: string; usage: { promptToke
 
 export const defaultCompleteJson: CompleteJsonFn = async ({ model, system, user, label }) => {
   if (completeJsonSeam.impl) return completeJsonSeam.impl({ model, system, user, label });
+  // Offline stand (test / local UI runtime only): recorded answers or prompt recording; never reaches the provider.
+  const stand = recordedComplete({ label, system, user });
+  if (stand) return stand;
+  // Record-only mode: prompts were written down, the run goes on with the ordinary mock answers. Still never the provider.
+  if (recordedStandActive()) return mockedCompleteJson(label);
   if (envFlagOn("VOCAL_AI_MOCK")) {
     const delayMs = Number(process.env.VOCAL_AI_MOCK_DELAY_MS ?? 0);
     if (Number.isFinite(delayMs) && delayMs > 0) {

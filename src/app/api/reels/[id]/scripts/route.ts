@@ -52,7 +52,9 @@ export const POST = withApiUser(async function POST(request: Request, context: {
     }
     if (action === "final") {
       const scriptId = body.scriptId === null ? null : typeof body.scriptId === "string" ? body.scriptId : null;
-      const bundle = await setFinalScript(id, scriptId);
+      const expectedFinalScriptId =
+        body.expectedFinalScriptId === null ? null : typeof body.expectedFinalScriptId === "string" ? body.expectedFinalScriptId : undefined;
+      const bundle = await setFinalScript(id, scriptId, { expectedFinalScriptId });
       return NextResponse.json(bundle);
     }
     if (action === "accept") {

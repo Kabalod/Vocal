@@ -1,0 +1,34 @@
+{
+ "name": "empty-question-then-valid",
+ "origin": "shape guarded since R2: an invalid question regenerates once",
+ "responses": [
+  "{\"action\":\"ask_question\",\"question\":\"\"}",
+  "{\"action\":\"ask_question\",\"question\":\"Что здесь главное?\",\"clarificationReason\":\"нужно уточнение\",\"whyUnknown\":\"мало данных\"}"
+ ],
+ "expect": {
+  "turnFails": false,
+  "modelCalls": 2,
+  "questionIs": "Что здесь главное?",
+  "factsAdded": 0,
+  "gapsClosed": 0,
+  "discarded": []
+ },
+ "setup": {
+  "gaps": [
+   {
+    "id": "gap_no_thesis",
+    "text": "Нет вывода.",
+    "status": "open",
+    "kind": "no_thesis"
+   },
+   {
+    "id": "gap_no_episode",
+    "text": "Нет случая.",
+    "status": "open",
+    "kind": "no_episode"
+   }
+  ],
+  "priorAuthorTurn": true
+ },
+ "author": "Это был небольшой заказ на сайт."
+}

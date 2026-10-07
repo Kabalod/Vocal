@@ -109,8 +109,9 @@ test("R2 retries do not duplicate thought, take, message, finals or export rows"
   });
   assert.ok(extraA.headId && extraB.headId);
   const scriptRace = await Promise.allSettled([
-    setFinalScript(extra.reel.id, extraA.headId),
-    setFinalScript(extra.reel.id, extraB.headId),
+    // Both tabs saw the same state (no final script): the token makes the race deterministic, one wins and one is STALE.
+    setFinalScript(extra.reel.id, extraA.headId, { expectedFinalScriptId: null }),
+    setFinalScript(extra.reel.id, extraB.headId, { expectedFinalScriptId: null }),
   ]);
   const scriptOk = scriptRace.filter((row) => row.status === "fulfilled");
   const scriptBad = scriptRace.filter((row) => row.status === "rejected");

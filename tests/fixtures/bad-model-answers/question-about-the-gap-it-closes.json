@@ -1,0 +1,37 @@
+{
+ "name": "question-about-the-gap-it-closes",
+ "origin": "found by the recorded stand 2026-10-07: the model closes a gap with the author's answer and in the same reply asks a question about the same gap; before the fix the commit refused it and the author's fact was lost",
+ "responses": [
+  "{\"action\":\"ask_question\",\"question\":\"Что вы почувствовали, когда это произошло?\",\"gapId\":\"gap_no_episode\",\"whyUnknown\":\"нет реакции\",\"thoughtUpdate\":{\"fact\":{\"text\":\"Это был небольшой заказ на сайт.\",\"sourceType\":\"dialogue_message\",\"sourceId\":\"__AUTHOR__\"},\"closeGapIds\":[\"gap_no_episode\"],\"answeredGapId\":\"gap_no_episode\"}}"
+ ],
+ "expect": {
+  "turnFails": false,
+  "modelCalls": 1,
+  "questionIs": "Что вы почувствовали, когда это произошло?",
+  "factsAdded": 1,
+  "factText": "Это был небольшой заказ на сайт.",
+  "factSourceIsAuthorMessage": true,
+  "gapsClosed": 1,
+  "discarded": [
+   "question_gap_detached"
+  ]
+ },
+ "setup": {
+  "gaps": [
+   {
+    "id": "gap_no_thesis",
+    "text": "Нет вывода.",
+    "status": "open",
+    "kind": "no_thesis"
+   },
+   {
+    "id": "gap_no_episode",
+    "text": "Нет случая.",
+    "status": "open",
+    "kind": "no_episode"
+   }
+  ],
+  "priorAuthorTurn": true
+ },
+ "author": "Это был небольшой заказ на сайт."
+}

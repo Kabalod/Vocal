@@ -1,0 +1,33 @@
+{
+ "name": "not-json",
+ "origin": "provider returned prose instead of JSON",
+ "responses": [
+  "Извините, я не могу ответить на этот вопрос.",
+  "Извините, я не могу ответить на этот вопрос."
+ ],
+ "expect": {
+  "turnFails": true,
+  "modelCalls": 2,
+  "factsAdded": 0,
+  "gapsClosed": 0,
+  "discarded": []
+ },
+ "setup": {
+  "gaps": [
+   {
+    "id": "gap_no_thesis",
+    "text": "Нет вывода.",
+    "status": "open",
+    "kind": "no_thesis"
+   },
+   {
+    "id": "gap_no_episode",
+    "text": "Нет случая.",
+    "status": "open",
+    "kind": "no_episode"
+   }
+  ],
+  "priorAuthorTurn": true
+ },
+ "author": "Это был небольшой заказ на сайт."
+}

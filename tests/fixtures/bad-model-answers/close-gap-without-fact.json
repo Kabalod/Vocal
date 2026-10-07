@@ -1,0 +1,35 @@
+{
+ "name": "close-gap-without-fact",
+ "origin": "observed live 2026-10-07 (first measurement, 3 turns): fact null with closeGapIds",
+ "responses": [
+  "{\"action\":\"ask_question\",\"question\":\"Какую одну мысль вы хотите сказать?\",\"gapId\":\"gap_no_thesis\",\"whyUnknown\":\"позиции нет\",\"thoughtUpdate\":{\"fact\":null,\"closeGapIds\":[\"gap_no_thesis\"]}}"
+ ],
+ "expect": {
+  "turnFails": false,
+  "modelCalls": 1,
+  "questionIs": "Какую одну мысль вы хотите сказать?",
+  "factsAdded": 0,
+  "gapsClosed": 0,
+  "discarded": [
+   "gap_without_fact"
+  ]
+ },
+ "setup": {
+  "gaps": [
+   {
+    "id": "gap_no_thesis",
+    "text": "Нет вывода.",
+    "status": "open",
+    "kind": "no_thesis"
+   },
+   {
+    "id": "gap_no_episode",
+    "text": "Нет случая.",
+    "status": "open",
+    "kind": "no_episode"
+   }
+  ],
+  "priorAuthorTurn": true
+ },
+ "author": "Это был небольшой заказ на сайт."
+}

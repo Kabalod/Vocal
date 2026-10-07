@@ -491,6 +491,7 @@ async function freezeThoughtPrompt(
     "Для ask_question обязательны непустые question и whyUnknown, а также gapId или clarificationReason. evidenceRefs в вопросе не нужен.",
     "Для suggest_take обязательны непустые mainIdea, takeTask и evidenceRefs с id существующих фактов этой мысли. Если задача дубля ещё неясна, задай вопрос. Не заполняй поля пустыми строками или выдуманными id.",
     "content_sufficient требует checkedInTranscript и whyNoGaps. Не выбирай content_sufficient для исправления факта и не комбинируй его с c00Signal. content_sufficient допустим только после audio/video дубля с непустой выбранной расшифровкой.",
+    "redirect_to_task: обязательное поле currentTask — короткая фраза о том, к чему вернуться в этой мысли; других полей, кроме action и thoughtUpdate, нет, thoughtUpdate при этом пустой.",
     "После обработанного дубля основной результат — один вопрос или content_sufficient. redirect_to_task — только если автор ушёл от задачи мысли. Не используй текст сценария как произнесённый материал.",
     "thoughtUpdate.fact равен null, если нет нового проверенного факта из текущего сообщения автора. Никогда не возвращай fact с пустым text; не закрывай gap без принятого факта.",
     'Форма факта строго такая: {"text":"…","sourceType":"dialogue_message","sourceId":"<id текущего сообщения автора>"}. Без других ключей. Если факта нет, fact равен null и closeGapIds пуст.',
@@ -710,6 +711,27 @@ async function downgradeInvalidReply(input: {
 }): Promise<{ reply: ReturnType<typeof parseAgentReply>; rawText: string }> {
   const { action } = input.reply;
   const state = await getThoughtState(input.reelId);
+  // A question about the very gap this answer closes would be refused at commit and the author's fact lost: detach the
+  // link, keep the question, the fact and the closure.
+  if (action.action === "ask_question" && action.gapId && input.reply.thoughtUpdate.closeGapIds.includes(action.gapId)) {
+    const { gapId: _detached, ...rest } = action;
+    void _detached;
+    const { thoughtUpdate: update, c00Signal: signal } = input.reply;
+    const detached = {
+      ...rest,
+      clarificationReason: action.clarificationReason ?? "уточнение по принятому ответу",
+      thoughtUpdate: {
+        fact: update.fact,
+        closeGapIds: update.closeGapIds,
+        ...(update.answeredGapId ? { answeredGapId: update.answeredGapId } : {}),
+      },
+      ...(signal ? { c00Signal: signal } : {}),
+    };
+    const rawText = JSON.stringify(detached);
+    await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+    const parsed = parseAgentReply(detached, { authorMessageId: input.authorMessageId });
+    return { reply: { ...parsed, discarded: [...input.reply.discarded, "question_gap_detached"] }, rawText };
+  }
   let reason: DiscardReason | null = null;
   if (action.action === "suggest_take") {
     const factIds = new Set(state.facts.map((fact) => fact.id));

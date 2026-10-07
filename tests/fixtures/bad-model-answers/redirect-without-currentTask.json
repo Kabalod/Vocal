@@ -1,0 +1,35 @@
+{
+ "name": "redirect-without-currentTask",
+ "origin": "observed live 2026-10-07 (R5, 3 of 4 off-topic turns): the model answered redirect_to_task and nothing else",
+ "responses": [
+  "{\"action\":\"redirect_to_task\"}"
+ ],
+ "expect": {
+  "turnFails": false,
+  "modelCalls": 1,
+  "questionStartsWith": "Это в сторону от нашей мысли, давайте вернёмся к ней. ",
+  "factsAdded": 0,
+  "gapsClosed": 0,
+  "discarded": [
+   "redirect_invalid"
+  ]
+ },
+ "setup": {
+  "gaps": [
+   {
+    "id": "gap_no_thesis",
+    "text": "Нет вывода.",
+    "status": "open",
+    "kind": "no_thesis"
+   },
+   {
+    "id": "gap_no_episode",
+    "text": "Нет случая.",
+    "status": "open",
+    "kind": "no_episode"
+   }
+  ],
+  "priorAuthorTurn": true
+ },
+ "author": "Это был небольшой заказ на сайт."
+}
