@@ -21,7 +21,7 @@ const DIR = path.join(__dirname, "recorded");
 const scenarios: Scenario[] = readdirSync(DIR).filter((f) => f.endsWith(".json")).sort().map((f) => JSON.parse(readFileSync(path.join(DIR, f), "utf8")) as Scenario);
 
 test("recorded stand: scenarios are present and say what they do not prove", () => {
-  assert.deepEqual(scenarios.map((s) => s.name).sort(), ["false-redirect", "offtopic", "one-case-question", "repeat-after-dont-know"]);
+  assert.deepEqual(scenarios.map((s) => s.name).sort(), ["false-redirect", "offtopic", "one-case-question", "repeat-after-dont-know", "take-proposal-repeat"]);
   for (const s of scenarios) assert.match(s.note, /НЕ доказывает поведение рабочей модели Groq/);
 });
 

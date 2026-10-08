@@ -894,6 +894,56 @@ async function varyRepeatedQuestion(input: {
   return { reply: { ...parsed, discarded: [...input.reply.discarded, "question_repeat_replaced"] }, rawText };
 }
 
+/**
+ * 08.10: the model proposes the next take again and again once the thought looks ready (R5 dialogues 5 and 6: the same
+ * proposal 2-3 times in a row). A suggest_take right after a suggest_take is replaced, without a model call, by a
+ * neutral question about an open gap (or a variety question); the valid part of the update is kept.
+ */
+async function varyRepeatedProposal(input: {
+  reelId: string;
+  threadId: string;
+  callId: string;
+  reply: ReturnType<typeof parseAgentReply>;
+  rawText: string;
+  authorMessageId: string;
+}): Promise<{ reply: ReturnType<typeof parseAgentReply>; rawText: string }> {
+  if (input.reply.action.action !== "suggest_take" || input.reply.c00Signal) return { reply: input.reply, rawText: input.rawText };
+  const last = await prisma.dialogueMessage.findFirst({
+    where: { threadId: input.threadId, role: "assistant", status: "done" },
+    orderBy: { createdAt: "desc" },
+    select: { payloadJson: true },
+  });
+  let lastAction: unknown;
+  try {
+    lastAction = last ? (JSON.parse(last.payloadJson) as { action?: { action?: unknown } }).action?.action : undefined;
+  } catch {
+    lastAction = undefined;
+  }
+  if (lastAction !== "suggest_take") return { reply: input.reply, rawText: input.rawText };
+  const state = await getThoughtState(input.reelId);
+  const recentQuestions = (
+    await prisma.dialogueMessage.findMany({
+      where: { threadId: input.threadId, role: "assistant", kind: "question", status: "done" },
+      orderBy: { createdAt: "desc" },
+      take: 2,
+      select: { body: true },
+    })
+  ).map((row) => stripOffTopicPhrase(row.body));
+  const { thoughtUpdate } = input.reply;
+  const replaced = {
+    ...neutralQuestionReply(state.openGaps, recentQuestions),
+    thoughtUpdate: {
+      fact: thoughtUpdate.fact,
+      closeGapIds: thoughtUpdate.closeGapIds,
+      ...(thoughtUpdate.answeredGapId ? { answeredGapId: thoughtUpdate.answeredGapId } : {}),
+    },
+  };
+  const rawText = JSON.stringify(replaced);
+  await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+  const parsed = parseAgentReply(replaced, { authorMessageId: input.authorMessageId });
+  return { reply: { ...parsed, discarded: [...input.reply.discarded, "proposal_repeat_replaced"] }, rawText };
+}
+
 async function recentStoredText(threadId: string): Promise<string> {
   const rows = await prisma.dialogueMessage.findMany({
     where: { threadId, kind: { in: ["text", "question", "answer", "script_proposal"] } },
@@ -1293,11 +1343,19 @@ export async function runDialogueTurn(
       complete,
       authorMessageId: userMessage.id,
     });
-    const safe = await authorSafeReply({
+    const proposalVaried = await varyRepeatedProposal({
       reelId,
+      threadId: thread.id,
       callId: call.id,
       reply: varied.reply,
       rawText: varied.rawText,
+      authorMessageId: userMessage.id,
+    });
+    const safe = await authorSafeReply({
+      reelId,
+      callId: call.id,
+      reply: proposalVaried.reply,
+      rawText: proposalVaried.rawText,
       userPrompt,
       complete,
       knownIds: [reelId, userMessage.id, material.workingTakeId, material.transcriptRevisionId, ...thoughtFacts.map((fact) => fact.id)],
