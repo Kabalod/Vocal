@@ -87,6 +87,8 @@ export const DISCARD_REASONS = [
   /** Counter only: the model named another message as the source; the server set the author's current message. */
   "fact_source_replaced",
   "redirect_invalid",
+  /** The model returned a valid redirect_to_task; the server replaced it with the fixed return phrase and a neutral question. */
+  "redirect_replaced",
   "question_repeat_regenerated",
   "question_repeat_replaced",
   "question_gap_detached",

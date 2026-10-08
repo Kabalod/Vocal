@@ -11,9 +11,11 @@ import { closePostgresTestDb, openPostgresTestDb } from "../../tests/helpers/pos
 
 (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
 process.env.VOCAL_TAKE_DIAGNOSIS = "1";
+// No automatic retries in the app client (withRetry gets one attempt): the only retry is the script's own, logged below.
+process.env.VOCAL_AI_NO_RETRY = "1";
 
 const ROOT = path.resolve(__dirname, "../../Analyz");
-const TOKEN_CAP = 160_000;
+const TOKEN_CAP = Number(process.argv.find((a) => a.startsWith("--token-cap="))?.slice(12) ?? "160000");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const CUID = /\bc[a-z0-9]{24}\b|\bfact_[A-Za-z0-9_-]+|\bgap_[A-Za-z0-9_-]+|\bcraft_[A-Za-z0-9_]+/;
 
@@ -39,9 +41,9 @@ function fromHadunkin(): { id: string; text: string } {
 
 const NEUTRAL_ANSWERS = [
   "Это из моего опыта, я так и думаю.",
+  "Не знаю.",
+  "Не знаю.",
   "Могу рассказать подробнее про один случай.",
-  "Мне важно, чтобы это было понятно обычному человеку.",
-  "Да, главное я уже сказал.",
   "Хочу закончить этим.",
 ];
 const OFF_TOPIC = ["А какая сегодня погода?", "Расскажи анекдот.", "Кто выиграл матч вчера?"];
@@ -79,18 +81,40 @@ async function main() {
     ...raw.map((r) => ({ label: `raw:${r.kind}:${r.id}`, title: `Сырой дубль ${r.id}`, body: r.text, answers: NEUTRAL_ANSWERS })),
     ...ORDINARY.map((o) => ({ label: `ordinary:${o.title}`, title: o.title, body: o.body, answers: o.answers })),
     ...WITH_OFF_TOPIC.map((o) => ({ label: `offtopic:${o.title}`, title: o.title, body: o.body, answers: o.answers })),
+    // 08.10 micro-check: the line that got a false redirect_to_task, then one ordinary answer. No "уточни" warm-up turn.
+    { label: "falseredirect:Утренний кофе", title: "Утренний кофе", body: WITH_OFF_TOPIC[1].body, answers: [] as string[], onlyTurns: ["Главное пережить первые три дня без исключений.", "К четвергу я заметил, что просыпаюсь без будильника."] },
   ];
 
   const { defaultCompleteJson } = await import("../../src/lib/ai/complete");
   // Raw model answers go to a file OUTSIDE the test schema, so they survive the cleanup.
   let currentDialogue = "";
+  // Every provider call goes through here: counted, the status of each failure logged (never keys or prompts), and ONE own
+  // retry after a 429 / timeout / 5xx with a delay. Failed attempts are costed by an estimate (chars / 3) because the provider
+  // may count them and AiCall does not record them.
+  const callStats = { attempts: 0, failures: [] as { dialogue: string; status: number | string; code: string; retried: boolean }[], estimatedFailedTokens: 0 };
   const complete = async (args: Parameters<typeof defaultCompleteJson>[0]) => {
-    const result = await defaultCompleteJson(args);
-    if (RAW_FILE) appendFileSync(RAW_FILE, JSON.stringify({ dialogue: currentDialogue, label: args.label ?? "chat", text: result.text }) + "\n");
-    return result;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      callStats.attempts += 1;
+      try {
+        const result = await defaultCompleteJson(args);
+        if (RAW_FILE) appendFileSync(RAW_FILE, JSON.stringify({ dialogue: currentDialogue, label: args.label ?? "chat", text: result.text }) + "\n");
+        return result;
+      } catch (error) {
+        const e = error as { status?: number; code?: string; message?: string; headers?: Record<string, string> };
+        const status = e.status ?? "none";
+        const retryable = status === 429 || (typeof status === "number" && status >= 500) || /вовремя|timeout|timed out/i.test(String(e.message ?? ""));
+        callStats.estimatedFailedTokens += Math.ceil(((args.system?.length ?? 0) + (args.user?.length ?? 0)) / 3);
+        callStats.failures.push({ dialogue: currentDialogue, status, code: String(e.code ?? "").slice(0, 40), retried: retryable && attempt === 0 });
+        console.warn(`provider failure: status=${status} code=${String(e.code ?? "-").slice(0, 40)} retry=${retryable && attempt === 0}`);
+        if (!retryable || attempt === 1) throw error;
+        const retryAfter = Number(e.headers?.["retry-after"]);
+        await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter, 120) * 1000 + 750 : 20_000);
+      }
+    }
+    throw new Error("unreachable");
   };
-  if (ONLY) {
-    const keep = (label: string) => (ONLY === "offtopic" ? label.startsWith("offtopic") : ONLY === "repeats" ? /DYSu2FDuQyw|DW6nB5hDPPa/.test(label) : true);
+  {
+    const keep = (label: string) => (ONLY === "falseredirect" ? label.startsWith("falseredirect") : label.startsWith("falseredirect") ? false : ONLY === "offtopic" ? label.startsWith("offtopic") : ONLY === "repeats" ? /DYSu2FDuQyw|DW6nB5hDPPa/.test(label) : true);
     for (let i = plans.length - 1; i >= 0; i -= 1) if (!keep(plans[i].label)) plans.splice(i, 1);
   }
   if (process.argv.includes("--dry")) {
@@ -119,24 +143,18 @@ async function main() {
     currentDialogue = plan.label;
     const made = await createThoughtFromText({ title: plan.title, body: plan.body, idempotencyKey: `r5-${n}` });
     reelIds.push(made.reel.id);
-    const allTurns = ["уточни", ...plan.answers];
+    const allTurns = (plan as { onlyTurns?: string[] }).onlyTurns ?? ["уточни", ...plan.answers];
     const turns = TURNS > 0 ? allTurns.slice(0, TURNS) : allTurns;
     for (let i = 0; i < turns.length; i += 1) {
+      if (i > 0 && (await tokens()) > TOKEN_CAP) {
+        console.log(`stopped inside dialogue ${n} before turn ${i}: token cap ${TOKEN_CAP} reached`);
+        break;
+      }
       let outcome = "ok";
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          await sendDialogueMessage(made.reel.id, { text: turns[i], idempotencyKey: `r5-${n}-t${i}-${attempt}` }, complete);
-          outcome = "ok";
-          break;
-        } catch (error) {
-          outcome = (error as { code?: string }).code ?? "error";
-          if (/429|Rate limit/i.test(error instanceof Error ? error.message : "") && attempt === 0) {
-            outcome = "429";
-            await sleep(20_000);
-            continue;
-          }
-          break;
-        }
+      try {
+        await sendDialogueMessage(made.reel.id, { text: turns[i], idempotencyKey: `r5-${n}-t${i}` }, complete);
+      } catch (error) {
+        outcome = (error as { code?: string }).code ?? "error";
       }
       results.push({ dialogue: plan.label, turn: i, outcome });
       if (OFF_TOPIC.includes(turns[i]) && outcome === "ok") {
@@ -240,6 +258,7 @@ async function main() {
     criterion5_noFactWithoutAuthorReply: factsWithoutAuthorReply === 0,
     tokens: sum,
     totalTokens: await tokens(),
+    providerCalls: { attempts: callStats.attempts, failures: callStats.failures, estimatedFailedAttemptTokens: callStats.estimatedFailedTokens, note: "AiCall tokens exclude failed attempts; the estimate is chars/3 and may overstate or understate the provider count" },
   }, null, 1));
   await closePostgresTestDb(db);
 }

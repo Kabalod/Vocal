@@ -714,7 +714,8 @@ test("redirect_to_task stays on the current thought without changing status", as
     }),
     usage: { promptTokens: 1, completionTokens: 1 },
   }));
-  assert.ok(page.messages.some((item) => item.body.includes("вернуться к задаче")));
+  assert.ok(page.messages.some((item) => item.body.startsWith("Это в сторону от нашей мысли, давайте вернёмся к ней.")), "08.10: the fixed return phrase, not currentTask");
+  assert.ok(!page.messages.some((item) => item.body.includes("вернуться к задаче")));
   assert.equal((await prisma.reel.findUniqueOrThrow({ where: { id: reel.id } })).status, "idea");
   assert.equal((await prisma.reel.findUniqueOrThrow({ where: { id: reel.id } })).status !== "redirect_to_task", true);
   assert.equal((await getThoughtState(reel.id)).facts.length, 0);
@@ -740,11 +741,11 @@ test("redirect_to_task with a fact is dropped, counted and does not change state
       usage: { promptTokens: 1, completionTokens: 1 },
     };
   });
-  assert.ok(page.messages.some((item) => item.body.includes("вернуться к задаче")), "the redirect itself is shown");
+  assert.ok(page.messages.some((item) => item.body.startsWith("Это в сторону от нашей мысли, давайте вернёмся к ней.")), "the fixed return phrase is shown (08.10), not currentTask");
   const after = await getThoughtState(reel.id);
   assert.deepEqual(after.facts, before.facts, "the off-topic fact is not stored");
   assert.deepEqual(after.openGaps, before.openGaps);
-  assert.deepEqual(await discardedUpdates(prisma, reel.id), ["redirect_state"]);
+  assert.deepEqual((await discardedUpdates(prisma, reel.id)).sort(), ["redirect_replaced", "redirect_state"]);
 });
 
 test("closing a different gap than the current question drops the update, counts it, and shows the question", async (t) => {

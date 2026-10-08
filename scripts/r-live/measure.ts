@@ -7,6 +7,7 @@ import { closePostgresTestDb, openPostgresTestDb } from "../../tests/helpers/pos
 
 (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
 process.env.VOCAL_TAKE_DIAGNOSIS = "1";
+process.env.VOCAL_AI_NO_RETRY = "1"; // no automatic app retries; the script keeps its own single retry after a 429
 
 const THOUGHTS = [
   ["Привычка и мотивация", "Я неделю вставал в шесть утра и понял, что мотивация пропала на третий день, а привычка осталась.", ["Это было в марте, я начал бегать по утрам.", "На третий день мне стало лень, но я всё равно вышел, потому что так уже делал вчера.", "Хочу сказать тем, кто бросает через неделю: не ждите настроения.", "Привычка держится на простом первом шаге, а не на желании."]],
