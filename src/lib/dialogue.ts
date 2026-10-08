@@ -491,7 +491,7 @@ async function freezeThoughtPrompt(
     "Для ask_question обязательны непустые question и whyUnknown, а также gapId или clarificationReason. evidenceRefs в вопросе не нужен.",
     "Для suggest_take обязательны непустые mainIdea, takeTask и evidenceRefs с id существующих фактов этой мысли. Если задача дубля ещё неясна, задай вопрос. Не заполняй поля пустыми строками или выдуманными id.",
     "content_sufficient требует checkedInTranscript и whyNoGaps. Не выбирай content_sufficient для исправления факта и не комбинируй его с c00Signal. content_sufficient допустим только после audio/video дубля с непустой выбранной расшифровкой.",
-    "redirect_to_task: обязательное поле currentTask — короткая фраза о том, к чему вернуться в этой мысли; других полей, кроме action и thoughtUpdate, нет, thoughtUpdate при этом пустой.",
+    "redirect_to_task: обязательное поле currentTask — короткая фраза о том, к чему вернуться в этой мысли; других полей, кроме action и thoughtUpdate, нет, thoughtUpdate при этом пустой. Выбирай redirect_to_task только если реплика автора не отвечает на твой вопрос и не относится к мысли автора (погода, анекдот, новости). Любая реплика, которая похожа на ответ, вывод или рассказ по мысли, — это ответ, а не уход: при сомнении считай реплику ответом и работай с ней как с ответом.",
     "После обработанного дубля основной результат — один вопрос или content_sufficient. redirect_to_task — только если автор ушёл от задачи мысли. Не используй текст сценария как произнесённый материал.",
     "thoughtUpdate.fact равен null, если нет нового проверенного факта из текущего сообщения автора. Никогда не возвращай fact с пустым text; не закрывай gap без принятого факта.",
     'Форма факта строго такая: {"text":"…","sourceType":"dialogue_message","sourceId":"<id текущего сообщения автора>"}. Без других ключей. Если факта нет, fact равен null и closeGapIds пуст.',
@@ -568,13 +568,16 @@ export async function offTopicStreak(threadId: string): Promise<number> {
   });
   let streak = 0;
   for (const row of rows) {
-    let action: unknown;
+    let returned = false;
     try {
-      action = (JSON.parse(row.payloadJson) as { action?: { action?: unknown } }).action?.action;
+      const payload = JSON.parse(row.payloadJson) as { action?: { action?: unknown }; discardedUpdates?: unknown };
+      // A redirect the server turned into the fixed return phrase is stored as a question and marked in the counters.
+      const marks = Array.isArray(payload.discardedUpdates) ? payload.discardedUpdates : [];
+      returned = payload.action?.action === "redirect_to_task" || marks.includes("redirect_replaced") || marks.includes("redirect_invalid");
     } catch {
-      action = undefined;
+      returned = false;
     }
-    if (action !== "redirect_to_task") break;
+    if (!returned) break;
     streak += 1;
   }
   return streak;
@@ -654,6 +657,28 @@ async function repairInvalidRedirect(input: {
   await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText } });
   const parsed = parseAgentReply(phrased, { authorMessageId: input.authorMessageId });
   return { reply: { ...parsed, discarded: ["redirect_invalid"] }, responseText };
+}
+
+/**
+ * 08.10: the author never sees the model's own currentTask. A VALID redirect_to_task is replaced the same way as an
+ * invalid one: the fixed return phrase and a neutral question about an open gap, without a model call. A fact or gap
+ * closure that came with the redirect was already dropped by parseAgentReply and counted ("redirect_state"); the
+ * correction signal, if any, is kept. The replacement is stored as the call response, so a replay is deterministic.
+ */
+async function replaceValidRedirect(input: {
+  reelId: string;
+  callId: string;
+  reply: ReturnType<typeof parseAgentReply>;
+  authorMessageId: string;
+}): Promise<{ reply: ReturnType<typeof parseAgentReply>; responseText: string } | null> {
+  if (input.reply.action.action !== "redirect_to_task") return null;
+  const state = await getThoughtState(input.reelId);
+  const neutral = neutralQuestionReply(state.openGaps);
+  const phrased = { ...neutral, question: withOffTopicPhrase(String(neutral.question)) };
+  const responseText = JSON.stringify(phrased);
+  await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText } });
+  const parsed = parseAgentReply(phrased, { authorMessageId: input.authorMessageId });
+  return { reply: { ...parsed, c00Signal: input.reply.c00Signal, discarded: [...input.reply.discarded, "redirect_replaced"] }, responseText };
 }
 
 /**
@@ -827,10 +852,10 @@ async function varyRepeatedQuestion(input: {
   const repeats = (question: string) =>
     recentBodies.some((old) => questionsAreNearDuplicates(stripOffTopicPhrase(question), stripOffTopicPhrase(old)));
   if (!repeats(input.reply.action.question)) return { reply: input.reply, rawText: input.rawText };
-  const fromRedirect = input.reply.discarded.includes("redirect_invalid");
+  const fromRedirect = input.reply.discarded.includes("redirect_invalid") || input.reply.discarded.includes("redirect_replaced");
 
   // A question the server itself made (an off-topic return, a downgrade) is varied without another model call.
-  const serverMade = input.reply.discarded.some((reason) => reason === "redirect_invalid" || reason.startsWith("downgrade_"));
+  const serverMade = input.reply.discarded.some((reason) => reason === "redirect_invalid" || reason === "redirect_replaced" || reason.startsWith("downgrade_"));
   try {
     if (serverMade) throw new Error("server-made question");
     const again = await gatewayComplete(input.complete, {
@@ -1081,6 +1106,11 @@ export async function runDialogueTurn(
         reply = repaired.reply;
         resumeRawText = repaired.responseText;
       }
+      const resumeReplaced = await replaceValidRedirect({ reelId, callId: reusable.id, reply, authorMessageId: userMessage.id });
+      if (resumeReplaced) {
+        reply = resumeReplaced.reply;
+        resumeRawText = resumeReplaced.responseText;
+      }
       assertCraftNotAuthorEvidence({
         cardIds: readStoredCraftSnapshot(reusable.inputSnapshotJson)?.cardIds ?? [],
         action: reply.action,
@@ -1237,7 +1267,9 @@ export async function runDialogueTurn(
       complete,
       authorMessageId: userMessage.id,
     });
-    const reply = parsedReply.reply;
+    const replacedRedirect = await replaceValidRedirect({ reelId, callId: call.id, reply: parsedReply.reply, authorMessageId: userMessage.id });
+    const reply = replacedRedirect ? replacedRedirect.reply : parsedReply.reply;
+    if (replacedRedirect) parsedReply.responseText = replacedRedirect.responseText;
     assertCraftNotAuthorEvidence({
       cardIds: craft.cardIds,
       action: reply.action,

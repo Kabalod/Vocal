@@ -44,4 +44,14 @@ test("R3: off-topic streak counts only the latest unbroken run of redirect_to_ta
   assert.match(hint, /продолжить эту мысль, либо отложить/);
   assert.match(hint, /Не добавляй тему ухода в thoughtUpdate/);
   assert.equal((await buildThoughtMaterialContext(created.reel.id)).includes("подряд уходит от мысли"), true);
+
+  // 08.10: a redirect the server replaced with the fixed phrase is stored as a question but still counts.
+  await prisma.dialogueMessage.create({
+    data: {
+      threadId: thread.id, role: "assistant", kind: "question", body: "Это в сторону от нашей мысли, давайте вернёмся к ней. Вопрос?",
+      payloadJson: JSON.stringify({ action: { action: "ask_question" }, discardedUpdates: ["redirect_replaced"] }),
+      status: "done", createdAt: new Date(Date.UTC(2026, 9, 8, 10, 0, 5)),
+    },
+  });
+  assert.equal(await offTopicStreak(thread.id), 3);
 });

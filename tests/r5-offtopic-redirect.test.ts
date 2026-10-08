@@ -72,7 +72,7 @@ test("R5: an invalid redirect_to_task does not fail the turn; the author is retu
   assert.ok(replay.messages.some((m) => m.body === questions[0]), "the stored first reply is returned");
 });
 
-test("R5: a valid redirect_to_task is untouched, and an invalid question that is not a redirect still regenerates once", async (t) => {
+test("08.10: a VALID redirect_to_task is replaced too (fixed phrase, no currentTask shown), and an invalid question that is not a redirect still regenerates once", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   t.after(async () => {
     await prisma.$disconnect();
@@ -85,8 +85,9 @@ test("R5: a valid redirect_to_task is untouched, and an invalid question that is
     text: JSON.stringify({ action: "redirect_to_task", currentTask: "вернуться к мысли про кофе" }),
     usage: { promptTokens: 1, completionTokens: 1 },
   })) as never);
-  assert.ok(ok.messages.some((m) => m.body === "вернуться к мысли про кофе"));
-  assert.deepEqual(await discardedReasons(prisma, made.reel.id), []);
+  assert.ok(!ok.messages.some((m) => m.body.includes("вернуться к мысли про кофе")), "the model's currentTask is never shown to the author");
+  assert.ok(ok.messages.at(-1)?.body.startsWith("Это в сторону от нашей мысли, давайте вернёмся к ней. "), "the fixed phrase and a neutral question");
+  assert.deepEqual(await discardedReasons(prisma, made.reel.id), ["redirect_replaced"]);
 
   let calls = 0;
   await sendDialogueMessage(made.reel.id, { text: "уточни", idempotencyKey: "r5-off2-b" }, (async () => {
@@ -97,4 +98,32 @@ test("R5: a valid redirect_to_task is untouched, and an invalid question that is
     };
   }) as never);
   assert.equal(calls, 2);
+});
+
+test("08.10: a redirect_to_task that came with the author's fact (a false return) drops the fact visibly, never silently, and keeps the author's message", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  t.after(async () => {
+    await prisma.$disconnect();
+    await resetPrismaClient();
+  });
+  const { createThoughtFromText } = await import("../src/lib/thought-create");
+  const { sendDialogueMessage } = await import("../src/lib/dialogue");
+  const { getThoughtState, applyThoughtState } = await import("../src/lib/thought-state");
+  const line = "Главное пережить первые три дня без исключений.";
+  const made = await createThoughtFromText({ title: "Кофе", body: "Я перестал пить кофе по утрам.", idempotencyKey: "r5-false" });
+  await applyThoughtState({ reelId: made.reel.id, expectedRevision: 0, patch: { openGaps: [{ id: "gap_no_thesis", text: "Нет вывода.", status: "open", kind: "no_thesis" }] } });
+  const page = await sendDialogueMessage(made.reel.id, { text: line, idempotencyKey: "r5-false-1" }, (async () => ({
+    text: JSON.stringify({
+      action: "redirect_to_task",
+      currentTask: "сформулировать выводную позицию автора",
+      thoughtUpdate: { fact: { text: line, sourceType: "dialogue_message", sourceId: "x" }, closeGapIds: ["gap_no_thesis"] },
+    }),
+    usage: { promptTokens: 1, completionTokens: 1 },
+  })) as never);
+  assert.ok(page.messages.some((m) => m.role === "user" && m.body === line), "the author's message stays in the dialogue");
+  assert.ok(!page.messages.some((m) => m.body.includes("сформулировать выводную позицию")), "currentTask is not shown");
+  const state = await getThoughtState(made.reel.id);
+  assert.equal(state.facts.length, 0, "current behaviour: the fact that came with a redirect is NOT stored (the redirect schema forbids it)");
+  assert.equal(state.openGaps.find((g) => g.id === "gap_no_thesis")?.status, "open");
+  assert.deepEqual((await discardedReasons(prisma, made.reel.id)).sort(), ["redirect_replaced", "redirect_state"], "the loss is counted, not silent");
 });
