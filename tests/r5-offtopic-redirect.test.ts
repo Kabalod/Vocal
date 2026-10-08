@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { assertPlainQuestion } from "./helpers/plain-question";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
 async function discardedReasons(prisma: import("@prisma/client").PrismaClient, reelId: string) {
@@ -43,18 +44,16 @@ test("R5: an invalid redirect_to_task does not fail the turn; the author is retu
     assert.equal(calls, 1, "no regeneration: the model already said the message is off topic");
     assert.equal(page.messages.at(-1)?.kind, "question");
     if (index === 0) {
-      assert.equal(
-        page.messages.at(-1)?.body,
-        "Это в сторону от нашей мысли, давайте вернёмся к ней. Какую одну мысль вы хотите, чтобы зритель унёс?",
-        "the fixed phrase, then a neutral question about the first open gap",
-      );
+      assert.ok(page.messages.at(-1)?.body.startsWith("Это в сторону от нашей мысли, давайте вернёмся к ней. Что зритель должен унести из ролика"), "the fixed phrase, then a neutral question about the first open gap");
+      assertPlainQuestion(page.messages.at(-1)?.body, "first return");
     } else {
       assert.notEqual(page.messages.at(-1)?.body, page.messages.at(-2 - (page.messages.at(-2)?.role === "user" ? 0 : 1))?.body ?? "", "a second return does not repeat the first question");
     }
   }
   const questions = (await prisma.dialogueMessage.findMany({ where: { role: "assistant", kind: "question", status: "done" }, orderBy: { createdAt: "asc" } })).map((m) => m.body);
   assert.equal(questions.length, 3);
-  assert.equal(questions[0], "Это в сторону от нашей мысли, давайте вернёмся к ней. Какую одну мысль вы хотите, чтобы зритель унёс?");
+  assert.ok(questions[0].startsWith("Это в сторону от нашей мысли, давайте вернёмся к ней. Что зритель должен унести из ролика"));
+  for (const q of questions) assertPlainQuestion(q, "return");
   assert.ok(questions.every((q) => q.startsWith("Это в сторону от нашей мысли, давайте вернёмся к ней.")), "every return starts with the fixed phrase");
   assert.notEqual(questions[1], questions[0], "the second return is varied");
   assert.notEqual(questions[2], questions[1], "and the third differs from the second");

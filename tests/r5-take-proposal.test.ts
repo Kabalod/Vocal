@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { assertPlainQuestion } from "./helpers/plain-question";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
 const PHRASE = "Для следующего дубля у вас уже есть опора. Запишите его или соберите сценарий.";
@@ -41,7 +42,8 @@ test("08.10: suggest_take shows the fixed sentence, keeps takeTask in the state,
   const second = await sendDialogueMessage(reelId, { text: "Это помогает дописывать до обеда.", idempotencyKey: "r5-prop-2" }, proposal("Это помогает дописывать до обеда.") as never);
   const secondReply = second.messages.filter((m) => m.role === "assistant").at(-1);
   assert.equal(secondReply?.kind, "question", "a repeated proposal is replaced by a question");
-  assert.equal(secondReply?.body, "Почему, по-вашему, так получается?", "about the open gap");
+  assertPlainQuestion(secondReply?.body, "replaced proposal");
+  assert.match(secondReply?.body ?? "", /шаг за шагом/, "about the open gap");
   const state = await getThoughtState(reelId);
   assert.equal(state.facts.length, 2, "the author's second fact is kept");
   const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId } });
@@ -78,4 +80,43 @@ test("08.10: a fact accepted from the author's answer is in the thought state an
     return { text: JSON.stringify({ action: "ask_question", question: "Что стало легче?", clarificationReason: "нужно уточнение", whyUnknown: "мало деталей", thoughtUpdate: { fact: null, closeGapIds: [] } }), usage: { promptTokens: 1, completionTokens: 1 } };
   }) as never);
   assert.ok(nextPrompt.includes(fact), "the accepted fact is sent to the model on the next turn");
+});
+
+test("08.10: the style-rules experiment is off by default and never active in production", async () => {
+  const { thoughtDialogueSystemPrompt, DIALOGUE_STYLE_RULES } = await import("../src/lib/dialogue");
+  const env = process.env as Record<string, string | undefined>;
+  const saved = { flag: env.VOCAL_DIALOGUE_STYLE_RULES, node: env.NODE_ENV };
+  try {
+    delete env.VOCAL_DIALOGUE_STYLE_RULES;
+    const base = thoughtDialogueSystemPrompt();
+    assert.ok(!base.includes(DIALOGUE_STYLE_RULES));
+    env.VOCAL_DIALOGUE_STYLE_RULES = "1";
+    assert.ok(thoughtDialogueSystemPrompt().includes(DIALOGUE_STYLE_RULES), "the flag appends the rules outside production");
+    env.NODE_ENV = "production";
+    assert.equal(thoughtDialogueSystemPrompt(), base, "production ignores the flag");
+  } finally {
+    if (saved.flag === undefined) delete env.VOCAL_DIALOGUE_STYLE_RULES; else env.VOCAL_DIALOGUE_STYLE_RULES = saved.flag;
+    env.NODE_ENV = saved.node;
+  }
+});
+
+test("08.10: every server question is one plain question with the topic named; content_sufficient prose is filtered, not replaced", async () => {
+  const { neutralQuestionReply, filterServiceProse, VARIETY_FALLBACKS } = await import("../src/lib/author-text-guard");
+  const { actionMessage, CONTENT_SUFFICIENT_FALLBACK } = await import("../src/lib/agent-action");
+  const kinds = ["no_episode", "no_thesis", "facts_vs_interpretation", "no_mechanism", "unclear_terms", "repeat_unchecked", "no_boundary", "no_audience", "multiple_topics", "promise_unclear"] as const;
+  for (const kind of kinds) {
+    for (const topic of [null, "Утренний кофе"]) {
+      const reply = neutralQuestionReply([{ id: `gap_${kind}`, text: "x", status: "open", kind }], [], [], topic);
+      assertPlainQuestion(String(reply.question), `${kind}/${topic ?? "no topic"}`);
+      if (topic && ["no_episode", "no_thesis", "no_mechanism"].includes(kind)) assert.ok(String(reply.question).includes("«Утренний кофе»"), `${kind}: names the topic`);
+    }
+  }
+  for (const q of VARIETY_FALLBACKS) assertPlainQuestion(q, "variety fallback");
+
+  const action = (whyNoGaps: string) => ({ action: "content_sufficient", checkedInTranscript: "x", whyNoGaps }) as never;
+  assert.equal(actionMessage(action("Автор назвал случай и результат.")).body, "Автор назвал случай и результат.", "ordinary prose is shown unchanged");
+  const mixed = actionMessage(action("Автор назвал случай. Пробелов не осталось, gap_no_thesis закрыт. Результат понятен.")).body;
+  assert.equal(mixed, "Автор назвал случай. Результат понятен.", "service sentences are dropped, the rest stays");
+  assert.equal(actionMessage(action("См. fact_abc123456 и gap_no_thesis.")).body, CONTENT_SUFFICIENT_FALLBACK, "only when nothing is left");
+  assert.equal(filterServiceProse("Всё хорошо.").dropped, 0);
 });

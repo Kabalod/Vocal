@@ -38,18 +38,34 @@ export function stripOffTopicPhrase(question: string): string {
 
 export const GENERIC_NEUTRAL_QUESTION = "Что для вас здесь главное своими словами?";
 
-const NEUTRAL_QUESTIONS: Record<GapKind, string> = {
-  no_episode: "О каком одном конкретном случае вы сейчас думаете?",
-  no_thesis: "Какую одну мысль вы хотите, чтобы зритель унёс?",
-  facts_vs_interpretation: "Что в этом случае было видно со стороны, а что вы к нему добавляете сами?",
-  no_mechanism: "Почему, по-вашему, так получается?",
-  unclear_terms: "Чем для вас отличаются эти два понятия, когда вы видите их в жизни?",
-  repeat_unchecked: "Был ли похожий случай ещё раз?",
-  no_boundary: "В какой ситуации это не сработает?",
-  no_audience: "Кому вы это говорите в кадре?",
-  multiple_topics: "Какую одну тему из названных вы хотите сказать сейчас?",
-  promise_unclear: "Что зритель поймёт после этого ролика?",
+/** 08.10: a thought's title usable as a topic in a server question; auto titles and empty ones are not. */
+export function cleanTopic(title: string | null | undefined): string | null {
+  const text = (title ?? "").replace(/\s+/g, " ").trim().replace(/[«»"]/g, "");
+  if (!text || /^(сырой дубль|без названия|новая мысль|черновик)/i.test(text)) return null;
+  return text.length > 60 ? `${text.slice(0, 57).trim()}…` : text;
+}
+
+/**
+ * Server questions (08.10 owner rules): one question, plain words, no "по вашему мнению / по-вашему / пожалуйста /
+ * конкретн* / позиция / вывод / урок / тезис", the thought's topic named when there is one.
+ */
+const NEUTRAL_QUESTIONS: Record<GapKind, (topic: string | null) => string> = {
+  no_episode: (topic) => `Расскажите в деталях, какой случай${topic ? ` про «${topic}»` : ""} ярко вспоминается?`,
+  no_thesis: (topic) => `Что зритель должен унести из ролика${topic ? ` про «${topic}»` : ""}?`,
+  facts_vs_interpretation: () => "Что в этом случае было видно со стороны?",
+  no_mechanism: (topic) => `Как это происходит${topic ? ` в теме «${topic}»` : ""}, шаг за шагом?`,
+  unclear_terms: () => "Чем для вас отличаются эти два понятия, когда вы видите их в жизни?",
+  repeat_unchecked: () => "Был ли похожий случай ещё раз?",
+  no_boundary: () => "В какой ситуации это не сработает?",
+  no_audience: () => "Кому вы это говорите в кадре?",
+  multiple_topics: () => "Какую одну тему из названных вы хотите сказать сейчас?",
+  promise_unclear: () => "Что зритель поймёт после этого ролика?",
 };
+
+function neutralQuestionText(kind: GapKind | null | undefined, topic: string | null | undefined): string {
+  if (!kind) return GENERIC_NEUTRAL_QUESTION;
+  return NEUTRAL_QUESTIONS[kind](topic ?? null);
+}
 
 const CONTENT_TOKEN_MIN = 3;
 export const REPEAT_SIMILARITY = 0.7;
@@ -78,9 +94,9 @@ export function questionsAreNearDuplicates(a: string, b: string): boolean {
 export const REPEAT_QUESTION_NOTE =
   "\n\nТы повторяешь недавний вопрос. После неинформативного ответа не повторяй вопрос дословно: сузь его до одного конкретного случая («какой один случай…») или предложи продолжить. Верни ответ заново.";
 
-const VARIETY_FALLBACKS = [
+export const VARIETY_FALLBACKS = [
   GENERIC_NEUTRAL_QUESTION,
-  "Какой один конкретный случай вы бы рассказали?",
+  "Какой случай вы бы рассказали в деталях?",
   "Хотите продолжить с этой мыслью или записать следующий дубль?",
 ];
 
@@ -92,10 +108,11 @@ export function neutralQuestionReply(
   openGaps: ThoughtGap[],
   avoidQuestions: string[] = [],
   avoidGapIds: string[] = [],
+  topic: string | null = null,
 ): Record<string, unknown> {
   const open = openGaps.filter((row) => row.status === "open").sort((a, b) => a.id.localeCompare(b.id));
   const fresh = (question: string) => !avoidQuestions.some((old) => questionsAreNearDuplicates(question, old));
-  const askable = (row: ThoughtGap) => fresh(row.kind ? NEUTRAL_QUESTIONS[row.kind] : GENERIC_NEUTRAL_QUESTION);
+  const askable = (row: ThoughtGap) => fresh(neutralQuestionText(row.kind, topic));
   // Prefer a gap nobody asked about lately; otherwise any gap whose question is fresh.
   const gap = open.find((row) => !avoidGapIds.includes(row.id) && askable(row)) ?? open.find(askable) ?? null;
   if (!gap && avoidQuestions.length) {
@@ -108,7 +125,7 @@ export function neutralQuestionReply(
       thoughtUpdate: { fact: null, closeGapIds: [] },
     };
   }
-  const question = gap?.kind ? NEUTRAL_QUESTIONS[gap.kind] : GENERIC_NEUTRAL_QUESTION;
+  const question = neutralQuestionText(gap?.kind, topic);
   return {
     action: "ask_question",
     question,
@@ -116,4 +133,17 @@ export function neutralQuestionReply(
     whyUnknown: "ответ с служебными данными заменён нейтральным вопросом",
     thoughtUpdate: { fact: null, closeGapIds: [] },
   };
+}
+
+/**
+ * content_sufficient shows the model's whyNoGaps to the author. Not replaced: filtered. Sentences that carry an internal id
+ * or service wording (gap, field names, JSON) are dropped and the rest is kept; if nothing is left the caller falls back.
+ */
+const SERVICE_WORDS = /\b(gap|gapid|thoughtupdate|c00signal|evidencerefs|checkedintranscript|json|state)\b|пробел\w*/i;
+
+export function filterServiceProse(text: string, knownIds: (string | null | undefined)[] = []): { text: string; dropped: number } {
+  const sentences = text.split(/(?<=[.!?…])\s+/).map((part) => part.trim()).filter(Boolean);
+  // A one-word remainder ("См.") is what is left of a sentence that pointed at an id: dropped as well.
+  const kept = sentences.filter((sentence) => !textLeaksServiceId(sentence, knownIds) && !SERVICE_WORDS.test(sentence) && sentence.split(/\s+/).length >= 2);
+  return { text: kept.join(" "), dropped: sentences.length - kept.length };
 }

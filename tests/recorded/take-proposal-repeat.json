@@ -102,12 +102,12 @@
     {
       "author": "Это помогает дописывать до обеда.",
       "expect": {
-        "questionIs": "Почему, по-вашему, так получается?",
         "discarded": [
           "proposal_repeat_replaced"
         ],
         "factsAdded": 1,
-        "gapsClosed": 0
+        "gapsClosed": 0,
+        "questionStartsWith": "Как это происходит в теме «Отчёт и злость», шаг за шагом?"
       }
     }
   ]

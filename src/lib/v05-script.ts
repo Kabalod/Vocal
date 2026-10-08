@@ -473,7 +473,7 @@ function evaluateReadiness(material: V05Material): {
     return {
       ready: false,
       blockReason: "Нет актуального состояния мысли.",
-      nextQuestion: { text: "Сформулируйте мысль своими словами — что вы хотите сказать?", gapId: null },
+      nextQuestion: { text: "Что вы хотите сказать в этой мысли?", gapId: null },
     };
   }
   const recorded = Boolean(material.workingTake && material.workingTake.inputType !== "text");

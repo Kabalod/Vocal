@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { assertPlainQuestion } from "./helpers/plain-question";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
 test("R5: near-duplicate detection catches a verbatim and a lightly reworded repeat, not a different question", async () => {
@@ -83,7 +84,8 @@ test("R5: a repeated question is regenerated once; a second repeat becomes a neu
   assert.equal(third.calls.n, 2, "one regeneration only");
   const last = (await bodies()).at(-1);
   assert.notEqual(last, FIRST);
-  assert.equal(last, "Какую одну мысль вы хотите, чтобы зритель унёс?", "the question of the other open gap");
+  assertPlainQuestion(last, "other gap");
+  assert.match(last ?? "", /^Что зритель должен унести из ролика/, "the question of the other open gap");
 
   // 4. the state is untouched and the repeats are counted.
   const after = await getThoughtState(reelId);
@@ -101,5 +103,5 @@ test("R5: a repeated question is regenerated once; a second repeat becomes a neu
   const replay = await sendDialogueMessage(reelId, { text: "да", idempotencyKey: "r5-rep-3" }, (async () => {
     throw new Error("replay must not call the model");
   }) as never);
-  assert.ok(replay.messages.some((m) => m.body === "Какую одну мысль вы хотите, чтобы зритель унёс?"));
+  assert.ok(replay.messages.some((m) => m.body === last), "the stored reply is returned");
 });

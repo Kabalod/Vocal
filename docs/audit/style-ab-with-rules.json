@@ -1,0 +1,37 @@
+{
+ "styleRules": true,
+ "dialogues": 8,
+ "turns": 67,
+ "errorTurns": 0,
+ "notExecutedTurns": 0,
+ "redirects": 2,
+ "falseReturns": 0,
+ "questions": 66,
+ "semanticRepeatPairs": 5,
+ "hintQuestions": 1,
+ "suggestTakeActions": 1,
+ "proposalRepeatReplaced": 0,
+ "textReplies": 1,
+ "scripts": {
+  "Спор с тёщей": "ok(changes=2)",
+  "Покупки в стрессе": "ok(changes=1)",
+  "Почему я бросил курсы": "ok(changes=3)",
+  "Новая работа": "ok(changes=1)",
+  "Утренняя пробежка": "ok(changes=2)",
+  "Фотография для новичков": "ok(changes=3)",
+  "Соседи и шум": "ok(changes=2)",
+  "Соседская собака": "ok(changes=3)"
+ },
+ "discarded": {
+  "question_repeat_replaced": 2,
+  "update_dropped_at_commit": 2,
+  "question_repeat_regenerated": 5,
+  "downgrade_gap": 1,
+  "update_shape": 2,
+  "redirect_replaced": 2,
+  "gap_without_fact": 1
+ },
+ "aiCallTokens": 165745,
+ "providerAttempts": 89,
+ "failures": []
+}

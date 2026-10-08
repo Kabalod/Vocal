@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
+import { assertPlainQuestion } from "./helpers/plain-question";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
 test("R3: the guard sees service ids in author text and builds a neutral question", async () => {
@@ -26,7 +27,8 @@ test("R3: the guard sees service ids in author text and builds a neutral questio
     { id: "gap_no_mechanism", text: "x", status: "open", kind: "no_mechanism" },
     { id: "old", text: "y", status: "resolved" },
   ]);
-  assert.equal(typed.question, "Почему, по-вашему, так получается?");
+  assertPlainQuestion(String(typed.question), "typed no_mechanism");
+  assert.match(String(typed.question), /шаг за шагом/);
   assert.equal(typed.gapId, "gap_no_mechanism");
   const none = neutralQuestionReply([]);
   assert.equal(none.question, GENERIC_NEUTRAL_QUESTION);
@@ -88,7 +90,8 @@ test("R3: an answer with a cuid in the question never reaches the author; the th
   const second = await sendDialogueMessage(reelId, { text: "уточни ещё", idempotencyKey: "r3g-2" }, alwaysLeaks as never);
   assert.equal(calls2, 2, "one regeneration, then the neutral question without a third call");
   const shown = await questions(second);
-  assert.equal(shown.at(-1), "О каком одном конкретном случае вы сейчас думаете?");
+  assertPlainQuestion(shown.at(-1), "neutral after a leak");
+  assert.match(shown.at(-1) ?? "", /какой случай/);
   assert.equal(shown.some((body) => body.includes(reelId)), false);
 
   const after = await getThoughtState(reelId);
@@ -100,5 +103,5 @@ test("R3: an answer with a cuid in the question never reaches the author; the th
   const replay = await sendDialogueMessage(reelId, { text: "уточни ещё", idempotencyKey: "r3g-2" }, (async () => {
     throw new Error("replay must not call the model");
   }) as never);
-  assert.equal((await questions(replay)).at(-1), "О каком одном конкретном случае вы сейчас думаете?");
+  assert.equal((await questions(replay)).at(-1), shown.at(-1), "the stored neutral question is returned");
 });
