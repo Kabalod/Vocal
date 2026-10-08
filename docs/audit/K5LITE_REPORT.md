@@ -1,0 +1,47 @@
+# K5-lite: отчёт (08.10.2026)
+
+Ветка `docs/cards-research`. Провайдер не вызывался, токены не тратились; работа в лимитах IDE. **Результат не доказывает поведение рабочей модели Groq** и не оценивает действие карточек на авторах: вопросы написаны Claude, оценку даёт владелец вслепую по `k5lite_pairs.md`. K4 не выполнялся, каталог карточек пуст.
+
+## Как выбраны дубли
+
+Скрипт `scripts/k-research/k5lite_select.py`, зерно `20261008`, длина 70–160 слов, дубли с `dupOf` у hadunkin исключены. Квоты: chemistry_by_olga 3, lermontova.career 3, SirDenisov 2, vipsauna 2, marysstories 4, ira_podrez 2, hadunkin 4 (всего 20). Тексты в отчёт не копируются; выбранные тексты лежали во внешнем приватном файле, не в репозитории.
+
+Сдвиг выборки: корпус экспертный и рекламный; олга, марис и ира — те же авторы, на которых построены карточки (возможное завышение попадания). Жанры «юмор, путешествия» не покрыты.
+
+| № | id | источник | жанр | режим (определил агент) | главный тип пробела (K0) |
+|---|---|---|---|---|---|
+| 1 | DSNn4OQDGH- | hadunkin | personal reflection | personal_story | no_mechanism |
+| 2 | DWzCuOsDBil | lermontova.career | explanation | explanation | no_audience |
+| 3 | DTSnASkjFC4 | hadunkin | personal reflection | observation | no_thesis |
+| 4 | DV4QcM5sPM3 | hadunkin | personal reflection | observation | no_episode |
+| 5 | DYnF6feICka | marysstories | story | ready_thought | no_episode |
+| 6 | DXjIpPZDNUD | lermontova.career | explanation | explanation | promise_unclear |
+| 7 | DGsJ0ieih_e | vipsauna | other (lifestyle/business) | explanation | no_thesis |
+| 8 | DYHHJk_xbfU | lermontova.career | explanation | explanation | no_boundary |
+| 9 | DbkZBZuom6C | ira_podrez | story/reflection | ready_thought | no_episode |
+| 10 | C7or6uoN6vm | chemistry_by_olga | explanation | explanation | no_audience |
+| 11 | DYBswLYolZ7 | marysstories | story | personal_story | multiple_topics |
+| 12 | DUc3AakiBxw | marysstories | story | personal_story | no_thesis |
+| 13 | DE-WG8ZPIMK | SirDenisov | explanation (business) | personal_story | no_thesis |
+| 14 | DSDdA7VDCPZ | hadunkin | personal reflection | ready_thought | no_boundary |
+| 15 | DWEvQNCjImb | marysstories | story | observation | facts_vs_interpretation |
+| 16 | DbDLMBdsvRJ | vipsauna | other (lifestyle/business) | unspecified | multiple_topics |
+| 17 | DIy2EvwCGab | chemistry_by_olga | explanation | explanation | promise_unclear |
+| 18 | DCEwPH4IauG | SirDenisov | explanation (business) | ready_thought | repeat_unchecked |
+| 19 | C5iv_EqN-Ct | chemistry_by_olga | explanation | explanation | no_audience |
+| 20 | Db3h_5_MOYo | ira_podrez | story/reflection | personal_story | no_thesis |
+
+## Как писались вопросы
+
+- **Этап a (без карточки):** отдельный субагент со свежим контекстом. Читал только список типов пробела, режимы и правила диалога из кода; карточки, `Analyz/craft`, K-отчёты ему были запрещены, нарушений он не заявил. Он же определил режим и тип пробела (его разметка одна, второго разметчика нет; по его же замечанию, у дублей 2, 6, 8, 17, 19 (реклама) тип спорный, у 16 (в основном английский, обрывочный) неопределённый).
+- **Этап b (с карточкой):** я, по карточкам из `01b_inversion.md` (P01, P04, P07–P12), после получения этапа a. Оговорка: я видел карточки в этой сессии раньше, поэтому этап a отдан субагенту, а не написан мной.
+
+## Сколько пар и чего нет
+
+Пар **8 из 20**. Остальные 12 пропущены: нет карточки под тип пробела (`no_audience` 2, 10, 19; `no_thesis` 3, 7, 12, 13, 20; `promise_unclear` 6, 17; `multiple_topics` 11, 16). Принцип P05 (`no_thesis`) только гипотеза и в набор не входил.
+
+Из 8 пар у **4 режим дубля совпадает с режимами карточки** (1, 4, 8, 14 по номерам дублей) и у **4 не совпадает** (5, 9, 15, 18: например `ready_thought` для P04). Они оставлены в оценке и помечены в ключе (`modeMatchesCard`), чтобы увидеть, нужно ли ограничение по режиму; владельцу при оценке это не сообщается. Порог из `K_REPORT.md` («не менее 20 сырых дублей из разных жанров») **не достигнут**: оценивается 8 пар, из них 4 по режиму. Любой вывод о пользе карточек по 8 парам предварительный. Кандидатами из пары попали P01 (8, 14), P04 (4, 5, 9) и из механик P07 (1), P09 (18), P10 (15). Для P04 вопрос этапа a и вопрос с карточкой почти совпадают (тип пробела `no_episode` уже ведёт к тому же вопросу): карточка там мало что добавляет, это наблюдение, а не оценка.
+
+## Файлы
+
+`k5lite_pairs.md` (пары в случайном порядке, пустая таблица оценок), `k5lite_key.json` (ключ, не открывать до оценки), `k5lite_refute.md` (проход «опровергни», сводка в `K_REPORT.md`).

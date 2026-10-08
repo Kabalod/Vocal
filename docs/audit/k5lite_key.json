@@ -1,0 +1,94 @@
+{
+ "note": "Ключ к k5lite_pairs.md. Не открывать до оценки.",
+ "seed": 20261008,
+ "pairs": [
+  {
+   "pair": 1,
+   "takeId": "DYnF6feICka",
+   "takeNumber": 5,
+   "stageAGapKind": "no_episode",
+   "contentMode": "ready_thought",
+   "A": "card",
+   "B": "stageA",
+   "card": "P04",
+   "modeMatchesCard": false
+  },
+  {
+   "pair": 2,
+   "takeId": "DWEvQNCjImb",
+   "takeNumber": 15,
+   "stageAGapKind": "facts_vs_interpretation",
+   "contentMode": "observation",
+   "A": "stageA",
+   "B": "card",
+   "card": "P10",
+   "modeMatchesCard": false
+  },
+  {
+   "pair": 3,
+   "takeId": "DSDdA7VDCPZ",
+   "takeNumber": 14,
+   "stageAGapKind": "no_boundary",
+   "contentMode": "ready_thought",
+   "A": "card",
+   "B": "stageA",
+   "card": "P01",
+   "modeMatchesCard": true
+  },
+  {
+   "pair": 4,
+   "takeId": "DCEwPH4IauG",
+   "takeNumber": 18,
+   "stageAGapKind": "repeat_unchecked",
+   "contentMode": "ready_thought",
+   "A": "stageA",
+   "B": "card",
+   "card": "P09",
+   "modeMatchesCard": false
+  },
+  {
+   "pair": 5,
+   "takeId": "DV4QcM5sPM3",
+   "takeNumber": 4,
+   "stageAGapKind": "no_episode",
+   "contentMode": "observation",
+   "A": "card",
+   "B": "stageA",
+   "card": "P04",
+   "modeMatchesCard": true
+  },
+  {
+   "pair": 6,
+   "takeId": "DYHHJk_xbfU",
+   "takeNumber": 8,
+   "stageAGapKind": "no_boundary",
+   "contentMode": "explanation",
+   "A": "stageA",
+   "B": "card",
+   "card": "P01",
+   "modeMatchesCard": true
+  },
+  {
+   "pair": 7,
+   "takeId": "DSNn4OQDGH-",
+   "takeNumber": 1,
+   "stageAGapKind": "no_mechanism",
+   "contentMode": "personal_story",
+   "A": "card",
+   "B": "stageA",
+   "card": "P07",
+   "modeMatchesCard": true
+  },
+  {
+   "pair": 8,
+   "takeId": "DbkZBZuom6C",
+   "takeNumber": 9,
+   "stageAGapKind": "no_episode",
+   "contentMode": "ready_thought",
+   "A": "stageA",
+   "B": "card",
+   "card": "P04",
+   "modeMatchesCard": false
+  }
+ ]
+}
