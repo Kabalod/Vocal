@@ -91,6 +91,8 @@ export const DISCARD_REASONS = [
   "redirect_replaced",
   "question_repeat_regenerated",
   "question_repeat_replaced",
+  /** suggest_take right after a suggest_take: replaced by a neutral question about an open gap. */
+  "proposal_repeat_replaced",
   "question_gap_detached",
   "downgrade_evidence",
   "downgrade_gap",
@@ -234,9 +236,15 @@ export async function assertAgentActionAllowed(
   }
 }
 
+/**
+ * 08.10 (R5 dialogues): takeTask is the model's service wording of the next take ("Наденьте кроссовки…", "Сформулировать
+ * вывод…"). It is kept in the thought state for the script, but the author sees this fixed sentence instead.
+ */
+export const TAKE_PROPOSAL_PHRASE = "Для следующего дубля у вас уже есть опора. Запишите его или соберите сценарий.";
+
 export function actionMessage(action: AgentAction): { kind: "question" | "text"; body: string } {
   if (action.action === "ask_question") return { kind: "question", body: action.question };
-  if (action.action === "suggest_take") return { kind: "text", body: action.takeTask };
+  if (action.action === "suggest_take") return { kind: "text", body: TAKE_PROPOSAL_PHRASE };
   if (action.action === "content_sufficient") return { kind: "text", body: action.whyNoGaps };
   return { kind: "text", body: action.currentTask };
 }

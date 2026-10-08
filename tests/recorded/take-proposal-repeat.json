@@ -1,0 +1,114 @@
+{
+  "name": "take-proposal-repeat",
+  "description": "suggest_take показывается фиксированной фразой, а не takeTask; второй suggest_take подряд заменяется нейтральным вопросом по открытому пробелу, факт автора сохраняется",
+  "note": "Ответы написаны Claude вручную по форме, наблюдавшейся в R5 (suggest_take подряд, диалоги 5 и 6). Это проверка нашего кода на заданных ответах; она НЕ доказывает поведение рабочей модели Groq.",
+  "thought": {
+    "title": "Отчёт и злость",
+    "body": "Я вчера снова не дописал отчёт и разозлился на себя, хотя на самом деле меня отвлекали."
+  },
+  "answers": [
+    {
+      "label": "take-diagnosis",
+      "response": {
+        "contentMode": "personal_story",
+        "gaps": [
+          {
+            "kind": "no_mechanism",
+            "text": "Не объяснено, почему так получается."
+          }
+        ]
+      }
+    },
+    {
+      "label": "dialogue",
+      "userContains": [
+        "Ответ автора: уточни"
+      ],
+      "response": {
+        "action": "ask_question",
+        "question": "Что именно вас отвлекало, когда вы писали отчёт?",
+        "gapId": "gap_no_mechanism",
+        "whyUnknown": "причина не названа",
+        "thoughtUpdate": {
+          "fact": null,
+          "closeGapIds": []
+        }
+      }
+    },
+    {
+      "label": "dialogue",
+      "userContains": [
+        "Ответ автора: Теперь я закрываю дверь на два часа утром."
+      ],
+      "response": {
+        "action": "suggest_take",
+        "mainIdea": "Закрытая дверь защищает время",
+        "takeTask": "Закрывать дверь на два часа утром",
+        "evidenceRefs": [
+          "fact___AUTHOR_MESSAGE_ID__"
+        ],
+        "thoughtUpdate": {
+          "fact": {
+            "text": "Теперь я закрываю дверь на два часа утром.",
+            "sourceType": "dialogue_message",
+            "sourceId": "__AUTHOR_MESSAGE_ID__"
+          },
+          "closeGapIds": []
+        }
+      }
+    },
+    {
+      "label": "dialogue",
+      "userContains": [
+        "Ответ автора: Это помогает дописывать до обеда."
+      ],
+      "response": {
+        "action": "suggest_take",
+        "mainIdea": "Закрытая дверь защищает время",
+        "takeTask": "Закрывать дверь на два часа утром",
+        "evidenceRefs": [
+          "fact___AUTHOR_MESSAGE_ID__"
+        ],
+        "thoughtUpdate": {
+          "fact": {
+            "text": "Это помогает дописывать до обеда.",
+            "sourceType": "dialogue_message",
+            "sourceId": "__AUTHOR_MESSAGE_ID__"
+          },
+          "closeGapIds": []
+        }
+      }
+    }
+  ],
+  "turns": [
+    {
+      "author": "уточни",
+      "expect": {
+        "questionIs": "Что именно вас отвлекало, когда вы писали отчёт?",
+        "discarded": [],
+        "factsAdded": 0,
+        "gapsClosed": 0
+      }
+    },
+    {
+      "author": "Теперь я закрываю дверь на два часа утром.",
+      "expect": {
+        "questionIs": "Для следующего дубля у вас уже есть опора. Запишите его или соберите сценарий.",
+        "discarded": [],
+        "factsAdded": 1,
+        "gapsClosed": 0
+      }
+    },
+    {
+      "author": "Это помогает дописывать до обеда.",
+      "expect": {
+        "questionIs": "Почему, по-вашему, так получается?",
+        "discarded": [
+          "proposal_repeat_replaced"
+        ],
+        "factsAdded": 1,
+        "gapsClosed": 0
+      }
+    }
+  ]
+}

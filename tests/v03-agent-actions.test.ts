@@ -198,7 +198,8 @@ test("user reply becomes a fact and then suggest_take can cite it", async (t) =>
     }),
     usage: { promptTokens: 1, completionTokens: 1 },
   }));
-  assert.ok(page.messages.some((item) => item.body.includes("сказать про вечер")));
+  assert.ok(page.messages.some((item) => item.body.startsWith("Для следующего дубля у вас уже есть опора.")), "08.10: the fixed sentence, not takeTask");
+  assert.ok(!page.messages.some((item) => item.body.includes("сказать про вечер")));
   const afterSuggest = await getThoughtState(reel.id);
   assert.equal(afterSuggest.facts.length, 1);
   assert.equal(afterSuggest.takeTask, "сказать про вечер спокойно");
@@ -496,7 +497,8 @@ test("same turn can suggest_take citing the current answer fact", async (t) => {
       };
     },
   );
-  assert.ok(page.messages.some((item) => item.body.includes("сказать про кухню")));
+  assert.ok(page.messages.some((item) => item.body.startsWith("Для следующего дубля у вас уже есть опора.")), "08.10: the fixed sentence, not takeTask");
+  assert.ok(!page.messages.some((item) => item.body.includes("сказать про кухню")));
   const state = await getThoughtState(reel.id);
   assert.equal(state.facts.length, 1);
   assert.equal(state.facts[0]?.id, `fact_${state.facts[0]?.sourceId}`);
