@@ -81,18 +81,20 @@ export const defaultCompleteJson: CompleteJsonFn = async ({ model, system, user,
   }
   const completion = await withRetry(
     () =>
-      getGroq().chat.completions.create(
-        {
-          model,
-          temperature: 0.2,
-          max_tokens: 1800,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ],
-        },
-        { timeout: aiAttemptTimeoutMs() },
+      createWithJsonBudget((maxTokens) =>
+        getGroq().chat.completions.create(
+          {
+            model,
+            temperature: 0.2,
+            max_tokens: maxTokens,
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: system },
+              { role: "user", content: user },
+            ],
+          },
+          { timeout: aiAttemptTimeoutMs() },
+        ),
       ),
     { label, retries: 3 },
   );
@@ -108,5 +110,29 @@ export const defaultCompleteJson: CompleteJsonFn = async ({ model, system, user,
     },
   };
 };
+
+/**
+ * 09.10 (E1): the reasoning model spends part of max_tokens on reasoning. When the answer does not fit, the provider answers
+ * 400 json_validate_failed ("max completion tokens reached before generating a valid document"). That is an output-budget
+ * failure, not a request-size one: one retry with a larger output budget.
+ */
+export const BASE_MAX_TOKENS = 1800;
+export const RETRY_MAX_TOKENS = 4800;
+
+export function isJsonBudgetError(error: unknown): boolean {
+  const e = error as { status?: number; message?: string; error?: unknown };
+  if (e?.status !== 400) return false;
+  const text = `${e.message ?? ""} ${typeof e.error === "string" ? e.error : JSON.stringify(e.error ?? "")}`;
+  return /json_validate_failed|Failed to (?:validate|generate) JSON/i.test(text);
+}
+
+export async function createWithJsonBudget<T>(create: (maxTokens: number) => Promise<T>): Promise<T> {
+  try {
+    return await create(BASE_MAX_TOKENS);
+  } catch (error) {
+    if (!isJsonBudgetError(error)) throw error;
+    return create(RETRY_MAX_TOKENS);
+  }
+}
 
 export { parseJsonObject, LLM_MODEL };

@@ -53,7 +53,7 @@ test("R4: generate stores the changes, shows them for that version, and refuses 
     return {
       text: JSON.stringify({
         script: "Чай остыл на подоконнике.",
-        changes: ["Убрал повтор.", "Оставил вашу формулировку про чай.", "Третья.", "Лишняя четвёртая."],
+        changes: ["Убрал повтор.", "Оставил вашу формулировку про чай.", "Объединил третью фразу.", "Добавил лишнюю четвёртую фразу."],
       }),
       usage: { promptTokens: 1, completionTokens: 1 },
     };

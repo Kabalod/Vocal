@@ -13,6 +13,7 @@
  * carry one question each and do not reproach the author.
  */
 import { prisma } from "@/lib/db";
+import { meaningfulWords, newContentWords } from "@/lib/author-speech";
 import { DRYNESS_HINT } from "@/lib/author-text-guard";
 import type { ThoughtFact, ThoughtGap } from "@/lib/thought-state";
 
@@ -62,6 +63,10 @@ export function isCommandText(text: string): boolean {
 export function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
+/** 09.10: words after cutting fillers ("ну", "как бы", "короче", "типа") and self-repeats: what the thresholds are applied to. */
+export function speechWords(text: string): number {
+  return meaningfulWords(text).length;
+}
 /** "Не знаю" and empty-ish answers: they carry no material. */
 export function isDontKnow(text: string): boolean {
   const t = text.trim().toLowerCase().replace(/ё/g, "е");
@@ -78,9 +83,12 @@ export function isEndPhrase(text: string): boolean {
  * Measured on the rich-author run: the model accepted a fact from only about a third of long answers, so a missing fact must not
  * make a long answer count as "adds nothing".
  */
-export function isSubstantiveAnswer(text: string): boolean {
-  return wordCount(text) > SHORT_ANSWER_WORDS && !isDontKnow(text) && !isCommandText(text) && !isEndPhrase(text);
+export function isSubstantiveAnswer(text: string, question?: string): boolean {
+  if (speechWords(text) <= SHORT_ANSWER_WORDS || isDontKnow(text) || isCommandText(text) || isEndPhrase(text)) return false;
+  // 09.10 (E6): a long answer that only restates the question adds fewer than four new content words.
+  return question ? newContentWords(text, question) >= MIN_NEW_CONTENT_WORDS : true;
 }
+export const MIN_NEW_CONTENT_WORDS = 4;
 
 export function isYes(text: string): boolean {
   return /^(да|ага|угу|ок|окей|хорошо|давайте|давай|можно|да, закончим|да, давайте)[.!]*$/i.test(text.trim());
@@ -113,12 +121,17 @@ export type PolicyDecision =
   | { kind: "prefix"; phrase: string; marks: string[] };
 
 /** Consecutive latest author answers (commands skipped) with no accepted fact; the current answer counts as accepted when the reply carries a fact. */
+function questionBefore(turns: PolicyTurn[], index: number): string | undefined {
+  for (let i = index - 1; i >= 0; i -= 1) if (turns[i].role === "assistant") return turns[i].body;
+  return undefined;
+}
+
 export function noFactStreak(turns: PolicyTurn[], factSources: Set<string>): number {
   let streak = 0;
   for (let i = turns.length - 1; i >= 0; i -= 1) {
     const turn = turns[i];
     if (turn.role !== "user" || isCommandText(turn.body)) continue;
-    if (factSources.has(turn.id) || isSubstantiveAnswer(turn.body)) break;
+    if (factSources.has(turn.id) || isSubstantiveAnswer(turn.body, questionBefore(turns, i))) break;
     streak += 1;
   }
   return streak;
@@ -126,7 +139,7 @@ export function noFactStreak(turns: PolicyTurn[], factSources: Set<string>): num
 
 /** Author answers that carry material: an accepted fact or a substantive answer. */
 export function materialUnits(turns: PolicyTurn[], factSources: Set<string>): number {
-  return turns.filter((turn) => turn.role === "user" && !isCommandText(turn.body) && (factSources.has(turn.id) || isSubstantiveAnswer(turn.body))).length;
+  return turns.filter((turn, i) => turn.role === "user" && !isCommandText(turn.body) && (factSources.has(turn.id) || isSubstantiveAnswer(turn.body, questionBefore(turns, i)))).length;
 }
 
 function lastIndex<T>(list: T[], pick: (item: T) => boolean): number {
@@ -206,7 +219,7 @@ export function decideTurnPolicy(input: {
   // A5: dry answers, once per thought, put in front of the next question.
   if (reply.kind === "ask_question" && !turns.some((turn) => turn.role === "assistant" && turn.marks.includes(POLICY_MARKS.dryness))) {
     const [a, b] = [answers[answers.length - 2], answers[answers.length - 1]];
-    if (a && b && wordCount(a.body) <= SHORT_ANSWER_WORDS && wordCount(b.body) <= SHORT_ANSWER_WORDS && !isDontKnow(a.body) && !isDontKnow(b.body)) {
+    if (a && b && speechWords(a.body) <= SHORT_ANSWER_WORDS && speechWords(b.body) <= SHORT_ANSWER_WORDS && !isDontKnow(a.body) && !isDontKnow(b.body)) {
       return { kind: "prefix", phrase: DRYNESS_HINT, marks: [POLICY_MARKS.dryness] };
     }
   }
@@ -275,4 +288,31 @@ export function questionNeedsHintCheck(question: string, authorAnswers: string):
   if (questionOffersAlternatives(question, authorAnswers)) return "alternatives";
   if (questionAssumesRole(question, authorAnswers)) return "role";
   return null;
+}
+
+// ---- E4: a "new" fact that only repeats what is already known ----------------------------------------------------------
+
+const wordSet = (text: string): Set<string> => new Set(meaningfulWords(text).filter((w) => w.length >= 4));
+function shareIn(part: Set<string>, whole: Set<string>): number {
+  if (part.size === 0) return 1;
+  let shared = 0;
+  for (const w of part) if (whole.has(w)) shared += 1;
+  return shared / part.size;
+}
+
+/**
+ * The model sometimes attaches a fact to the current message that is really the text of an earlier answer or fact
+ * (rich-author finding: P4 turn 10, P6 turns 5-7). A fact is a duplicate when it is (a) nearly the same as an accepted fact, or
+ * (b) mostly absent from the current message and mostly present in earlier author text.
+ */
+export function isDuplicateFact(factText: string, currentMessage: string, earlierTexts: string[], acceptedFacts: string[]): boolean {
+  const fact = wordSet(factText);
+  if (fact.size < 3) return false;
+  for (const known of acceptedFacts) {
+    const other = wordSet(known);
+    if (shareIn(fact, other) >= 0.8 && shareIn(other, fact) >= 0.6) return true;
+  }
+  const inCurrent = shareIn(fact, wordSet(currentMessage));
+  if (inCurrent >= 0.4) return false;
+  return earlierTexts.some((text) => shareIn(fact, wordSet(text)) >= 0.7);
 }

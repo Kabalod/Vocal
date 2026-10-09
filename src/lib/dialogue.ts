@@ -31,7 +31,8 @@ import {
   thoughtUpdateAfterClassification,
 } from "@/lib/c00-classify-signal";
 import { isC00PolicyEnabled } from "@/lib/c00-policy";
-import { decideTurnPolicy, isCommandText, isSubstantiveAnswer, loadPolicyTurns, questionEchoesAuthor, questionNeedsHintCheck, turnPolicyEnabled } from "@/lib/turn-policy";
+import { stripServiceMarks } from "@/lib/author-speech";
+import { decideTurnPolicy, isCommandText, isDuplicateFact, isSubstantiveAnswer, loadPolicyTurns, questionEchoesAuthor, questionNeedsHintCheck, turnPolicyEnabled } from "@/lib/turn-policy";
 import { C00EnvelopeError } from "@/lib/c00-envelope";
 import type { C00SignalCandidate } from "@/lib/c00-signal";
 import {
@@ -1085,16 +1086,58 @@ async function guardQuestionContent(input: {
   return { reply, rawText: input.rawText };
 }
 
+/**
+ * 09.10 (E4): a fact that repeats an accepted fact or an earlier answer instead of the current message is not stored.
+ * The valid rest of the reply stays; the gap closure that depended on the fact is dropped with it. Counted as "fact_duplicate".
+ */
+async function dropDuplicateFact(input: {
+  threadId: string;
+  callId: string;
+  reply: ReturnType<typeof parseAgentReply>;
+  rawText: string;
+  authorMessageId: string;
+  authorText: string;
+  acceptedFacts: string[];
+}): Promise<{ reply: ReturnType<typeof parseAgentReply>; rawText: string }> {
+  const fact = input.reply.thoughtUpdate.fact;
+  if (!fact) return { reply: input.reply, rawText: input.rawText };
+  const turns = await loadPolicyTurns(input.threadId);
+  const earlier = turns.filter((turn) => turn.role === "user" && turn.id !== input.authorMessageId).map((turn) => turn.body);
+  if (!isDuplicateFact(fact.text, input.authorText, earlier, input.acceptedFacts)) return { reply: input.reply, rawText: input.rawText };
+  const { thoughtUpdate: _dropped, c00Signal: _signal, ...action } = input.reply.action as Record<string, unknown> & { action: string };
+  void _dropped;
+  void _signal;
+  const replaced = { ...action, thoughtUpdate: { fact: null, closeGapIds: [] } };
+  const rawText = JSON.stringify(replaced);
+  await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+  const parsed = parseAgentReply(replaced, { authorMessageId: input.authorMessageId });
+  return { reply: { ...parsed, c00Signal: input.reply.c00Signal, discarded: [...input.reply.discarded, "fact_duplicate"] as typeof input.reply.discarded }, rawText };
+}
+
+/** 09.10 (E1): the recent history is cut by a character budget (≈ tokens), not by a message count: long transcripts must not crowd out the rest. */
+export const RECENT_TEXT_CHAR_BUDGET = 6000;
+export const RECENT_TEXT_PER_MESSAGE = 900;
+export const RECENT_TEXT_MAX_MESSAGES = 20;
+
+export function budgetRecentText(rowsNewestFirst: { role: string; body: string }[]): string {
+  const lines: string[] = [];
+  let used = 0;
+  for (const row of rowsNewestFirst.slice(0, RECENT_TEXT_MAX_MESSAGES)) {
+    const line = `${row.role}: ${row.body.slice(0, RECENT_TEXT_PER_MESSAGE)}`;
+    if (lines.length > 0 && used + line.length > RECENT_TEXT_CHAR_BUDGET) break;
+    lines.push(line);
+    used += line.length;
+  }
+  return lines.reverse().join("\n");
+}
+
 async function recentStoredText(threadId: string): Promise<string> {
   const rows = await prisma.dialogueMessage.findMany({
     where: { threadId, kind: { in: ["text", "question", "answer", "script_proposal"] } },
     orderBy: { createdAt: "desc" },
-    take: 12,
+    take: RECENT_TEXT_MAX_MESSAGES,
   });
-  return rows
-    .reverse()
-    .map((row) => `${row.role}: ${row.body.slice(0, 400)}`)
-    .join("\n");
+  return budgetRecentText(rows);
 }
 
 async function assertDialogueStateVersion(
@@ -1197,7 +1240,8 @@ export async function sendDialogueMessage(
   },
   complete: CompleteJsonFn = defaultCompleteJson,
 ): Promise<DialoguePageDto> {
-  const text = input.text.trim();
+  // 09.10 (E5): service markers such as "(факт 2)" are never author speech; they are cut before the message is stored.
+  const text = stripServiceMarks(input.text.trim()) || input.text.trim();
   if (!text) throw new DialogueError("Введите сообщение.", "EMPTY");
   const key = input.idempotencyKey.trim();
   if (!key) throw new DialogueError("Нужен ключ повтора.", "IDEMPOTENCY");
@@ -1467,11 +1511,20 @@ export async function runDialogueTurn(
       thoughtUpdate: reply.thoughtUpdate,
       c00Signal: reply.c00Signal,
     });
-    const downgraded = await downgradeInvalidReply({
-      reelId,
+    const deduped = await dropDuplicateFact({
+      threadId: thread.id,
       callId: call.id,
       reply,
       rawText: parsedReply.responseText,
+      authorMessageId: userMessage.id,
+      authorText: text,
+      acceptedFacts: thoughtFacts.map((fact) => fact.text),
+    });
+    const downgraded = await downgradeInvalidReply({
+      reelId,
+      callId: call.id,
+      reply: deduped.reply,
+      rawText: deduped.rawText,
       authorMessageId: userMessage.id,
     });
     const varied = await varyRepeatedQuestion({

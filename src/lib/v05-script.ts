@@ -1,4 +1,5 @@
-import { NO_FACT_NOTICE, NO_FACT_STREAK_LIMIT, THIN_BLOCK_REASON, THIN_NEXT_QUESTION, materialUnits, noFactStreak } from "@/lib/turn-policy";
+import { changeLooksLikeEdit, cleanSpeechText, NO_EDIT_LIST_FALLBACK } from "@/lib/author-speech";
+import { NO_FACT_NOTICE, NO_FACT_STREAK_LIMIT, THIN_BLOCK_REASON, THIN_NEXT_QUESTION, isCommandText, isDontKnow, isEndPhrase, materialUnits, noFactStreak, speechWords } from "@/lib/turn-policy";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
@@ -360,6 +361,9 @@ export function isCraftInstruction(text: string) {
   );
 }
 
+/** Budget (characters) for the author's answers in the build input. */
+export const ANSWER_SOURCE_CHAR_BUDGET = 5000;
+
 function pushSource(keys: string[], texts: { label: string; text: string }[], key: string, label: string, text: string) {
   const body = text.trim();
   if (!body || keys.includes(key)) return;
@@ -426,6 +430,35 @@ async function collectFromLoaded(reelId: string, material: Omit<V05Material, "ke
     if (isNonContentUtterance(normalized)) continue;
   }
 
+  // 09.10 (E2): the author's own answers (cleaned of fillers) go into the build input, not only the accepted facts: the model
+  // accepts a fact from only a third of long answers, so the rest of what the author said never reached the script (26 % of
+  // their phrases survived). Not used after an accepted correction: a corrected statement must not come back through an answer.
+  if (thought && !material.world.lastCorrectionAcceptedAt) {
+    const rows = await db.dialogueMessage.findMany({
+      where: { role: "user", thread: { reelId } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, body: true },
+    });
+    const factByMessage = new Map(thought.facts.filter((fact) => fact.sourceType === "dialogue_message").map((fact) => [fact.sourceId, fact.text]));
+    const picked: { id: string; text: string }[] = [];
+    for (const row of rows) {
+      if (isCommandText(row.body) || isDontKnow(row.body) || isEndPhrase(row.body) || speechWords(row.body) < 4) continue;
+      if (isNonContentUtterance(normalizeDialogueUtterance(row.body))) continue;
+      // A message that already has an accepted fact is represented by that fact: the fact is the curated (possibly corrected)
+      // version, and a retracted statement must not come back through the raw answer. Only answers without a fact are added.
+      if (factByMessage.has(row.id)) continue;
+      picked.push({ id: row.id, text: cleanSpeechText(row.body) });
+    }
+    let used = 0;
+    const chosen: { id: string; text: string }[] = [];
+    for (const item of picked.reverse()) {
+      if (chosen.length > 0 && used + item.text.length > ANSWER_SOURCE_CHAR_BUDGET) break;
+      chosen.push(item);
+      used += item.text.length;
+    }
+    for (const item of chosen.reverse()) pushSource(keys, texts, `dialogue:${item.id}`, "Ответ автора", item.text);
+  }
+
   return { keys, texts };
 }
 
@@ -471,8 +504,12 @@ export async function loadV05Material(reelId: string, db: ScriptDb = prisma): Pr
   let units = 0;
   const dialogue = await db.dialogueThread.findFirst({ where: { reelId }, select: { id: true } });
   if (dialogue && thought) {
-    const rows = await db.dialogueMessage.findMany({ where: { threadId: dialogue.id, role: "user" }, orderBy: { createdAt: "asc" }, select: { id: true, body: true } });
-    const asTurns = rows.map((row) => ({ role: "user" as const, id: row.id, body: row.body, marks: [], action: "" }));
+    const rows = await db.dialogueMessage.findMany({
+      where: { threadId: dialogue.id, OR: [{ role: "user" }, { role: "assistant", status: "done" }] },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, body: true, role: true },
+    });
+    const asTurns = rows.map((row) => ({ role: row.role as "user" | "assistant", id: row.id, body: row.body, marks: [], action: "" }));
     const sources = new Set(thought.facts.map((fact) => fact.sourceId));
     streak = noFactStreak(asTurns, sources);
     units = materialUnits(asTurns, sources);
@@ -955,11 +992,11 @@ async function lockThoughtWorld(tx: Prisma.TransactionClient, reelId: string) {
 }
 
 function buildUserPrompt(context: Awaited<ReturnType<typeof getReelContext>>, texts: { label: string; text: string }[]) {
-  return `Собери черновик прямой речи только из материалов автора ниже. Основа — последний дубль автора; ответы автора уточняют его. Сохраняй формулировки автора, меняй только то, что нужно для ясности. Не придумывай факты, события и выводы. Портрет — только тон, не сюжет.
+  return `Собери черновик прямой речи только из материалов автора ниже. Основа — последний дубль автора; ответы автора уточняют его. Сохраняй формулировки автора дословно там, где они понятны; меняй только то, что нужно для ясности. Материал взят из распознанной речи: убери слова-паразиты («ну», «как бы», «короче», «типа»), самоповторы и оборванные фразы, явные ошибки распознавания исправь по смыслу и ничего нового не добавляй. Не придумывай факты, события и выводы. Портрет — только тон, не сюжет.
 Тон портрета (не факты мысли): ${JSON.stringify(context.live.publicForScript)}
 Структурированные основания мысли и выбранный материал:
 ${texts.map((item, index) => `${index + 1}. ${item.label}\n${item.text}`).join("\n\n")}
-JSON: {"script":"","changes":["что изменил и почему, одна короткая фраза"]}. changes — от одной до трёх фраз без цитат и служебных идентификаторов.`;
+JSON: {"script":"","changes":["правка текста и причина, одна короткая фраза"]}. changes — от одной до трёх коротких фраз о правках ТЕКСТА сценария, а не о жизни автора: начинай с глагола правки (Убрал, Добавил, Объединил, Переставил, Сократил, Исправил, Заменил, Уточнил, Оставил) и назови причину. Если добавил фразу из диалога, скажи, что автор её сказал. Не пересказывай события жизни автора. Без цитат и служебных идентификаторов.`;
 }
 
 export async function generateV05Script(
@@ -1097,6 +1134,8 @@ export async function generateV05Script(
           throw new ScriptError("Пустой или некорректный ответ модели не сохранён как сценарий.", "LLM_INVALID");
         }
 
+        // 09.10 (E7): the stored script carries no speech fillers, self-repeats or service markers, whatever the model returned.
+        parsed.data.script = cleanSpeechText(parsed.data.script) || parsed.data.script;
         if (scriptLeaksInternalIds(parsed.data.script, [reelId, frozen.world.workingTakeId, frozen.world.selectedTranscriptId])) {
           throw new ScriptError("Ответ модели содержит служебные данные и не сохранён как сценарий.", "LLM_INVALID");
         }
@@ -1109,7 +1148,9 @@ export async function generateV05Script(
               item.length <= SCRIPT_CHANGE_CHARS_MAX &&
               !scriptLeaksInternalIds(item, [reelId, frozen.world.workingTakeId, frozen.world.selectedTranscriptId]),
           )
+          .filter(changeLooksLikeEdit) // 09.10 (E3): an item must describe an edit of the text, not the author's life
           .slice(0, SCRIPT_CHANGES_MAX);
+        if (changes.length === 0) changes.push(NO_EDIT_LIST_FALLBACK);
 
         const version = await prisma.$transaction(async (tx) => {
           await lockThoughtWorld(tx, reelId);

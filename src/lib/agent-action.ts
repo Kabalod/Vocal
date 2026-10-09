@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { isC00PolicyEnabled } from "@/lib/c00-policy";
 import { parseC00SignalCandidate, type C00SignalCandidate } from "@/lib/c00-signal";
+import { removeFillers, stripServiceMarks } from "@/lib/author-speech";
 import { filterServiceProse, stripStyleFillers } from "@/lib/author-text-guard";
 import { parseThoughtStateLists } from "@/lib/thought-state";
 
@@ -95,6 +96,7 @@ export const DISCARD_REASONS = [
   /** suggest_take right after a suggest_take: replaced by a neutral question about an open gap. */
   "proposal_repeat_replaced",
   /** 09.10 turn policy: markers of server-made replies. They are also what later turns read to avoid repeating a notice. */
+  "fact_duplicate",
   "policy_end_ask",
   "policy_end_ack",
   "policy_understanding_offer",
@@ -119,8 +121,11 @@ export type DiscardReason = (typeof DISCARD_REASONS)[number];
  */
 export function normalizeFactForAuthorMessage(fact: unknown, authorMessageId: string | null): ThoughtUpdate["fact"] {
   if (!fact || typeof fact !== "object" || !authorMessageId) return null;
-  const text = (fact as { text?: unknown }).text;
-  if (typeof text !== "string" || !text.trim()) return null;
+  const rawText = (fact as { text?: unknown }).text;
+  if (typeof rawText !== "string") return null;
+  // 09.10 (E5, E7): a fact never carries service markers ("(факт 2)") or speech fillers ("ну как бы"); the author's words stay.
+  const text = removeFillers(stripServiceMarks(rawText));
+  if (!text.trim()) return null;
   return { text: text.trim(), sourceType: "dialogue_message", sourceId: authorMessageId };
 }
 

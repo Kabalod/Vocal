@@ -8,7 +8,10 @@
 // Local test Postgres only. Budget: stops at 80% of --max-tokens (counted from AiCall + simulator usage) and reports "не выполнено".
 import { appendFileSync, writeFileSync } from "node:fs";
 import { resetPrismaClient } from "../../src/lib/db";
+import { changeLooksLikeEdit, stripServiceMarks } from "../../src/lib/author-speech";
 import { closePostgresTestDb, openPostgresTestDb } from "../../tests/helpers/postgres-test-db";
+import { factShares, fillersIn, phraseShares } from "./script-metrics-lib";
+import { toTranscript } from "./transcript-mode";
 
 (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
 process.env.VOCAL_TAKE_DIAGNOSIS = "1";
@@ -19,6 +22,9 @@ const OUT = argOf("out");
 const MD = argOf("md");
 const RAW = argOf("raw");
 const MAX_TOKENS = Number(argOf("max-tokens") ?? "600000");
+// --mode=transcript (default): the answers are turned into speech-to-text style; --mode=written keeps the clean text.
+const MODE = argOf("mode") === "written" ? "written" : "transcript";
+const STOP_AT = Number(argOf("stop-at") ?? "0.8");
 const ONLY = argOf("only") ? Number(argOf("only")) : null;
 const TURNS_OVERRIDE = argOf("turns") ? Number(argOf("turns")) : null;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -125,7 +131,7 @@ const PERSONAS: Persona[] = [
 
 const SIM_SYSTEM = [
   "Ты играешь роль автора коротких видео, которого расспрашивают о его мысли. Ты ничего не знаешь о том, кто и как тебя расспрашивает.",
-  "Отвечай по-русски, от первого лица, живой речью, от 40 до 120 слов на один ответ. Не называй номера фактов и не говори «пункт»: ты рассказываешь свою жизнь, а не читаешь список.",
+  `Отвечай по-русски, от первого лица, живой речью, ${MODE === "transcript" ? "от 50 до 110 слов потоком, как человек, который говорит вслух" : "от 40 до 120 слов"} на один ответ. Никогда не называй номера фактов, не пиши «факт N», «пункт N» и ничего в скобках о своей истории: ты рассказываешь свою жизнь, а не читаешь список.`,
   "Отвечай только из своей истории (пронумерованные факты). Если вопрос про то, чего в истории нет, скажи, что не помнишь или не думал об этом, и больше ничего не выдумывай.",
   "Если вопрос спрашивает о том, что ты уже рассказал, начни ответ с метки <уже_говорил> и ответь кратко.",
   "Если тебя спрашивают, готов ли ты закончить или собрать результат, ответь согласием одной короткой фразой.",
@@ -193,10 +199,10 @@ async function main() {
 
   for (const persona of PERSONAS) {
     if (ONLY && Number(persona.id.slice(1)) !== ONLY) continue;
-    if ((await spent()) > MAX_TOKENS * 0.8) {
+    if ((await spent()) > MAX_TOKENS * STOP_AT) {
       notExecuted = true;
-      results.push({ persona: persona.id, notExecuted: true, reason: "80% of the run budget reached" });
-      md.push(`## ${persona.id}. ${persona.title}`, "", "_Не выполнено: достигнуто 80% бюджета прогона._", "");
+      results.push({ persona: persona.id, notExecuted: true, reason: `${Math.round(STOP_AT * 100)}% of the run budget reached` });
+      md.push(`## ${persona.id}. ${persona.title}`, "", "_Не выполнено: достигнут порог бюджета прогона._", "");
       continue;
     }
     currentWho = persona.id;
@@ -246,7 +252,10 @@ async function main() {
       } catch {
         notDone += 1;
       }
-      if (!answer) { userText = "Не знаю."; used = []; } else userText = answer.replace(/^<уже_говорил>\s*/i, "").trim() || answer;
+      if (!answer) { userText = "Не знаю."; used = []; } else {
+        const clean = stripServiceMarks(answer.replace(/^<уже_говорил>\s*/i, "").trim() || answer);
+        userText = MODE === "transcript" ? toTranscript(clean, persona.id.charCodeAt(1) * 1009 + turn * 31) : clean;
+      }
       if (/^<уже_говорил>/i.test(answer)) alreadySaid += 1;
       if (/Собрать сценарий\?/.test(question) && !acceptedOffer) { acceptedOffer = true; }
       history.push({ q: question, a: answer || "(нет ответа)" });
@@ -292,8 +301,14 @@ async function main() {
       const src = userRows.find((r) => r.id === f.sourceId);
       return !src || containment(f.text, src.body) < 0.8;
     }).length;
-    const earlyFacts = state.facts.slice(0, 3);
+    // facts accepted from the LAST author message cannot be in the last prompt (the prompt was built before that fact existed)
+    const lastUserId = userRows[userRows.length - 1]?.id;
+    const earlyFacts = state.facts.filter((f) => f.sourceId !== lastUserId).slice(0, 3);
     const inPrompt = earlyFacts.filter((f) => lastDialoguePrompt.includes(f.text)).length;
+    const factTexts = state.facts.map((f) => f.text);
+    const phraseM = scriptText ? phraseShares(answers.map((r) => r.body), scriptText) : null;
+    const factM = scriptText ? factShares(factTexts, scriptText) : null;
+    const editChanges = changes.filter(changeLooksLikeEdit).length;
     const sentencesOfAuthor = sentences(answerText);
     const preserved = scriptText ? sentencesOfAuthor.filter((s) => containment(s, scriptText) >= 0.7).length : 0;
     const scriptSentences = sentences(scriptText);
@@ -313,7 +328,10 @@ async function main() {
       earlyFactsInLastPrompt: `${inPrompt}/${earlyFacts.length}`,
       scriptStatus, scriptWords: scriptText.split(/\s+/).filter(Boolean).length,
       authorSentences: sentencesOfAuthor.length, preservedInScript: preserved,
-      changes: changes.length, changesTraced: traced, newSentencesInScript: newContent.length,
+      changes: changes.length, changesAreEdits: editChanges, changesTraced: traced, newSentencesInScript: newContent.length,
+      phrasesRaw: phraseM ? `${phraseM.raw.found}/${phraseM.raw.total}` : null, phrasesClean: phraseM ? `${phraseM.clean.found}/${phraseM.clean.total}` : null,
+      factsInScriptRaw: factM ? `${factM.raw.found}/${factM.raw.total}` : null, factsInScriptClean: factM ? `${factM.clean.found}/${factM.clean.total}` : null,
+      fillersInScript: scriptText ? fillersIn(scriptText) : null, fillersInAnswers: answers.reduce((a, r) => a + fillersIn(r.body), 0),
       discarded: allMarks.reduce<Record<string, number>>((a, m) => ((a[m] = (a[m] ?? 0) + 1), a), {}),
       notExecutedCalls: notDone, serviceTokens: dialogueTokens, simulatorTokens: simTokens,
       tokensPerTurn: Math.round(dialogueTokens / Math.max(1, userRows.length)),
@@ -325,7 +343,7 @@ async function main() {
   }
 
   const total = await spent();
-  const summary = { notExecuted, maxTokens: MAX_TOKENS, spentTokens: total, aiCallTokens: await aiTokens(), simulatorTokens: stats.simTokens, simulatorCalls: stats.simCalls, providerAttempts: stats.attempts, failures: stats.failures, results };
+  const summary = { mode: MODE, notExecuted, maxTokens: MAX_TOKENS, spentTokens: total, aiCallTokens: await aiTokens(), simulatorTokens: stats.simTokens, simulatorCalls: stats.simCalls, providerAttempts: stats.attempts, failures: stats.failures, results };
   if (MD) writeFileSync(MD, md.join("\n"));
   if (OUT) writeFileSync(OUT, JSON.stringify(summary, null, 1));
   console.log(JSON.stringify(summary, null, 1));
