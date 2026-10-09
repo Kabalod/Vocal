@@ -30,7 +30,7 @@ test("R3: the guard sees service ids in author text and builds a neutral questio
     { id: "old", text: "y", status: "resolved" },
   ]);
   assertPlainQuestion(String(typed.question), "typed no_mechanism");
-  assert.match(String(typed.question), /происходит/);
+  assert.equal(typed.question, "Что вы делаете в самом начале?", "I4: the owner's wording for no_mechanism");
   assert.equal(typed.gapId, "gap_no_mechanism");
   const none = neutralQuestionReply([]);
   assert.equal(none.question, GENERIC_NEUTRAL_QUESTION);
@@ -93,7 +93,7 @@ test("R3: an answer with a cuid in the question never reaches the author; the th
   assert.equal(calls2, 2, "one regeneration, then the neutral question without a third call");
   const shown = await questions(second);
   assertPlainQuestion(shown.at(-1), "neutral after a leak");
-  assert.match(shown.at(-1) ?? "", /какой случай/);
+  assert.match(shown.at(-1) ?? "", /[Кк]акой случай/);
   assert.equal(shown.some((body) => body.includes(reelId)), false);
 
   const after = await getThoughtState(reelId);

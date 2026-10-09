@@ -6,8 +6,8 @@
  * Material states (criterion proposed in R_REPORT.md):
  *  - insufficient (Н): no accepted author fact and no author position.
  *  - enough (Д): at least one accepted author fact.
- *  - ready (Г): enough, plus a case (>= 2 facts, no open no_episode), a main thought (no open no_thesis), a named final action
- *    (takeTask or a suggest_take seen in this thought) and the viewer effect named or skipped (asked and answered, or intent set).
+ *  - ready (Г, relaxed 09.10 I1): two units of material and any of: 3 accepted facts, the viewer answer (asked and answered, "не знаю"
+ *    counts as skipped, or the goal already named), a named final action (takeTask or a suggest_take seen in this thought).
  *
  * Fixed phrases avoid the style words (по вашему мнению / по-вашему / пожалуйста / конкретн* / вывод / урок / позиция / тезис),
  * carry one question each and do not reproach the author.
@@ -36,8 +36,7 @@ export const POLICY_MARKS = {
 } as const;
 
 /** A2: shown once when two answers in a row added no accepted fact; the same text blocks the build button in state Н. */
-export const NO_FACT_NOTICE =
-  "Ответы пока не добавляют материала, и улучшить сценарий не получится. Что выберете: рассказать один случай, записать ещё дубль или закончить?";
+export const NO_FACT_NOTICE = "Пока в ответах нет нового материала. Что выберем: рассказать случай, записать ещё дубль или закончить?";
 /** A1: why the build button is blocked in state Н, and the question next to it. */
 export const THIN_BLOCK_REASON = "Основа вашего дубля сохранена. Чтобы собрать новый сценарий, нужен хотя бы один ваш ответ по сути.";
 export const THIN_NEXT_QUESTION = "Расскажете один случай по этой мысли или запишете ещё один дубль?";
@@ -48,7 +47,7 @@ export const END_ACK = "Хорошо, мысль остаётся как ест�
 /** A3 */
 export const DONT_KNOW_PAUSE = "Можно сделать паузу и вернуться к мысли позже. Или назовите одну деталь, с которой можно начать?";
 /** A7 */
-export const EFFECT_QUESTION = "Что должен почувствовать или сделать зритель после этого ролика?";
+export const EFFECT_QUESTION = "Что человек должен сделать после ролика?";
 /** A5: put in front of the next question, once per thought. */
 export { DRYNESS_HINT };
 
@@ -107,12 +106,14 @@ export type PolicyState = {
 export function materialState(input: { state: PolicyState; units: number; actionNamed: boolean; effectResolved: boolean }): MaterialState {
   const { state } = input;
   if (input.units === 0 && state.facts.length === 0 && !state.position.trim()) return "insufficient";
-  const open = (kind: string) => state.openGaps.some((gap) => gap.status === "open" && gap.kind === kind);
-  const caseKnown = input.units >= 2 && !open("no_episode");
-  const thesisKnown = !open("no_thesis");
-  const actionKnown = Boolean(state.takeTask.trim()) || input.actionNamed;
-  return caseKnown && thesisKnown && actionKnown && input.effectResolved ? "ready" : "enough";
+  // 09.10 (I1): G was too strict (a case, a main thought, a named action AND the viewer effect: 1 dialogue of 18 reached it).
+  // Now: some material (two units) and ANY of: three accepted facts, the viewer answer (or the goal already named), a named final action.
+  const ready = input.units >= 2 && (state.facts.length >= READY_FACTS || input.effectResolved || input.actionNamed || Boolean(state.takeTask.trim()));
+  return ready ? "ready" : "enough";
 }
+
+/** I1: accepted facts that alone make the material ready to offer the build. */
+export const READY_FACTS = 3;
 
 export type ReplyShape = { kind: "ask_question" | "suggest_take" | "content_sufficient" | "redirect_to_task"; hasFact: boolean; hasSignal: boolean; serverMade: boolean };
 
@@ -206,7 +207,8 @@ export function decideTurnPolicy(input: {
   // A7: the viewer effect, once per thought, when there is a case and a main thought and the goal is not named yet.
   const effectAsked = turns.some((turn) => turn.role === "assistant" && turn.marks.includes(POLICY_MARKS.effectAsk));
   const open = (kind: string) => state.openGaps.some((gap) => gap.status === "open" && gap.kind === kind);
-  const effectResolved = Boolean(state.intent.trim()) || effectAsked;
+  // The viewer answer for readiness (I1) is a real answer to the server's question; a goal set by the author only stops the question being asked.
+  const effectResolved = effectAsked;
   if (!effectAsked && !state.intent.trim() && unitsAfter >= 2 && !open("no_episode") && !open("no_thesis") && !isDontKnow(current.body)) {
     return { kind: "replace", question: EFFECT_QUESTION, marks: replaceMarks(POLICY_MARKS.effectAsk) };
   }

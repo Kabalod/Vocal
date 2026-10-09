@@ -88,7 +88,7 @@ test("R5: a repeated question is regenerated once; a second repeat becomes a neu
   const last = (await bodies()).at(-1);
   assert.notEqual(last, SHOWN_FIRST);
   assertPlainQuestion(last, "other gap");
-  assert.match(last ?? "", /^О чём главное в ролике/, "the question of the other open gap");
+  assert.equal(last, "Если сказать одним предложением, о чём этот ролик?", "the question of the other open gap");
 
   // 4. the state is untouched and the repeats are counted.
   const after = await getThoughtState(reelId);

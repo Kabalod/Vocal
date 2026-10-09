@@ -1,3 +1,4 @@
+import { checkRequestRate, consumeThoughtSlot } from "@/lib/quota";
 import { Prisma } from "@prisma/client";
 import { createBaseScriptFromTakeInTx } from "@/lib/scripts";
 import { prisma } from "@/lib/db";
@@ -31,6 +32,7 @@ export async function createThoughtFromText(input: {
   body: string;
   idempotencyKey: string;
 }): Promise<{ reel: ReelDto; created: boolean }> {
+  checkRequestRate();
   const idempotencyKey = input.idempotencyKey.trim();
   if (!idempotencyKey) {
     throw new ReelError("Нужен ключ повтора запроса.", "IDEMPOTENCY_REQUIRED");
@@ -58,6 +60,8 @@ export async function createThoughtFromText(input: {
         select: { reelId: true },
       });
       if (raced) return raced.reelId;
+      // J1: a NEW thought spends one slot of the paid period (a replay of the key above never does).
+      await consumeThoughtSlot(tx);
 
       const reel = await tx.reel.create({
         data: {

@@ -6,7 +6,7 @@ import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
 process.env.VOCAL_TURN_POLICY = "0"; // 09.10: these suites predate the turn policy; it is tested in turn-policy.test.ts
 
-const PHRASE = "Для следующего дубля у вас уже есть опора. Запишите его или соберите сценарий.";
+const PHRASE = "Материала уже хватает. Запишем следующий дубль или соберём сценарий?";
 
 test("08.10: suggest_take shows the fixed sentence, keeps takeTask in the state, and a repeated proposal becomes a question", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
@@ -45,7 +45,7 @@ test("08.10: suggest_take shows the fixed sentence, keeps takeTask in the state,
   const secondReply = second.messages.filter((m) => m.role === "assistant").at(-1);
   assert.equal(secondReply?.kind, "question", "a repeated proposal is replaced by a question");
   assertPlainQuestion(secondReply?.body, "replaced proposal");
-  assert.match(secondReply?.body ?? "", /происходит/, "about the open gap");
+  assert.equal(secondReply?.body, "Что вы делаете в самом начале?", "about the open gap");
   const state = await getThoughtState(reelId);
   assert.equal(state.facts.length, 2, "the author's second fact is kept");
   const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId } });
@@ -110,7 +110,7 @@ test("08.10: every server question is one plain question with the topic named; c
     for (const topic of [null, "Утренний кофе"]) {
       const reply = neutralQuestionReply([{ id: `gap_${kind}`, text: "x", status: "open", kind }], [], [], topic);
       assertPlainQuestion(String(reply.question), `${kind}/${topic ?? "no topic"}`);
-      if (topic && ["no_episode", "no_thesis", "no_mechanism"].includes(kind)) assert.ok(String(reply.question).includes("«Утренний кофе»"), `${kind}: names the topic`);
+      if (topic && kind === "no_episode") assert.ok(String(reply.question).includes("«Утренний кофе»"), `${kind}: names the topic`);
     }
   }
   for (const q of VARIETY_FALLBACKS) assertPlainQuestion(q, "variety fallback");

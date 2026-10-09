@@ -1,4 +1,5 @@
-import { changeLooksLikeEdit, cleanSpeechText, NO_EDIT_LIST_FALLBACK } from "@/lib/author-speech";
+import { checkRequestRate } from "@/lib/quota";
+import { changeLooksLikeEdit, cleanSpeechText, factQuote, NO_EDIT_LIST_FALLBACK } from "@/lib/author-speech";
 import { NO_FACT_NOTICE, NO_FACT_STREAK_LIMIT, THIN_BLOCK_REASON, THIN_NEXT_QUESTION, isCommandText, isDontKnow, isEndPhrase, materialUnits, noFactStreak, speechWords } from "@/lib/turn-policy";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -361,6 +362,32 @@ export function isCraftInstruction(text: string) {
   );
 }
 
+/** I2 switch: VOCAL_FACT_QUOTES=0 turns the verbatim quotes off (the build input is then facts only, as before 09.10). */
+export function factQuotesEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return env.VOCAL_FACT_QUOTES !== "0";
+}
+
+async function loadFactQuotes(
+  reelId: string,
+  facts: { id: string; text: string; sourceType: string; sourceId: string }[],
+  db: ScriptDb,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const sourced = facts.filter((fact) => fact.sourceType === "dialogue_message");
+  if (sourced.length === 0) return out;
+  const rows = await db.dialogueMessage.findMany({
+    where: { id: { in: sourced.map((fact) => fact.sourceId) }, role: "user", thread: { reelId } },
+    select: { id: true, body: true },
+  });
+  const byId = new Map(rows.map((row) => [row.id, row.body]));
+  for (const fact of sourced) {
+    const body = byId.get(fact.sourceId);
+    const quote = body ? factQuote(fact.text, body) : null;
+    if (quote) out.set(fact.id, quote);
+  }
+  return out;
+}
+
 /** Budget (characters) for the author's answers in the build input. */
 export const ANSWER_SOURCE_CHAR_BUDGET = 5000;
 
@@ -383,8 +410,13 @@ async function collectFromLoaded(reelId: string, material: Omit<V05Material, "ke
       if (isServiceDecision(decision)) continue;
       if (decision.trim()) pushSource(keys, texts, `state:decision:${decision.slice(0, 24)}`, "Решение", decision);
     }
+    // 09.10 (I2): a fact goes into the build with a short verbatim quote of the author's own (cleaned) words, so that the script keeps
+    // the author's wording. The quote belongs to the fact: when the fact is removed or replaced, the quote goes with it; after an
+    // accepted correction no quotes are added at all.
+    const quotes = !material.world.lastCorrectionAcceptedAt && factQuotesEnabled() ? await loadFactQuotes(reelId, thought.facts, db) : new Map<string, string>();
     for (const fact of thought.facts) {
-      pushSource(keys, texts, `fact:${fact.id}`, "Факт мысли", fact.text);
+      const quote = quotes.get(fact.id);
+      pushSource(keys, texts, `fact:${fact.id}`, "Факт мысли", quote ? `${fact.text}\nСлова автора: «${quote}»` : fact.text);
     }
   }
 
@@ -1006,6 +1038,7 @@ export async function generateV05Script(
 ): Promise<ScriptWorkspaceDto> {
   const key = input.idempotencyKey.trim();
   if (!key) throw new ScriptError("Нужен ключ повтора.", "IDEMPOTENCY");
+  checkRequestRate();
   const reel = await prisma.reel.findFirst({
     where: { id: reelId, ownerUserId: ownerUserId() },
   });

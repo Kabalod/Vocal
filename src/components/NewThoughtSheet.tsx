@@ -6,6 +6,7 @@ import { ThoughtMediaProcessing } from "@/components/ThoughtMediaProcessing";
 import { ThoughtVideoUpload } from "@/components/ThoughtVideoUpload";
 import { ThoughtVoiceRecorder } from "@/components/ThoughtVoiceRecorder";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
+import { QuotaExhausted } from "@/components/QuotaExhausted";
 import { Field, TextArea } from "@/components/vocal-ui/Field";
 import { InlineError } from "@/components/vocal-ui/InlineError";
 import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
@@ -15,7 +16,7 @@ import {
   thoughtLeaveKind,
   type ThoughtLeaveKind,
 } from "@/lib/thought-leave";
-import { ThoughtUploadAbortedError, uploadThoughtMedia } from "@/lib/thought-media-upload";
+import { ThoughtQuotaExhaustedError, ThoughtUploadAbortedError, uploadThoughtMedia } from "@/lib/thought-media-upload";
 import {
   clearThoughtDraft,
   newThoughtIdempotencyKey,
@@ -58,6 +59,8 @@ export function NewThoughtSheet({
   const [draft, setDraft] = useState<ThoughtDraft>({ title: "", body: "", idempotencyKey: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // J1: undefined = fine; a value (the end of the paid period or null) = the thought limit is used up (HTTP 402)
+  const [quotaEnd, setQuotaEnd] = useState<string | null | undefined>(undefined);
   const inFlight = useRef(false);
   const [mode, setMode] = useState<MediaMode>("none");
   const [voiceDirty, setVoiceDirty] = useState(false);
@@ -130,6 +133,12 @@ export function NewThoughtSheet({
       setUploadPercent(null);
     } catch (err) {
       if (err instanceof ThoughtUploadAbortedError) {
+        setProcessing(false);
+        setUploadPercent(null);
+        return;
+      }
+      if (err instanceof ThoughtQuotaExhaustedError) {
+        setQuotaEnd(err.periodEnd);
         setProcessing(false);
         setUploadPercent(null);
         return;
@@ -224,7 +233,11 @@ export function NewThoughtSheet({
           idempotencyKey: draft.idempotencyKey,
         }),
       });
-      const data = (await res.json()) as { reel?: { id: string; status?: string }; error?: string };
+      const data = (await res.json()) as { reel?: { id: string; status?: string }; error?: string; code?: string; periodEnd?: string | null };
+      if (res.status === 402 && data.code === "QUOTA_EXHAUSTED") {
+        setQuotaEnd(data.periodEnd ?? null);
+        return;
+      }
       if (!res.ok || !data.reel) throw new Error(data.error ?? "Не удалось создать мысль.");
       openThought(data.reel.id);
     } catch (err) {
@@ -240,7 +253,9 @@ export function NewThoughtSheet({
   return (
     <VocalModal open={open} title="Новая мысль" onClose={cancel} placement="dialog">
       <div className="space-y-4">
-        {processing ? (
+        {quotaEnd !== undefined ? (
+          <QuotaExhausted periodEnd={quotaEnd} onClose={cancel} />
+        ) : processing ? (
           <ThoughtMediaProcessing reelId={reelId} uploadPercent={uploadPercent} onReady={openThought} />
         ) : (
           <>

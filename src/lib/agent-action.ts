@@ -97,6 +97,7 @@ export const DISCARD_REASONS = [
   "proposal_repeat_replaced",
   /** 09.10 turn policy: markers of server-made replies. They are also what later turns read to avoid repeating a notice. */
   "fact_duplicate",
+  "quota_ceiling",
   "policy_topic_repeat",
   "policy_lexicon_regenerated",
   "policy_lexicon_fallback",
@@ -264,7 +265,7 @@ export async function assertAgentActionAllowed(
 /** Shown only when every sentence of whyNoGaps was service wording or carried an id. */
 export const CONTENT_SUFFICIENT_FALLBACK = "Мысли хватает, можно переходить дальше.";
 
-export const TAKE_PROPOSAL_PHRASE = "Для следующего дубля у вас уже есть опора. Запишите его или соберите сценарий.";
+export const TAKE_PROPOSAL_PHRASE = "Материала уже хватает. Запишем следующий дубль или соберём сценарий?";
 
 export function actionMessage(action: AgentAction): { kind: "question" | "text"; body: string } {
   if (action.action === "ask_question") return { kind: "question", body: stripStyleFillers(action.question) || action.question };

@@ -36,3 +36,16 @@ test("rich-author finding: service markers in decisions are not author material 
   assert.equal(isServiceDecision("diagnosed:cmv0guas50006dmbop4hva6lm"), true);
   assert.equal(isServiceDecision("Снять дубль про утро"), false);
 });
+
+test("I1: the relaxed state G: two units of material and any of 3 facts / the viewer answer / a named action", async () => {
+  const { materialState, READY_FACTS } = await import("../src/lib/turn-policy");
+  const state = (facts: number, takeTask = "") => ({ facts: Array.from({ length: facts }, (_, i) => ({ id: `f${i}`, sourceId: `m${i}`, text: "x" })), position: "", intent: "", takeTask, openGaps: [] });
+  assert.equal(READY_FACTS, 3);
+  assert.equal(materialState({ state: state(3), units: 3, actionNamed: false, effectResolved: false }), "ready", "three facts alone");
+  assert.equal(materialState({ state: state(2), units: 3, actionNamed: false, effectResolved: false }), "enough", "two facts alone are not enough");
+  assert.equal(materialState({ state: state(1), units: 2, actionNamed: false, effectResolved: true }), "ready", "the viewer answer");
+  assert.equal(materialState({ state: state(1), units: 2, actionNamed: true, effectResolved: false }), "ready", "a named action");
+  assert.equal(materialState({ state: state(1, "Снять дубль"), units: 2, actionNamed: false, effectResolved: false }), "ready", "takeTask");
+  assert.equal(materialState({ state: state(1), units: 1, actionNamed: true, effectResolved: true }), "enough", "one unit of material is never ready");
+  assert.equal(materialState({ state: state(0), units: 0, actionNamed: true, effectResolved: true }), "insufficient");
+});

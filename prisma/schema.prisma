@@ -357,3 +357,15 @@ model CompareResult {
 
   @@index([reelId, createdAt])
 }
+
+/// J1: the paid period and the thought quota of one author (a row per auth user). Prepared by prisma/migrations/11_user_quota;
+/// not applied to live Supabase without the owner's decision.
+model UserQuota {
+  ownerUserId   String   @id
+  periodStart   DateTime
+  periodEnd     DateTime
+  thoughtsLimit Int      @default(100)
+  thoughtsUsed  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

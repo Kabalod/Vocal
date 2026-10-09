@@ -1,14 +1,35 @@
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
+import { isOrdinaryUser, quotaEnforced } from "@/lib/quota-env";
 
 const inflight = new Map<string, Promise<unknown>>();
 
 export class AiBudgetError extends Error {
-  readonly code = "AI_BUDGET";
-  readonly status = 429;
+  readonly code: string = "AI_BUDGET";
+  readonly status: number = 429;
   constructor(message = "Дневной лимит обращений к модели исчерпан.") {
     super(message);
     this.name = "AiBudgetError";
+  }
+}
+
+/** J1: too many requests per minute from one author. */
+export class RateLimitedError extends AiBudgetError {
+  override readonly code: string = "RATE_LIMITED";
+  override readonly status: number = 429;
+  constructor(readonly retryAfterSeconds: number) {
+    super("Слишком много запросов. Подождите минуту и повторите.");
+    this.name = "RateLimitedError";
+  }
+}
+
+/** J1: the global switch: the day's provider spend passed the cap. */
+export class AiPausedError extends AiBudgetError {
+  override readonly code: string = "AI_PAUSED";
+  override readonly status: number = 503;
+  constructor() {
+    super("Сервис временно приостановлен: суточный расход на модель исчерпан. Попробуйте позже.");
+    this.name = "AiPausedError";
   }
 }
 
@@ -98,7 +119,31 @@ export async function sttSecondsUsedToday(owner = ownerUserId()): Promise<number
   return rows._sum.promptTokens ?? 0;
 }
 
+export const DEFAULT_GLOBAL_DAILY_TOKEN_CAP = 20_000_000;
+
+export function globalDailyTokenCap(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.VOCAL_GLOBAL_DAILY_TOKEN_CAP?.trim();
+  if (!raw) return DEFAULT_GLOBAL_DAILY_TOKEN_CAP;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : DEFAULT_GLOBAL_DAILY_TOKEN_CAP;
+}
+
+/** J1 global switch: chat tokens of ALL users since midnight against VOCAL_GLOBAL_DAILY_TOKEN_CAP (0 disables). Only where the quota is enforced. */
+export async function assertGlobalSpendCap(): Promise<void> {
+  const cap = globalDailyTokenCap();
+  if (cap <= 0 || !quotaEnforced()) return;
+  const rows = await prisma.aiCall.aggregate({
+    where: { kind: { not: STT_CALL_KIND }, status: { in: ["done", "error"] }, createdAt: { gte: dayStart() } },
+    _sum: { promptTokens: true, completionTokens: true },
+  });
+  if ((rows._sum.promptTokens ?? 0) + (rows._sum.completionTokens ?? 0) >= cap) throw new AiPausedError();
+}
+
 export async function assertDailyTokenBudget(): Promise<void> {
+  await assertGlobalSpendCap();
+  // J1: the per-user daily token limit is for the owner/dev contour only; ordinary authors have the thought quota,
+  // the per-thought ceiling, the request rate limit and the global switch instead.
+  if (isOrdinaryUser()) return;
   const limit = dailyTokenLimit();
   if (limit <= 0) return;
   if ((await chatTokensUsedToday()) >= limit) throw new AiBudgetError();

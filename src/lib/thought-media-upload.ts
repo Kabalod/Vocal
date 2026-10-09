@@ -1,3 +1,14 @@
+/** J1: HTTP 402 QUOTA_EXHAUSTED: the thought limit of the paid period is used up. */
+export class ThoughtQuotaExhaustedError extends Error {
+  constructor(
+    message: string,
+    readonly periodEnd: string | null,
+  ) {
+    super(message);
+    this.name = "ThoughtQuotaExhaustedError";
+  }
+}
+
 export class ThoughtUploadAbortedError extends Error {
   constructor() {
     super("Загрузка отменена.");
@@ -29,7 +40,11 @@ export function uploadThoughtMedia(
       onProgress?.(Math.round((event.loaded / event.total) * 100));
     };
     xhr.onload = () => {
-      const data = (xhr.response ?? {}) as { reel?: { id: string }; job?: { id: string }; error?: string };
+      const data = (xhr.response ?? {}) as { reel?: { id: string }; job?: { id: string }; error?: string; code?: string; periodEnd?: string | null };
+      if (xhr.status === 402 && data.code === "QUOTA_EXHAUSTED") {
+        reject(new ThoughtQuotaExhaustedError(data.error ?? "Лимит мыслей исчерпан.", data.periodEnd ?? null));
+        return;
+      }
       if (xhr.status >= 200 && xhr.status < 300 && data.reel && data.job) {
         resolve({ reelId: data.reel.id, jobId: data.job.id });
         return;

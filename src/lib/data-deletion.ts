@@ -278,6 +278,7 @@ export async function deleteAccountData(owner: string): Promise<{ thoughts: numb
         await tx.profileRevision.deleteMany({ where: { profileId: profile.id } });
         await tx.creatorProfile.delete({ where: { id: profile.id } });
       }
+      await tx.userQuota.deleteMany({ where: { ownerUserId: owner } }); // J1: the paid-period row goes with the account
       // Remaining accounting rows keep their counts but lose the account id.
       await anonymizeAiCalls(tx, { ownerUserId: owner }, anonymizedOwnerId(owner));
     },

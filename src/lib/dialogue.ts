@@ -32,12 +32,14 @@ import {
 } from "@/lib/c00-classify-signal";
 import { isC00PolicyEnabled } from "@/lib/c00-policy";
 import { stripServiceMarks } from "@/lib/author-speech";
+import { CEILING_REPLY, checkRequestRate, thoughtCeilingReached } from "@/lib/quota";
 import {
   composeUnderstandingList,
   detectGenre,
   anchoredByGenre,
   anchoredByKind,
   isUnknownAnswer,
+  isViewerQuestion,
   pickFallback,
   questionProblem,
   questionRulesBlock,
@@ -1084,7 +1086,7 @@ async function fallbackQuestion(input: { reelId: string; turns: PolicyTurn[]; ge
   const state = await getThoughtState(input.reelId);
   const past = input.turns.filter((turn) => turn.role === "assistant" && turn.action === "ask_question").map((turn) => turn.body);
   const askedGaps = new Set(input.turns.filter((turn) => turn.role === "assistant" && turn.gapId).map((turn) => turn.gapId as string));
-  const viewerAsked = past.some((q) => /зрител|человек должен/i.test(q));
+  const viewerAsked = past.some(isViewerQuestion);
   const topic = (await reelTopic(input.reelId)) ?? (await takeKeyword(input.reelId));
   const fromGaps = state.openGaps
     .filter((gap) => gap.status === "open" && gap.kind && !askedGaps.has(gap.id) && !(gap.kind === "viewer_effect" && viewerAsked))
@@ -1133,7 +1135,8 @@ async function guardQuestionStyle(input: {
   const lastAnswer = answersOnly[answersOnly.length - 1]?.body;
   const lastUserTurn = [...turns].reverse().find((turn) => turn.role === "user");
   const anchorTexts = [context[0] ?? "", (await reelTopic(input.reelId)) ?? "", ...answersOnly.slice(-2).map((turn) => turn.body)];
-  const problemCtx = { genre, lastAnswer, anchorTexts, lastIsCommand: Boolean(lastUserTurn && isCommandText(lastUserTurn.body)) };
+  const recentQuestions = turns.filter((turn) => turn.role === "assistant" && turn.action === "ask_question").map((turn) => turn.body);
+  const problemCtx = { genre, lastAnswer, anchorTexts, lastIsCommand: Boolean(lastUserTurn && isCommandText(lastUserTurn.body)), recentQuestions, answerTexts: answersOnly.map((turn) => turn.body) };
   const pastQuestionTurns = turns.filter((turn) => turn.role === "assistant" && turn.action === "ask_question" && !turn.marks.includes("policy_understanding_offer"));
   const answered = pastQuestionTurns.filter((turn) => {
     const next = turns.slice(turns.indexOf(turn) + 1).find((t) => t.role === "user");
@@ -1168,7 +1171,7 @@ async function guardQuestionStyle(input: {
   if (repeatOf(question)) {
     return replaceWith(withPrefix(await fallbackQuestion({ reelId: input.reelId, turns, genre })), ["policy_topic_repeat"]);
   }
-  const problem = questionProblem(question, problemCtx);
+  const problem = questionProblem(question, serverMade ? { ...problemCtx, anchorTexts: undefined } : problemCtx);
   if (!problem) return { reply, rawText: input.rawText };
   if (serverMade || prefix) {
     return replaceWith(withPrefix(await fallbackQuestion({ reelId: input.reelId, turns, genre })), ["policy_lexicon_fallback"]);
@@ -1271,6 +1274,17 @@ async function dropDuplicateFact(input: {
   await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
   const parsed = parseAgentReply(replaced, { authorMessageId: input.authorMessageId });
   return { reply: { ...parsed, c00Signal: input.reply.c00Signal, discarded: [...input.reply.discarded, "fact_duplicate"] as typeof input.reply.discarded }, rawText };
+}
+
+/** J1: what the stored model reply looks like after the per-thought ceiling (no model call). */
+function ceilingReplyJson() {
+  return {
+    action: "ask_question",
+    question: CEILING_REPLY,
+    clarificationReason: "достигнут потолок вопросов по мысли",
+    whyUnknown: "потолок вопросов или токенов на одну мысль",
+    thoughtUpdate: { fact: null, closeGapIds: [] },
+  };
 }
 
 /** 09.10 (E1): the recent history is cut by a character budget (≈ tokens), not by a message count: long transcripts must not crowd out the rest. */
@@ -1405,6 +1419,7 @@ export async function sendDialogueMessage(
   const key = input.idempotencyKey.trim();
   if (!key) throw new DialogueError("Нужен ключ повтора.", "IDEMPOTENCY");
   await assertDialogueStateVersion(reelId, input);
+  checkRequestRate(); // J1: requests per minute per ordinary author
   return withAiInflight(
     aiOperationKey({
       ownerUserId: ownerUserId(),
@@ -1590,6 +1605,7 @@ export async function runDialogueTurn(
         }),
       },
     });
+    const ceilingTurn = await thoughtCeilingReached(reelId, thread.id);
     let call = await prisma.aiCall.findUniqueOrThrow({ where: { id: reusable.id } });
     let execClaim: { ownerId: string; generation: number } | null = null;
     // True when another executor produced the model reply and this one only waited for it.
@@ -1608,12 +1624,15 @@ export async function runDialogueTurn(
                 generation: claim.generation,
               });
             }
-            const raw = await gatewayComplete(complete, {
-              model: LLM_MODEL,
-              system: thoughtDialogueSystemPrompt(),
-              user: userPrompt,
-              label: "dialogue",
-            });
+            // J1: past the per-thought ceiling (8 questions or ~40k tokens) the model is not called: the author is offered the script.
+            const raw = ceilingTurn
+              ? { text: JSON.stringify(ceilingReplyJson()), usage: { promptTokens: 0, completionTokens: 0 } }
+              : await gatewayComplete(complete, {
+                  model: LLM_MODEL,
+                  system: thoughtDialogueSystemPrompt(),
+                  user: userPrompt,
+                  label: "dialogue",
+                });
             try {
               await writeDialogueModelResponse({
                 callId: call.id,
@@ -1670,78 +1689,85 @@ export async function runDialogueTurn(
       thoughtUpdate: reply.thoughtUpdate,
       c00Signal: reply.c00Signal,
     });
-    const deduped = await dropDuplicateFact({
-      threadId: thread.id,
-      callId: call.id,
-      reply,
-      rawText: parsedReply.responseText,
-      authorMessageId: userMessage.id,
-      authorText: text,
-      acceptedFacts: thoughtFacts.map((fact) => fact.text),
-    });
-    const downgraded = await downgradeInvalidReply({
-      reelId,
-      callId: call.id,
-      reply: deduped.reply,
-      rawText: deduped.rawText,
-      authorMessageId: userMessage.id,
-    });
-    const varied = await varyRepeatedQuestion({
-      reelId,
-      threadId: thread.id,
-      callId: call.id,
-      reply: downgraded.reply,
-      rawText: downgraded.rawText,
-      userPrompt,
-      complete,
-      authorMessageId: userMessage.id,
-    });
-    const proposalVaried = await varyRepeatedProposal({
-      reelId,
-      threadId: thread.id,
-      callId: call.id,
-      reply: varied.reply,
-      rawText: varied.rawText,
-      authorMessageId: userMessage.id,
-    });
-    const guarded = await guardQuestionContent({
-      reelId,
-      threadId: thread.id,
-      callId: call.id,
-      reply: proposalVaried.reply,
-      rawText: proposalVaried.rawText,
-      userPrompt,
-      complete,
-      authorMessageId: userMessage.id,
-    });
-    const policed = await applyTurnPolicy({
-      reelId,
-      threadId: thread.id,
-      callId: call.id,
-      reply: guarded.reply,
-      rawText: guarded.rawText,
-      authorMessageId: userMessage.id,
-    });
-    const styled = await guardQuestionStyle({
-      reelId,
-      threadId: thread.id,
-      callId: call.id,
-      reply: policed.reply,
-      rawText: policed.rawText,
-      userPrompt,
-      complete,
-      authorMessageId: userMessage.id,
-    });
-    const safe = await authorSafeReply({
-      reelId,
-      callId: call.id,
-      reply: styled.reply,
-      rawText: styled.rawText,
-      userPrompt,
-      complete,
-      knownIds: [reelId, userMessage.id, material.workingTakeId, material.transcriptRevisionId, ...thoughtFacts.map((fact) => fact.id)],
-      authorMessageId: userMessage.id,
-    });
+    const safe = ceilingTurn
+      ? {
+          reply: { ...reply, thoughtUpdate: { fact: null, closeGapIds: [] }, discarded: [...reply.discarded, "quota_ceiling"] as typeof reply.discarded },
+          rawText: parsedReply.responseText,
+        }
+      : await (async () => {
+      const deduped = await dropDuplicateFact({
+        threadId: thread.id,
+        callId: call.id,
+        reply,
+        rawText: parsedReply.responseText,
+        authorMessageId: userMessage.id,
+        authorText: text,
+        acceptedFacts: thoughtFacts.map((fact) => fact.text),
+      });
+      const downgraded = await downgradeInvalidReply({
+        reelId,
+        callId: call.id,
+        reply: deduped.reply,
+        rawText: deduped.rawText,
+        authorMessageId: userMessage.id,
+      });
+      const varied = await varyRepeatedQuestion({
+        reelId,
+        threadId: thread.id,
+        callId: call.id,
+        reply: downgraded.reply,
+        rawText: downgraded.rawText,
+        userPrompt,
+        complete,
+        authorMessageId: userMessage.id,
+      });
+      const proposalVaried = await varyRepeatedProposal({
+        reelId,
+        threadId: thread.id,
+        callId: call.id,
+        reply: varied.reply,
+        rawText: varied.rawText,
+        authorMessageId: userMessage.id,
+      });
+      const guarded = await guardQuestionContent({
+        reelId,
+        threadId: thread.id,
+        callId: call.id,
+        reply: proposalVaried.reply,
+        rawText: proposalVaried.rawText,
+        userPrompt,
+        complete,
+        authorMessageId: userMessage.id,
+      });
+      const policed = await applyTurnPolicy({
+        reelId,
+        threadId: thread.id,
+        callId: call.id,
+        reply: guarded.reply,
+        rawText: guarded.rawText,
+        authorMessageId: userMessage.id,
+      });
+      const styled = await guardQuestionStyle({
+        reelId,
+        threadId: thread.id,
+        callId: call.id,
+        reply: policed.reply,
+        rawText: policed.rawText,
+        userPrompt,
+        complete,
+        authorMessageId: userMessage.id,
+      });
+      return await authorSafeReply({
+        reelId,
+        callId: call.id,
+        reply: styled.reply,
+        rawText: styled.rawText,
+        userPrompt,
+        complete,
+        knownIds: [reelId, userMessage.id, material.workingTakeId, material.transcriptRevisionId, ...thoughtFacts.map((fact) => fact.id)],
+        authorMessageId: userMessage.id,
+      });
+      })();
     const classified = await classifiedPromise;
     await commitDroppingBadUpdate({
       reelId,

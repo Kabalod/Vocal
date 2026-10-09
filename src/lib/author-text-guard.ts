@@ -41,7 +41,7 @@ export function stripOffTopicPhrase(question: string): string {
   return out.startsWith(OFF_TOPIC_RETURN_PHRASE) ? out.slice(OFF_TOPIC_RETURN_PHRASE.length).trim() : out;
 }
 
-export const GENERIC_NEUTRAL_QUESTION = "Что для вас здесь главное своими словами?";
+export const GENERIC_NEUTRAL_QUESTION = "Что здесь самое главное?";
 
 /** 08.10: a thought's title usable as a topic in a server question; auto titles and empty ones are not. */
 export function cleanTopic(title: string | null | undefined): string | null {
@@ -54,23 +54,31 @@ export function cleanTopic(title: string | null | undefined): string | null {
  * Server questions (08.10 owner rules): one question, plain words, no "по вашему мнению / по-вашему / пожалуйста /
  * конкретн* / позиция / вывод / урок / тезис", the thought's topic named when there is one.
  */
-const NEUTRAL_QUESTIONS: Record<GapKind, (topic: string | null) => string> = {
-  no_episode: (topic) => `Расскажите в деталях, какой случай${topic ? ` про «${topic}»` : ""} ярко вспоминается?`,
-  no_thesis: (topic) => (topic ? `О чём главное в ролике про «${topic}»?` : "О чём главное в этом ролике?"),
-  facts_vs_interpretation: () => "Что в этом случае было видно со стороны?",
-  no_mechanism: (topic) => (topic ? `Что на самом деле происходит с «${topic}»?` : "Что на самом деле происходит?"),
-  unclear_terms: () => "Чем для вас отличаются эти два понятия, когда вы видите их в жизни?",
-  repeat_unchecked: () => "Был ли похожий случай ещё раз?",
-  no_boundary: (topic) => (topic ? `Для кого «${topic}» точно не подойдёт?` : "Для кого это точно не подойдёт?"),
-  no_audience: () => "Кому вы это говорите в кадре?",
-  multiple_topics: () => "Какую одну тему из названных вы хотите сказать сейчас?",
-  promise_unclear: () => "Что зритель поймёт после этого ролика?",
-  viewer_effect: () => "Что должен почувствовать или сделать зритель после этого ролика?",
+const NEUTRAL_QUESTIONS: Record<GapKind, (topic: string | null, term: string | null) => string | null> = {
+  no_episode: (topic) => `Какой случай${topic ? ` про «${topic}»` : ""} вы помните лучше всего?`,
+  no_thesis: () => "Если сказать одним предложением, о чём этот ролик?",
+  facts_vs_interpretation: () => "Что вы сами при этом видели или слышали?",
+  // 09.10 (I4): the owner's wording instead of the proposed one
+  no_mechanism: () => "Что вы делаете в самом начале?",
+  // 09.10 (I4): the word itself is put in; without the word the question is not shown
+  unclear_terms: (_topic, term) => (term ? `Что вы имеете в виду под «${term}»?` : null),
+  repeat_unchecked: () => "Бывало ли так ещё раз?",
+  no_boundary: () => "Для кого это точно не подойдёт?",
+  no_audience: () => "Кому вы это рассказываете?",
+  multiple_topics: () => "Про что из этого снимем ролик?",
+  promise_unclear: () => "Что человек получит, дослушав до конца?",
+  viewer_effect: () => "Что человек должен сделать после ролика?",
 };
 
-function neutralQuestionText(kind: GapKind | null | undefined, topic: string | null | undefined): string {
+/** The term a diagnosis gap points at: the first «quoted» word or phrase of its text. */
+export function gapTerm(gap: Pick<ThoughtGap, "text">): string | null {
+  const match = gap.text.match(/[«"]([^»"]{1,40})[»"]/);
+  return match ? match[1].trim() : null;
+}
+
+function neutralQuestionText(kind: GapKind | null | undefined, topic: string | null | undefined, term: string | null = null): string | null {
   if (!kind) return GENERIC_NEUTRAL_QUESTION;
-  return NEUTRAL_QUESTIONS[kind](topic ?? null);
+  return NEUTRAL_QUESTIONS[kind](topic ?? null, term);
 }
 
 const CONTENT_TOKEN_MIN = 3;
@@ -103,7 +111,7 @@ export const REPEAT_QUESTION_NOTE =
 
 export const VARIETY_FALLBACKS = [
   GENERIC_NEUTRAL_QUESTION,
-  "Какой случай вы бы рассказали в деталях?",
+  "Какой случай расскажете?",
   "Хотите продолжить с этой мыслью или записать следующий дубль?",
 ];
 
@@ -119,7 +127,10 @@ export function neutralQuestionReply(
 ): Record<string, unknown> {
   const open = openGaps.filter((row) => row.status === "open").sort((a, b) => a.id.localeCompare(b.id));
   const fresh = (question: string) => !avoidQuestions.some((old) => questionsAreNearDuplicates(question, old));
-  const askable = (row: ThoughtGap) => fresh(neutralQuestionText(row.kind, topic));
+  const askable = (row: ThoughtGap) => {
+    const text = neutralQuestionText(row.kind, topic, gapTerm(row));
+    return text !== null && fresh(text);
+  };
   // Prefer a gap nobody asked about lately; otherwise any gap whose question is fresh.
   const gap = open.find((row) => !avoidGapIds.includes(row.id) && askable(row)) ?? open.find(askable) ?? null;
   if (!gap && avoidQuestions.length) {
@@ -132,7 +143,7 @@ export function neutralQuestionReply(
       thoughtUpdate: { fact: null, closeGapIds: [] },
     };
   }
-  const question = neutralQuestionText(gap?.kind, topic);
+  const question = neutralQuestionText(gap?.kind, topic, gap ? gapTerm(gap) : null) ?? GENERIC_NEUTRAL_QUESTION;
   return {
     action: "ask_question",
     question,

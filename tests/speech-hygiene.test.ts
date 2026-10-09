@@ -96,3 +96,35 @@ test("E3: if the model describes only the author's life, the honest fallback is 
   const built = await generateV05Script(reelId, { idempotencyKey: "sh-bad-changes" }, (async () => reply({ script: "Я хожу на рынок.", changes: ["Внедрила правило", "Перешла на новый график"] })) as never);
   assert.deepEqual(built.viewingChanges, ["Правок в тексте нет, он собран из ваших слов."]);
 });
+
+test("I2: a fact goes into the build with a short verbatim quote; a replaced fact gets no quote; the switch turns it off", async (t) => {
+  const { reelId } = await setup(t, "Цитаты");
+  const { sendDialogueMessage } = await import("../src/lib/dialogue");
+  const { collectV05SourceTexts } = await import("../src/lib/v05-script");
+  const { applyThoughtState, getThoughtState } = await import("../src/lib/thought-state");
+  const answer = "ну как бы я я встаю в шесть утра по вторникам и четвергам и иду на рынок пока там тихо потом беру сметану развесную потому что в банке она жидкая";
+  await sendDialogueMessage(reelId, { text: answer, idempotencyKey: "sh-quote-1" }, askWithFact("Я встаю в шесть утра и иду на рынок, где тихо.") as never);
+  const withQuote = await collectV05SourceTexts(reelId);
+  const factText = withQuote.texts.find((item) => item.label === "Факт мысли")?.text ?? "";
+  assert.match(factText, /^Я встаю в шесть утра и иду на рынок, где тихо\.\nСлова автора: «/);
+  assert.ok(!/ну как бы|я я/.test(factText), "the quote is cleaned of fillers and repeats");
+  const quoted = factText.split("Слова автора: «")[1].replace(/»$/, "");
+  assert.ok(quoted.split(/\s+/).length <= 31, "short");
+  for (const word of quoted.toLowerCase().replace(/[.…]/g, "").split(/\s+/)) assert.ok(answer.includes(word), `in the author's own words: ${word}`);
+  process.env.VOCAL_FACT_QUOTES = "0";
+  try {
+    const off = await collectV05SourceTexts(reelId);
+    assert.equal(off.texts.find((item) => item.label === "Факт мысли")?.text, "Я встаю в шесть утра и иду на рынок, где тихо.");
+  } finally {
+    delete process.env.VOCAL_FACT_QUOTES;
+  }
+  // the author replaces the fact: the quote of the retracted wording does not come back
+  const state = await getThoughtState(reelId);
+  await applyThoughtState({
+    reelId,
+    expectedRevision: state.revision,
+    patch: { facts: [{ ...state.facts[0], text: "Теперь я хожу на рынок после обеда, чтобы не вставать рано." }] },
+  });
+  const replaced = await collectV05SourceTexts(reelId);
+  assert.equal(replaced.texts.find((item) => item.label === "Факт мысли")?.text, "Теперь я хожу на рынок после обеда, чтобы не вставать рано.", "no quote of the old wording");
+});

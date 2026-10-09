@@ -1,3 +1,4 @@
+import { consumeThoughtSlot } from "@/lib/quota";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { Take as TakeRow } from "@prisma/client";
@@ -92,6 +93,7 @@ export async function createReel(input: CreateReelInput): Promise<ReelDto> {
     throw new ReelError(`Заметка короче ${REEL_NOTE_MAX} символов.`, "NOTE_TOO_LONG");
   }
   const row = await prisma.$transaction(async (tx) => {
+    await consumeThoughtSlot(tx); // J1: a new card spends one slot of the paid period
     const reel = await tx.reel.create({
       data: {
         title,

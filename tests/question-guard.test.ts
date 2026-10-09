@@ -115,6 +115,7 @@ test("G6: the 'what we have so far' reply is a short list in the author's words,
 
 import { anchoredByGenre, anchoredByKind, isUnknownAnswer, questionHasAnchor } from "../src/lib/question-guard";
 import { neutralQuestionReply } from "../src/lib/author-text-guard";
+import { TAKE_PROPOSAL_PHRASE } from "../src/lib/agent-action";
 
 test("H3: 'не помню / не знаю' closes the topic and its relatives (P4 and P3 patterns)", () => {
   assert.equal(isUnknownAnswer("не помню"), true);
@@ -189,3 +190,74 @@ test("H1: the three variants of the question-rules block; B (short, the fact rul
   const c = questionRulesBlock("story", "full");
   assert.ok(c.includes("мелочи") && c.includes("не помню") && c.includes("команда"));
 });
+
+test("I4: the approved wording of every gap type in NEUTRAL_QUESTIONS (no_mechanism and unclear_terms as the owner set them)", () => {
+  const expected: Record<string, string> = {
+    no_episode: "Какой случай вы помните лучше всего?",
+    no_thesis: "Если сказать одним предложением, о чём этот ролик?",
+    facts_vs_interpretation: "Что вы сами при этом видели или слышали?",
+    no_mechanism: "Что вы делаете в самом начале?",
+    repeat_unchecked: "Бывало ли так ещё раз?",
+    no_boundary: "Для кого это точно не подойдёт?",
+    no_audience: "Кому вы это рассказываете?",
+    multiple_topics: "Про что из этого снимем ролик?",
+    promise_unclear: "Что человек получит, дослушав до конца?",
+    viewer_effect: "Что человек должен сделать после ролика?",
+  };
+  for (const [kind, text] of Object.entries(expected)) {
+    const reply = neutralQuestionReply([{ id: `gap_${kind}`, text: "x", status: "open", kind: kind as never }]);
+    assert.equal(reply.question, text, kind);
+    assert.equal(questionProblem(text, { genre: "story" }), null, `${kind} passes the question rules`);
+  }
+  // with a topic only no_episode names it
+  assert.equal(neutralQuestionReply([{ id: "g", text: "x", status: "open", kind: "no_episode" }], [], [], "Рынок").question, "Какой случай про «Рынок» вы помните лучше всего?");
+  // unclear_terms puts the word itself in; without a word the question is not shown (the generic question is asked instead)
+  const withTerm = neutralQuestionReply([{ id: "g", text: "Не определено слово «успех».", status: "open", kind: "unclear_terms" }]);
+  assert.equal(withTerm.question, "Что вы имеете в виду под «успех»?");
+  assert.equal(withTerm.gapId, "g");
+  const withoutTerm = neutralQuestionReply([{ id: "g", text: "Непонятно, что значит это слово.", status: "open", kind: "unclear_terms" }]);
+  assert.equal(withoutTerm.question, "Что здесь самое главное?", "no word: not shown");
+  assert.equal(withoutTerm.gapId, undefined);
+  // the other fixed phrases of G5
+  assert.equal(TAKE_PROPOSAL_PHRASE, "Материала уже хватает. Запишем следующий дубль или соберём сценарий?");
+});
+
+test("I3: 'Сколько…' at most once in three questions, 'Кто такой X?' only when X was not met in the author's answers (logs h1-B, 18 dialogues)", () => {
+  type T = { role: "user" | "assistant"; kind?: string; text: string };
+  const dialogues = JSON.parse(readFileSync(path.join(__dirname, "fixtures", "h1-b-dialogues.json"), "utf8")) as { id: string; turns: T[] }[];
+  let questions = 0, counts = 0, windowsBefore = 0, windowsAfter = 0, whoBefore = 0, whoStopped = 0, countsAfter = 0;
+  for (const d of dialogues) {
+    const asked: string[] = [];
+    const shown: string[] = [];
+    const answers: string[] = [];
+    for (const t of d.turns) {
+      if (t.role === "user") { answers.push(t.text); continue; }
+      if (t.kind !== "question" || /^(Пока у нас так|Я понял так)/.test(t.text)) continue;
+      questions += 1;
+      const before = asked.slice(-2);
+      if (isCountQuestion(t.text)) { counts += 1; if (before.some(isCountQuestion)) windowsBefore += 1; }
+      if (/^Кто такой/.test(t.text)) whoBefore += 1;
+      const problem = questionProblem(t.text, { genre: "story", recentQuestions: shown, answerTexts: answers });
+      if (problem?.code === "уже сказано: Кто такой") whoStopped += 1;
+      // a stopped question is replaced by one that is not a "Сколько" (the fixed replacement)
+      const final = problem ? "Что было дальше?" : t.text;
+      if (isCountQuestion(final)) { countsAfter += 1; if (shown.slice(-2).some(isCountQuestion)) windowsAfter += 1; }
+      shown.push(final);
+      asked.push(t.text);
+    }
+  }
+  assert.equal(questions, 142);
+  assert.equal(counts, 16, "'Сколько…' in the logs: 16 of 142 (11 %)");
+  assert.equal(windowsBefore, 2, "two questions had another 'Сколько…' among the previous two");
+  assert.equal(windowsAfter, 0, "after the rule: none");
+  assert.equal(whoBefore, 1);
+  assert.equal(whoStopped, 1, "'Кто такой Саша…?' - Саша is in the author's answers");
+  assert.ok(countsAfter <= counts);
+  // unit cases
+  assert.equal(questionProblem("Сколько вы там ждали?", { genre: "story", recentQuestions: ["Что сказал директор?", "Сколько недель вы так ходите?"] })?.code, "однообразие: Сколько");
+  assert.equal(questionProblem("Сколько вы там ждали?", { genre: "story", recentQuestions: ["Сколько недель вы так ходите?", "Что сказал директор?", "Что вы почувствовали?"] }), null, "a third question back is outside the window");
+  assert.equal(questionProblem("Кто такой Саша, который принёс сочинение?", { genre: "story", answerTexts: ["Ко мне пришёл Саша с сочинением"] })?.code, "уже сказано: Кто такой");
+  assert.equal(questionProblem("Кто такой Саша, который принёс сочинение?", { genre: "story", answerTexts: ["Ко мне пришёл ученик с сочинением"] }), null, "a name the author has not mentioned");
+});
+
+import { isCountQuestion } from "../src/lib/question-guard";

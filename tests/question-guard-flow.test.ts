@@ -101,7 +101,7 @@ test("G6 (P3/P5 pattern): the build is offered once; again only after two new ac
   assert.match(offer, /^Пока у нас так:\n— /, "first offer");
   assert.ok(offer.split(/\s+/).length <= 45);
   const suppressed = await s.say(a[4], suggest(fact(a[4])));
-  assert.doesNotMatch(suppressed, /Пока у нас так|Для следующего дубля/, "one new fact since the offer: no second offer, no take proposal");
+  assert.doesNotMatch(suppressed, /Пока у нас так|Материала уже хватает/, "one new fact since the offer: no second offer, no take proposal");
   assertPlainQuestion(suppressed, "instead of the second offer");
   const again = await s.say(a[5], suggest(fact(a[5])));
   assert.match(again, /^Пока у нас так:/, "two new accepted facts: the offer comes again");

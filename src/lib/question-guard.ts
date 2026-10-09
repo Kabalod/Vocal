@@ -45,6 +45,11 @@ export const PAST_QUESTION_SHARE = 0.5;
 export const TOLD_MIN_STEMS = 6;
 export const TOLD_SHARE = 0.7;
 
+/** The viewer question is asked once per thought: any wording about the viewer or what "a person" should do after the reel. */
+export function isViewerQuestion(q: string): boolean {
+  return /зрител|человек должен|что человек получит/i.test(q);
+}
+
 export type TopicRepeat = "past_question" | "already_told" | "viewer_again" | "closed_topic" | null;
 
 /**
@@ -79,7 +84,7 @@ export function topicRepeat(input: {
     for (const s of stems) if (other.has(s)) shared += 1;
     if (shared >= CLOSED_SHARED && shared / Math.min(stems.size, other.size) >= CLOSED_SHARE) return "closed_topic";
   }
-  if (/зрител/i.test(input.question) && input.allQuestions.some((q) => /зрител/i.test(q))) return "viewer_again";
+  if (isViewerQuestion(input.question) && input.allQuestions.some(isViewerQuestion)) return "viewer_again";
   for (const past of input.answeredQuestions) {
     const other = questionStems(past);
     let shared = 0;
@@ -168,10 +173,36 @@ export function questionHasAnchor(question: string, anchorTexts: string[]): bool
   return false;
 }
 
+/** I3: "Сколько…" at most once in three questions. */
+const COUNT_QUESTION = /^(?:а\s+)?(?:сколько|во сколько|как долго)(?![\p{L}])/iu;
+export function isCountQuestion(q: string): boolean {
+  return COUNT_QUESTION.test(q.trim());
+}
+/** I3: "Кто такой X?" only if X was not met in the author's answers (then it is already said). */
+const WHO_IS = /^(?:а\s+)?кто\s+(?:такой|такая|такие|такое)\s+([^,?]+)/iu;
+
 export function questionProblem(
   question: string,
-  ctx: { genre: Genre; lastAnswer?: string; /** H4: the take, the title and the last two answers */ anchorTexts?: string[]; /** H7: the last author message is a command such as "уточни" */ lastIsCommand?: boolean },
+  ctx: {
+    genre: Genre;
+    lastAnswer?: string;
+    /** H4: the take, the title and the last two answers */
+    anchorTexts?: string[];
+    /** H7: the last author message is a command such as "уточни" */
+    lastIsCommand?: boolean;
+    /** I3: the questions asked before (the last two matter) and everything the author said */
+    recentQuestions?: string[];
+    answerTexts?: string[];
+  },
 ): QuestionProblem {
+  if (isCountQuestion(question) && (ctx.recentQuestions ?? []).slice(-2).some(isCountQuestion)) return { code: "однообразие: Сколько" };
+  const who = WHO_IS.exec(question.trim());
+  if (who && ctx.answerTexts) {
+    const x = questionStems(who[1]);
+    const said = new Set<string>();
+    for (const text of ctx.answerTexts) for (const stem of questionStems(text)) said.add(stem);
+    if (x.size > 0 && [...x].every((stem) => said.has(stem))) return { code: "уже сказано: Кто такой" };
+  }
   if (TY.test(question) || VY_SINGULAR.test(question)) return { code: "ты или род" };
   if (/[«"]уточни[»"]/i.test(question) || (ctx.lastIsCommand && /что (?:ты|вы) имел/i.test(question))) return { code: "команда принята за речь" };
   if (PETTY.test(question)) return { code: "мелочь" };

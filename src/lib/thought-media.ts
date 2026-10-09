@@ -1,3 +1,4 @@
+import { checkRequestRate, consumeThoughtSlot } from "@/lib/quota";
 import path from "node:path";
 import { enqueueByKey } from "@/lib/write-queue";
 import { assertThoughtKeyNotDeleted } from "@/lib/data-deletion";
@@ -103,6 +104,7 @@ export async function createThoughtFromMedia(input: {
   inputType: TakeInputType;
   idempotencyKey: string;
 }): Promise<{ reel: ReelDto; take: TakeDto; job: JobDto; created: boolean }> {
+  checkRequestRate();
   const idempotencyKey = input.idempotencyKey.trim();
   if (!idempotencyKey) {
     throw new ReelError("Нужен ключ повтора запроса.", "IDEMPOTENCY_REQUIRED");
@@ -139,6 +141,8 @@ async function createThoughtFromMediaOnce(input: {
           select: { reelId: true },
         });
         if (raced) return raced.reelId;
+        // J1: a NEW thought spends one slot of the paid period (the thought is counted at creation; a retry with the same key never again).
+        await consumeThoughtSlot(tx);
         const reel = await tx.reel.create({
           data: {
             title: DEFAULT_THOUGHT_TITLE,

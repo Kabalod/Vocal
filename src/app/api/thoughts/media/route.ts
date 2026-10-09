@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withApiUser } from "@/lib/auth/request";
+import { quotaErrorResponse } from "@/lib/quota-http";
 import { ReelError } from "@/lib/reels";
 import { logApiError } from "@/lib/safe-log";
 import { createThoughtFromMedia } from "@/lib/thought-media";
@@ -9,6 +10,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 function errorResponse(error: unknown) {
+  const quota = quotaErrorResponse(error);
+  if (quota) return quota;
   if (error instanceof ReelError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
   }
