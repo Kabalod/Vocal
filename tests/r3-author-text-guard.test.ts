@@ -4,6 +4,8 @@ import { resetPrismaClient } from "../src/lib/db";
 import { assertPlainQuestion } from "./helpers/plain-question";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
+process.env.VOCAL_QUESTION_GUARD = "0"; // 09.10 (H4): this suite predates the question guard (anchor, lexicon, repeats); it is tested in question-guard*.test.ts
+
 test("R3: the guard sees service ids in author text and builds a neutral question", async () => {
   const { textLeaksServiceId, actionLeaksServiceId, neutralQuestionReply, GENERIC_NEUTRAL_QUESTION } = await import(
     "../src/lib/author-text-guard"
@@ -28,7 +30,7 @@ test("R3: the guard sees service ids in author text and builds a neutral questio
     { id: "old", text: "y", status: "resolved" },
   ]);
   assertPlainQuestion(String(typed.question), "typed no_mechanism");
-  assert.match(String(typed.question), /шаг за шагом/);
+  assert.match(String(typed.question), /происходит/);
   assert.equal(typed.gapId, "gap_no_mechanism");
   const none = neutralQuestionReply([]);
   assert.equal(none.question, GENERIC_NEUTRAL_QUESTION);

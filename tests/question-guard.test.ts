@@ -112,3 +112,80 @@ test("G6: the 'what we have so far' reply is a short list in the author's words,
   }
   assert.equal(composeUnderstandingList([], []), null);
 });
+
+import { anchoredByGenre, anchoredByKind, isUnknownAnswer, questionHasAnchor } from "../src/lib/question-guard";
+import { neutralQuestionReply } from "../src/lib/author-text-guard";
+
+test("H3: 'не помню / не знаю' closes the topic and its relatives (P4 and P3 patterns)", () => {
+  assert.equal(isUnknownAnswer("не помню"), true);
+  assert.equal(isUnknownAnswer("ну не помню точно честно не знаю"), true);
+  assert.equal(isUnknownAnswer("не думал об этом"), true);
+  assert.equal(isUnknownAnswer("не помню название но это были помидоры и огурцы с дачи у соседки"), false, "content after the don't-know phrase keeps the answer open");
+  const ctx = { authorTexts: ["раньше я покупал всё по списку", "я хожу на рынок к шести утра"], answeredQuestions: [] as string[], allQuestions: [] as string[] };
+  // P4: the vegetable question was answered "не помню"; its relative ("впервые" / "обычно") is not asked
+  const veg = "Какой овощ ты впервые купил на рынке в эти утренние походы?";
+  assert.equal(topicRepeat({ ...ctx, question: "Какой овощ ты обычно берёшь на рынке в такие утренние походы?", allQuestions: [veg], closedQuestions: [veg] }), "closed_topic");
+  // P4: the neighbour Marina
+  const marina = "Что именно сказала соседка Марина про воздух в эти ранние часы?";
+  assert.equal(topicRepeat({ ...ctx, question: "Какой комментарий Марина обычно делала о воздухе в эти ранние часы?", allQuestions: [marina], closedQuestions: [marina] }), "closed_topic");
+  // P3: the sheet on the wall
+  const sheet = "Как именно ты прикрепила листок к стене над рабочим столом?";
+  assert.equal(topicRepeat({ ...ctx, question: "Где именно висит листок над рабочим столом?", allQuestions: [sheet], closedQuestions: [sheet] }), "closed_topic");
+  // an unrelated question is not blocked by a closed one
+  assert.equal(topicRepeat({ ...ctx, question: "Сколько недель вы так ходите?", allQuestions: [marina], closedQuestions: [marina] }), null);
+});
+
+test("H4: a question needs an anchor word from the take, the title or the last answers; no server template lacks it or breaks G2", () => {
+  const anchors = ["Я начал ходить на рынок в шесть утра", "Рынок и сметана", "тётя Люба говорит что сметана в банке жидкая"];
+  assert.equal(questionHasAnchor("С чего это обычно начинается?", anchors), false);
+  assert.equal(questionHasAnchor("Что тогда сказали?", anchors), false);
+  assert.equal(questionHasAnchor("А что сказала тётя Люба про сметану?", anchors), true);
+  assert.equal(questionProblem("С чего это обычно начинается?", { genre: "story", anchorTexts: anchors })?.code, "без опоры");
+  assert.equal(questionProblem("А что сказала тётя Люба про сметану?", { genre: "story", anchorTexts: anchors }), null);
+  const kinds = ["no_episode", "no_thesis", "facts_vs_interpretation", "no_mechanism", "unclear_terms", "repeat_unchecked", "no_boundary", "no_audience", "multiple_topics", "promise_unclear", "viewer_effect"] as const;
+  for (const kind of kinds) {
+    for (const topic of [null, "Рынок и сметана"]) {
+      const neutral = String(neutralQuestionReply([{ id: `gap_${kind}`, text: "x", status: "open", kind }], [], [], topic).question);
+      assert.equal(questionProblem(neutral, { genre: "story" }), null, `neutral ${kind}/${topic}: ${neutral}`);
+      assert.doesNotMatch(neutral, /шаг за шагом|в теме/i, `${kind}: the old 'в теме … шаг за шагом' template is gone`);
+      const anchored = anchoredByKind(kind, topic);
+      if (anchored) assert.equal(questionProblem(anchored, { genre: "story", anchorTexts: topic ? [topic] : undefined }), null, `anchored ${kind}/${topic}: ${anchored}`);
+    }
+  }
+  for (const genre of ["story", "humor", "explanation", "advice"] as const) {
+    for (const q of anchoredByGenre(genre, "Рынок и сметана")) assert.equal(questionProblem(q, { genre, anchorTexts: ["Рынок и сметана"] }), null, q);
+  }
+});
+
+test("H5: petty questions are stopped; speech, number and reaction questions are not", () => {
+  const ctx = { genre: "story" as const };
+  for (const q of ["В каком месяце у вас дрожали руки?", "Какой овощ вы впервые купили на рынке?", "Какой именно цвет был у листка?", "Как именно вы прикрепили листок к стене?", "Во сколько именно вы пришли на рынок?"]) assert.equal(questionProblem(q, ctx)?.code, "мелочь", q);
+  for (const q of ["Что сказал директор?", "Сколько человек бросило бег?", "Что вы почувствовали, когда телефон сел?"]) assert.equal(questionProblem(q, ctx), null, q);
+});
+
+test("H6: 'ты' and singular past forms after 'вы' are stopped; forms without gender pass", () => {
+  const ctx = { genre: "story" as const };
+  for (const q of ["Что ты имел в виду?", "Какой комментарий ты привела?", "Как твоя цена изменилась?", "Что вы сделал потом?", "Что вы тогда почувствовала?"]) assert.equal(questionProblem(q, ctx)?.code, "ты или род", q);
+  for (const q of ["Что вы имели в виду?", "Что вы почувствовали?", "Что вы стали делать потом?", "Что было потом?"]) assert.equal(questionProblem(q, ctx), null, q);
+});
+
+test("H7: a question about the command word itself is stopped", () => {
+  assert.equal(questionProblem("Что вы имели в виду, сказав «уточни»?", { genre: "story" })?.code, "команда принята за речь");
+  assert.equal(questionProblem("Что ты имел в виду?", { genre: "story", lastIsCommand: true })?.code, "ты или род");
+});
+
+import { questionRulesBlock, questionRulesVariant } from "../src/lib/question-guard";
+
+test("H1: the three variants of the question-rules block; B (short, the fact rule first) is the default", () => {
+  assert.equal(questionRulesVariant({}), "short");
+  assert.equal(questionRulesVariant({ VOCAL_QUESTION_RULES: "0" }), "off");
+  assert.equal(questionRulesVariant({ VOCAL_QUESTION_RULES: "off" }), "off");
+  assert.equal(questionRulesVariant({ VOCAL_QUESTION_RULES: "full" }), "full");
+  assert.equal(questionRulesBlock("story", "off"), "");
+  const b = questionRulesBlock("story", "short");
+  assert.ok(b.startsWith("Если в ответе автора есть новое содержательное утверждение, верни его словами автора в thoughtUpdate.fact."), "the fact rule is first");
+  assert.ok(b.includes("Спрашивай про самую яркую деталь из последнего ответа автора (число, имя, реплика).") && b.includes("Обращайся на «вы», без «ты»."));
+  assert.equal(b.split(/(?<=[.!?])\s+/).length, 3, "the fact rule and the two sentences of the owner's wording");
+  const c = questionRulesBlock("story", "full");
+  assert.ok(c.includes("мелочи") && c.includes("не помню") && c.includes("команда"));
+});

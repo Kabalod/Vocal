@@ -14,6 +14,8 @@ import { emptyProfileFields } from "../src/types/profile";
 import { askQuestionJson } from "./helpers/agent-action-json";
 import { v04NoChangeJson, v04ReplaceExplicitJson } from "./helpers/v04-profile-reply";
 
+process.env.VOCAL_QUESTION_GUARD = "0"; // 09.10 (H4): this suite predates the question guard (anchor, lexicon, repeats); it is tested in question-guard*.test.ts
+
 test("R2 keeps R1 mapping and product invariants", () => {
   assert.deepEqual(P13_P16_TO_R_PHASE, {
     P13: "R6",

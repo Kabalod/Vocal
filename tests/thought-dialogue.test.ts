@@ -23,6 +23,8 @@ import { finishVoiceRecording } from "../src/lib/media-session";
 import { createThoughtFromText } from "../src/lib/thought-create";
 import { askQuestionJson, insertTestScriptProposal } from "./helpers/agent-action-json";
 
+process.env.VOCAL_QUESTION_GUARD = "0"; // 09.10 (H4): this suite predates the question guard (anchor, lexicon, repeats); it is tested in question-guard*.test.ts
+
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("dialogue cursor pages last N and older without duplicates", () => {

@@ -4,6 +4,8 @@ import { resetPrismaClient } from "../src/lib/db";
 import { assertPlainQuestion } from "./helpers/plain-question";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
+process.env.VOCAL_QUESTION_GUARD = "0"; // 09.10 (H4): this suite predates the question guard (anchor, lexicon, repeats); it is tested in question-guard*.test.ts
+
 const LONG = "Это было в прошлом году, я тогда впервые решил не отвечать сразу и подождал целый день, а потом ответил спокойно и по делу.";
 type Json = Record<string, unknown>;
 const idOf = (user: string) => /Текущее сообщение автора: (\S+?)\./.exec(user)?.[1] ?? "";

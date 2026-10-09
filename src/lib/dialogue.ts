@@ -35,11 +35,13 @@ import { stripServiceMarks } from "@/lib/author-speech";
 import {
   composeUnderstandingList,
   detectGenre,
-  FALLBACK_BY_GENRE,
-  FALLBACK_BY_KIND,
+  anchoredByGenre,
+  anchoredByKind,
+  isUnknownAnswer,
   pickFallback,
   questionProblem,
   questionRulesBlock,
+  questionRulesVariant,
   REGENERATE_QUESTION_NOTE,
   topicRepeat,
   type Genre,
@@ -551,7 +553,7 @@ async function freezeThoughtPrompt(
     `Отображаемый портрет (можно в текст): ${JSON.stringify(live.live.publicForScript)}`,
     `Отображаемый портрет (только понимание): ${JSON.stringify(live.live.understandingOnly)}`,
     `Недавняя переписка:\n${recent}`,
-    `Ответ автора: ${authorText}`,
+    isCommandText(authorText.trim()) ? `Ответ автора: ${authorText} (это команда: автор просит задать первый уточняющий вопрос по материалу дубля; это не содержание ответа, о самом слове не спрашивай)` : `Ответ автора: ${authorText}`,
     turn
       ? isC00PolicyEnabled()
         ? `Текущее сообщение автора: ${turn.userMessageId}. Кандидат факта: ${candidateFactId(turn.userMessageId)}. Если принимаешь ответ как новый факт, укажи thoughtUpdate.fact.sourceId = это сообщение. evidenceRefs нужен только для suggest_take и содержит id существующих фактов.`
@@ -566,7 +568,7 @@ async function freezeThoughtPrompt(
     })}`,
     craftHint,
     offTopicHint(await offTopicStreak(threadId)),
-    turnPolicyEnabled() && process.env.VOCAL_QUESTION_RULES !== "0" ? questionRulesBlock(detectGenre(await authorTextsForGenre(reelId, threadId))) : "",
+    turnPolicyEnabled() ? questionRulesBlock(detectGenre(await authorTextsForGenre(reelId, threadId)), questionRulesVariant()) : "",
     isC00PolicyEnabled() ? c00ReplyGuide : V03_HEAD_DIALOGUE_REPLY_GUIDE,
   ]
     .filter(Boolean)
@@ -1074,17 +1076,29 @@ async function authorTextsForGenre(reelId: string, threadId: string): Promise<st
   return [takeText, ...answers.map((row) => row.body)].filter((text) => text.trim());
 }
 
-/** A question that is not a repeat: another open gap first, then the genre's questions, then the last resort. */
+/**
+ * A question that is not a repeat and has an anchor (H4): another open gap first, then the genre's questions, then the last resort.
+ * Every candidate names the thought ("про «…»"); an auto title is replaced by a keyword of the take.
+ */
 async function fallbackQuestion(input: { reelId: string; turns: PolicyTurn[]; genre: Genre }): Promise<string> {
   const state = await getThoughtState(input.reelId);
   const past = input.turns.filter((turn) => turn.role === "assistant" && turn.action === "ask_question").map((turn) => turn.body);
   const askedGaps = new Set(input.turns.filter((turn) => turn.role === "assistant" && turn.gapId).map((turn) => turn.gapId as string));
   const viewerAsked = past.some((q) => /зрител|человек должен/i.test(q));
+  const topic = (await reelTopic(input.reelId)) ?? (await takeKeyword(input.reelId));
   const fromGaps = state.openGaps
     .filter((gap) => gap.status === "open" && gap.kind && !askedGaps.has(gap.id) && !(gap.kind === "viewer_effect" && viewerAsked))
-    .map((gap) => FALLBACK_BY_KIND[gap.kind as string])
-    .filter(Boolean);
-  return pickFallback([...fromGaps, ...FALLBACK_BY_GENRE[input.genre]], past) ?? "Что ещё вы хотите добавить?";
+    .map((gap) => anchoredByKind(gap.kind as string, topic))
+    .filter((q): q is string => Boolean(q));
+  const candidates = [...fromGaps, ...anchoredByGenre(input.genre, topic)];
+  return pickFallback(candidates, past) ?? (topic ? `Что ещё важно сказать про «${topic}»?` : "Что ещё важно сказать в этом ролике?");
+}
+
+/** A keyword of the take when the title is an auto title: the first long word. */
+async function takeKeyword(reelId: string): Promise<string | null> {
+  const take = await prisma.take.findFirst({ where: { reelId }, orderBy: { number: "asc" }, select: { bodyText: true } });
+  const word = (take?.bodyText ?? "").toLowerCase().split(/[^\p{L}]+/u).find((w) => w.length >= 6 && !/^(который|которая|которые|потому|поэтому|сейчас|только|всегда)$/.test(w));
+  return word ?? null;
 }
 
 /**
@@ -1103,7 +1117,7 @@ async function guardQuestionStyle(input: {
   authorMessageId: string;
 }): Promise<{ reply: ReturnType<typeof parseAgentReply>; rawText: string }> {
   const { reply } = input;
-  if (reply.action.action !== "ask_question" || reply.c00Signal || !turnPolicyEnabled()) return { reply, rawText: input.rawText };
+  if (reply.action.action !== "ask_question" || reply.c00Signal || !turnPolicyEnabled() || process.env.VOCAL_QUESTION_GUARD === "0") return { reply, rawText: input.rawText };
   // The fixed policy phrases (notice, pause, end, effect, offer) are not model questions: they are not checked here.
   const POLICY_FIXED = ["policy_effect_ask", "policy_end_ask", "policy_end_ack", "policy_dontknow_pause", "policy_no_fact_notice", "policy_understanding_offer"];
   if (reply.discarded.some((reason) => POLICY_FIXED.includes(reason))) return { reply, rawText: input.rawText };
@@ -1114,18 +1128,28 @@ async function guardQuestionStyle(input: {
   const prefix = fullQuestion.slice(0, fullQuestion.length - coreQuestion.length).trim();
   const turns = await loadPolicyTurns(input.threadId);
   const answersOnly = turns.filter((turn) => turn.role === "user" && !isCommandText(turn.body));
-  const genre = detectGenre(await authorTextsForGenre(input.reelId, input.threadId));
+  const context = await authorTextsForGenre(input.reelId, input.threadId);
+  const genre = detectGenre(context);
   const lastAnswer = answersOnly[answersOnly.length - 1]?.body;
+  const lastUserTurn = [...turns].reverse().find((turn) => turn.role === "user");
+  const anchorTexts = [context[0] ?? "", (await reelTopic(input.reelId)) ?? "", ...answersOnly.slice(-2).map((turn) => turn.body)];
+  const problemCtx = { genre, lastAnswer, anchorTexts, lastIsCommand: Boolean(lastUserTurn && isCommandText(lastUserTurn.body)) };
   const pastQuestionTurns = turns.filter((turn) => turn.role === "assistant" && turn.action === "ask_question" && !turn.marks.includes("policy_understanding_offer"));
   const answered = pastQuestionTurns.filter((turn) => {
     const next = turns.slice(turns.indexOf(turn) + 1).find((t) => t.role === "user");
     return Boolean(next) && isSubstantiveAnswer(next!.body, turn.body);
+  });
+  // H3: a question answered with "не помню / не знаю" is closed together with its relatives.
+  const closed = pastQuestionTurns.filter((turn) => {
+    const next = turns.slice(turns.indexOf(turn) + 1).find((t) => t.role === "user");
+    return Boolean(next) && !isCommandText(next!.body) && isUnknownAnswer(next!.body);
   });
   const repeatOf = (question: string) =>
     topicRepeat({
       question,
       answeredQuestions: answered.map((turn) => turn.body),
       allQuestions: pastQuestionTurns.map((turn) => turn.body),
+      closedQuestions: closed.map((turn) => turn.body),
       authorTexts: answersOnly.map((turn) => turn.body),
     });
   const kept = {
@@ -1144,7 +1168,7 @@ async function guardQuestionStyle(input: {
   if (repeatOf(question)) {
     return replaceWith(withPrefix(await fallbackQuestion({ reelId: input.reelId, turns, genre })), ["policy_topic_repeat"]);
   }
-  const problem = questionProblem(question, { genre, lastAnswer });
+  const problem = questionProblem(question, problemCtx);
   if (!problem) return { reply, rawText: input.rawText };
   if (serverMade || prefix) {
     return replaceWith(withPrefix(await fallbackQuestion({ reelId: input.reelId, turns, genre })), ["policy_lexicon_fallback"]);
@@ -1157,7 +1181,7 @@ async function guardQuestionStyle(input: {
       label: "dialogue",
     });
     const retried = parseAgentReply(parseJsonObject(again.text), { authorMessageId: input.authorMessageId });
-    if (retried.action.action === "ask_question" && !questionProblem(retried.action.question, { genre, lastAnswer }) && !repeatOf(retried.action.question)) {
+    if (retried.action.action === "ask_question" && !questionProblem(retried.action.question, problemCtx) && !repeatOf(retried.action.question)) {
       await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: again.text } });
       return { reply: { ...retried, discarded: [...retried.discarded, "policy_lexicon_regenerated"] as typeof reply.discarded }, rawText: again.text };
     }

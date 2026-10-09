@@ -45,7 +45,7 @@ test("08.10: suggest_take shows the fixed sentence, keeps takeTask in the state,
   const secondReply = second.messages.filter((m) => m.role === "assistant").at(-1);
   assert.equal(secondReply?.kind, "question", "a repeated proposal is replaced by a question");
   assertPlainQuestion(secondReply?.body, "replaced proposal");
-  assert.match(secondReply?.body ?? "", /шаг за шагом/, "about the open gap");
+  assert.match(secondReply?.body ?? "", /происходит/, "about the open gap");
   const state = await getThoughtState(reelId);
   assert.equal(state.facts.length, 2, "the author's second fact is kept");
   const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId } });

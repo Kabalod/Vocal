@@ -26,6 +26,10 @@ const RAW = argOf("raw");
 const MAX_TOKENS = Number(argOf("max-tokens") ?? "600000");
 // --mode=transcript (default): the answers are turned into speech-to-text style; --mode=written keeps the clean text.
 const MODE = argOf("mode") === "written" ? "written" : "transcript";
+// --variant=A|B|C: question-rules block off / short / full (VOCAL_QUESTION_RULES = 0 / short / full). --seed=N shifts the transcript-mode seed.
+const VARIANT = (argOf("variant") ?? "C").toUpperCase();
+process.env.VOCAL_QUESTION_RULES = VARIANT === "A" ? "0" : VARIANT === "B" ? "short" : "full"; // (the app default is B since 09.10)
+const SEED = Number(argOf("seed") ?? "0");
 const STOP_AT = Number(argOf("stop-at") ?? "0.8");
 const ONLY = argOf("only") ? Number(argOf("only")) : null;
 const PERSONAS_ARG = argOf("personas")?.split(",") ?? null;
@@ -164,6 +168,7 @@ async function main() {
 
   const stats = { attempts: 0, failures: [] as { status: number | string; retried: boolean; who: string }[], simTokens: 0, simCalls: 0 };
   let currentWho = "";
+  const callCounts = new Map<string, { calls: number; withFact: number }>();
   let lastDialoguePrompt = "";
   const wrap = (who: "service" | "author") => async (args: Parameters<typeof defaultCompleteJson>[0]) => {
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -175,6 +180,10 @@ async function main() {
           stats.simTokens += (result.usage?.promptTokens ?? 0) + (result.usage?.completionTokens ?? 0);
         } else if (args.label === "dialogue") {
           lastDialoguePrompt = args.user;
+          const counts = callCounts.get(currentWho) ?? { calls: 0, withFact: 0 };
+          counts.calls += 1;
+          try { if ((JSON.parse(result.text) as { thoughtUpdate?: { fact?: unknown } }).thoughtUpdate?.fact) counts.withFact += 1; } catch { /* an unparseable answer has no fact */ }
+          callCounts.set(currentWho, counts);
         }
         if (RAW && who === "service") appendFileSync(RAW, JSON.stringify({ dialogue: currentWho, label: args.label ?? "chat", text: result.text, ...(/script/i.test(String(args.label)) ? { prompt: args.user } : {}) }) + "\n");
         return result;
@@ -258,7 +267,7 @@ async function main() {
       }
       if (!answer) { userText = "Не знаю."; used = []; } else {
         const clean = stripServiceMarks(answer.replace(/^<уже_говорил>\s*/i, "").trim() || answer);
-        userText = MODE === "transcript" ? toTranscript(clean, persona.id.charCodeAt(1) * 1009 + turn * 31) : clean;
+        userText = MODE === "transcript" ? toTranscript(clean, persona.id.charCodeAt(1) * 1009 + turn * 31 + SEED * 100003) : clean;
       }
       if (/^<уже_говорил>/i.test(answer)) alreadySaid += 1;
       if (/Собрать сценарий\?/.test(question) && !acceptedOffer) { acceptedOffer = true; }
@@ -346,6 +355,8 @@ async function main() {
       earlyFactsInLastPrompt: `${inPrompt}/${earlyFacts.length}`,
       scriptStatus, scriptWords: scriptText.split(/\s+/).filter(Boolean).length,
       authorSentences: sentencesOfAuthor.length, preservedInScript: preserved,
+      dialogueCalls: callCounts.get(persona.id)?.calls ?? 0, factCalls: callCounts.get(persona.id)?.withFact ?? 0,
+      tyInQuestions: shown.filter((r) => /(?<![\p{L}\d])(?:ты|тебя|тебе|тобой|твой|твоя|твоё|твое|твои)(?![\p{L}\d])/iu.test(r.body) || /(?<![\p{L}\d])вы\s+(?:\p{L}+\s+)?\p{L}{3,}(?:л|ла|ло)(?![\p{L}\d])/iu.test(r.body)).length, over15: lengths.filter((n) => n > 15).length, shownList: shown.map((r) => r.body),
       shownQuestions: shown.length, leftoverRepeats, leftoverProblems, questionWordsAvg: lengths.length ? Math.round((10 * lengths.reduce((a, b) => a + b, 0)) / lengths.length) / 10 : 0, questionWordsMax: Math.max(0, ...lengths), genre,
       guardTopicRepeat: allMarks.filter((m) => m === "policy_topic_repeat").length, guardLexiconRegenerated: allMarks.filter((m) => m === "policy_lexicon_regenerated").length, guardLexiconFallback: allMarks.filter((m) => m === "policy_lexicon_fallback").length, offersSuppressed: allMarks.filter((m) => m === "policy_offer_suppressed").length, offers: allMarks.filter((m) => m === "policy_understanding_offer").length,
       changes: changes.length, changesAreEdits: editChanges, changesTraced: traced, newSentencesInScript: newContent.length,
@@ -363,7 +374,7 @@ async function main() {
   }
 
   const total = await spent();
-  const summary = { mode: MODE, notExecuted, maxTokens: MAX_TOKENS, spentTokens: total, aiCallTokens: await aiTokens(), simulatorTokens: stats.simTokens, simulatorCalls: stats.simCalls, providerAttempts: stats.attempts, failures: stats.failures, results };
+  const summary = { mode: MODE, variant: VARIANT, seed: SEED, notExecuted, maxTokens: MAX_TOKENS, spentTokens: total, aiCallTokens: await aiTokens(), simulatorTokens: stats.simTokens, simulatorCalls: stats.simCalls, providerAttempts: stats.attempts, failures: stats.failures, results };
   if (MD) writeFileSync(MD, md.join("\n"));
   if (OUT) writeFileSync(OUT, JSON.stringify(summary, null, 1));
   console.log(JSON.stringify(summary, null, 1));

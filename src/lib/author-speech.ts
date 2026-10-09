@@ -5,14 +5,15 @@
  * (accepted facts, the script input and output, the "meaningful words" count).
  */
 
-/** "(факт 2)", "[пункт 3]", "(fact 4)": service markers that are never author speech (seen from the simulated author). */
-const SERVICE_MARK = /[([]\s*(?:факт|пункт|fact|item)\s*№?\s*\d+(?:\s*[,;и]\s*\d+)*\s*[)\]]/giu;
-const BARE_MARK = /(?<![\p{L}\d])(?:факт|пункт)\s*№?\s*\d+(?![\p{L}\d])/giu;
+/**
+ * H9: only the exact form "(факт N)" in parentheses is cut (what the simulated author wrote into its answers). "пункт 3",
+ * "в третьем пункте", "[факт 3]" and a bare "факт 5" are ordinary speech and stay.
+ */
+const SERVICE_MARK = /\(\s*факт\s+\d+\s*\)/giu;
 
 export function stripServiceMarks(text: string): string {
   return text
     .replace(SERVICE_MARK, "")
-    .replace(BARE_MARK, "")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\s+([,.!?;:…])/g, "$1")
     .replace(/,\s*,/g, ",")
@@ -119,4 +120,40 @@ const EDIT_VERB = /^(?:убрал|удалил|добавил|вставил|о�
 export function changeLooksLikeEdit(item: string): boolean {
   return EDIT_VERB.test(item.trim());
 }
-export const NO_EDIT_LIST_FALLBACK = "Текст собран из ваших слов; список правок модель не дала.";
+export const NO_EDIT_LIST_FALLBACK = "Правок в тексте нет, он собран из ваших слов.";
+
+// ---- H2: normalization of a transcript before facts are extracted (no model) -------------------------------------------
+
+/** Words that usually open a new sentence in speech that has no punctuation. */
+const SENTENCE_OPENERS = new Set(["потом", "тогда", "поэтому", "затем", "наконец", "сначала", "теперь", "зато", "однако", "итак", "вдруг", "после"]);
+const MIN_SENTENCE_WORDS = 7;
+/** A sentence does not end on these words (a pronoun, a preposition, a conjunction): the break waits for the next opener. */
+const SENTENCE_TAIL_BLOCK = new Set(["я", "и", "а", "но", "в", "на", "с", "к", "по", "за", "у", "о", "от", "до", "что", "как", "мы", "он", "она", "они", "не", "то", "же"]);
+
+/**
+ * Transcript normalization: service marks, fillers and self-repeats out; in text with (almost) no punctuation, sentence
+ * boundaries are restored before the usual openers ("потом", "тогда", "поэтому", …) once a sentence has 7+ words; every sentence
+ * starts with a capital letter and ends with a full stop. Words are never changed or added. The stored message is not touched.
+ */
+export function normalizeTranscript(text: string): string {
+  const cleaned = removeFillers(stripServiceMarks(text));
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "";
+  const marks = (cleaned.match(/[.!?…]/g) ?? []).length;
+  if (marks * 25 >= words.length) return cleaned; // already punctuated enough
+  const sentences: string[][] = [[]];
+  for (const word of words) {
+    const current = sentences[sentences.length - 1];
+    const bare = word.toLowerCase().replace(/[^\p{L}-]/gu, "");
+    const previous = (current[current.length - 1] ?? "").toLowerCase().replace(/[^\p{L}-]/gu, "");
+    if (current.length >= MIN_SENTENCE_WORDS && SENTENCE_OPENERS.has(bare) && !SENTENCE_TAIL_BLOCK.has(previous)) sentences.push([word]);
+    else current.push(word);
+  }
+  return sentences
+    .map((sentence) => {
+      const joined = sentence.join(" ").replace(/[,;:]+$/u, "");
+      const capital = joined.charAt(0).toUpperCase() + joined.slice(1);
+      return /[.!?…]$/.test(capital) ? capital : `${capital}.`;
+    })
+    .join(" ");
+}

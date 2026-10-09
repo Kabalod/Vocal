@@ -9,6 +9,8 @@ import { withPostgresTestDb } from "./helpers/postgres-test-db";
 import { askQuestionJson } from "./helpers/agent-action-json";
 import { v04NoChangeJson } from "./helpers/v04-profile-reply";
 
+process.env.VOCAL_QUESTION_GUARD = "0"; // 09.10 (H4): this suite predates the question guard (anchor, lexicon, repeats); it is tested in question-guard*.test.ts
+
 const CHAT_LABELS = ["dialogue", "profile_dialogue", "script", "thought-title", "c00_classify"] as const;
 const ENV_KEYS = [
   "VOCAL_DAILY_TOKEN_LIMIT",

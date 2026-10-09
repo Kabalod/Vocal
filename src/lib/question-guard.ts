@@ -45,7 +45,21 @@ export const PAST_QUESTION_SHARE = 0.5;
 export const TOLD_MIN_STEMS = 6;
 export const TOLD_SHARE = 0.7;
 
-export type TopicRepeat = "past_question" | "already_told" | "viewer_again" | null;
+export type TopicRepeat = "past_question" | "already_told" | "viewer_again" | "closed_topic" | null;
+
+/**
+ * H3: "не помню / не знаю" closes the topic. An answer with fewer than four meaningful words once the "don't know" phrase and the
+ * fillers are cut says nothing: the question is answered with "unknown", and its relatives are not asked again.
+ */
+const DONT_KNOW_PHRASES = /не помню|не знаю|не думал[аи]?(?:\s+об\s+этом)?|не обращал[аи]?\s+внимани[яе]|не могу сказать|затрудняюсь|без понятия|точно\s+не|честно\s+говоря|честно/giu;
+export function isUnknownAnswer(text: string): boolean {
+  const rest = text.replace(DONT_KNOW_PHRASES, " ");
+  return meaningfulWords(rest).length < 4;
+}
+
+/** Relatives of a closed question: two shared stems and 40 % of the smaller one ("впервые / обычно", "что сказала / какой комментарий делала"). */
+export const CLOSED_SHARED = 2;
+export const CLOSED_SHARE = 0.4;
 
 export function topicRepeat(input: {
   question: string;
@@ -53,10 +67,18 @@ export function topicRepeat(input: {
   answeredQuestions: string[];
   /** All past questions (answered or not): used only for the viewer rule. */
   allQuestions: string[];
+  /** Past questions whose answer was "unknown" (H3). */
+  closedQuestions?: string[];
   /** Everything the author said so far. */
   authorTexts: string[];
 }): TopicRepeat {
   const stems = questionStems(input.question);
+  for (const closed of input.closedQuestions ?? []) {
+    const other = questionStems(closed);
+    let shared = 0;
+    for (const s of stems) if (other.has(s)) shared += 1;
+    if (shared >= CLOSED_SHARED && shared / Math.min(stems.size, other.size) >= CLOSED_SHARE) return "closed_topic";
+  }
   if (/зрител/i.test(input.question) && input.allQuestions.some((q) => /зрител/i.test(q))) return "viewer_again";
   for (const past of input.answeredQuestions) {
     const other = questionStems(past);
@@ -131,7 +153,28 @@ const FORBIDDEN_FOR_STORY = /услови|эффективн|не сработа
 
 export type QuestionProblem = { code: string } | null;
 
-export function questionProblem(question: string, ctx: { genre: Genre; lastAnswer?: string }): QuestionProblem {
+/** H6: the author is addressed with "вы". "ты/тебя/твой" and a singular past form after "вы" ("вы сделал") are not allowed. */
+const TY = /(?<![\p{L}\d])(?:ты|тебя|тебе|тобой|твой|твоя|твоё|твое|твои|твоей|твоего|твоих|твоим)(?![\p{L}\d])/iu;
+const VY_SINGULAR = /(?<![\p{L}\d])вы\s+(?:\p{L}+\s+)?\p{L}{3,}(?:л|ла|ло)(?![\p{L}\d])/iu;
+/** H5: small talk about trifles instead of speech, a number or a reaction. */
+const PETTY = /в каком (?:месяце|году|числе)|какого цвета|какой (?:именно )?(?:цвет|овощ|фрукт|продукт|день недели)(?![\p{L}])|как именно (?:вы\s+)?(?:прикреп|повес|полож|постав|закреп)\p{L}*|во сколько именно/iu;
+
+export function questionHasAnchor(question: string, anchorTexts: string[]): boolean {
+  const stems = questionStems(question);
+  if (stems.size === 0) return false;
+  const anchors = new Set<string>();
+  for (const text of anchorTexts) for (const stem of questionStems(text)) anchors.add(stem);
+  for (const stem of stems) if (anchors.has(stem)) return true;
+  return false;
+}
+
+export function questionProblem(
+  question: string,
+  ctx: { genre: Genre; lastAnswer?: string; /** H4: the take, the title and the last two answers */ anchorTexts?: string[]; /** H7: the last author message is a command such as "уточни" */ lastIsCommand?: boolean },
+): QuestionProblem {
+  if (TY.test(question) || VY_SINGULAR.test(question)) return { code: "ты или род" };
+  if (/[«"]уточни[»"]/i.test(question) || (ctx.lastIsCommand && /что (?:ты|вы) имел/i.test(question))) return { code: "команда принята за речь" };
+  if (PETTY.test(question)) return { code: "мелочь" };
   for (const rule of FORBIDDEN) {
     if (!rule.re.test(question)) continue;
     // "шаг за шагом" is allowed when the author told a process (the word "шаг" or "сначала … потом" is in the last answer)
@@ -140,6 +183,7 @@ export function questionProblem(question: string, ctx: { genre: Genre; lastAnswe
   }
   if ((ctx.genre === "story" || ctx.genre === "humor") && FORBIDDEN_FOR_STORY.test(question)) return { code: `жанр ${ctx.genre}` };
   if (question.trim().split(/\s+/).length > MAX_QUESTION_WORDS) return { code: "длина" };
+  if (ctx.anchorTexts && !questionHasAnchor(question, ctx.anchorTexts)) return { code: "без опоры" };
   if ((question.match(/\?/g) ?? []).length > 1) return { code: "несколько вопросов" };
   return null;
 }
@@ -147,41 +191,70 @@ export function questionProblem(question: string, ctx: { genre: Genre; lastAnswe
 export const REGENERATE_QUESTION_NOTE = (code: string, genre: Genre): string =>
   `\n\nВопрос не прошёл проверку (${code}). Задай один вопрос до ${MAX_QUESTION_WORDS} слов обычными словами, про самую яркую деталь из последнего ответа автора, без слов: механизм, позиция, вывод, «в теме», «шаг за шагом», «при каких условиях». ${genreRule(genre)}`;
 
-/** G3 + G2 + G4 rules for the model, one block in the prompt. */
-export function questionRulesBlock(genre: Genre): string {
+export type QuestionRulesVariant = "off" | "short" | "full";
+
+/**
+ * VOCAL_QUESTION_RULES: "0"/"off" = A (server guards only), "full" = C (the long block), anything else, including unset, = B (the
+ * two-sentence block, the fact rule first). B is the default since 09.10 (H1: 51 % of calls return a fact against 16 % for A and 7 % for C).
+ */
+export function questionRulesVariant(env: Record<string, string | undefined> = process.env): QuestionRulesVariant {
+  const raw = env.VOCAL_QUESTION_RULES?.trim().toLowerCase();
+  if (raw === "0" || raw === "off") return "off";
+  if (raw === "full" || raw === "1") return "full";
+  return "short";
+}
+
+const FACT_RULE = "Если в ответе автора есть новое содержательное утверждение, верни его словами автора в thoughtUpdate.fact.";
+
+/** G3 + G2 + G4 (+ H5, H6) rules for the model, one block in the prompt. Variant B is the two-sentence version, the fact rule first. */
+export function questionRulesBlock(genre: Genre, variant: QuestionRulesVariant = "full"): string {
+  if (variant === "off") return "";
+  if (variant === "short") {
+    return [FACT_RULE, "Спрашивай про самую яркую деталь из последнего ответа автора (число, имя, реплика).", "Обращайся на «вы», без «ты»."].join(" ");
+  }
   return [
     `Правила вопроса: один вопрос, до ${MAX_QUESTION_WORDS} слов, обычными словами.`,
     "Спроси о самой яркой конкретной детали из последнего ответа автора (число, имя, предмет, реплика), например: «А что сказала Тётя Люба?», «Почему именно четверо из двенадцати бросили?».",
-    "Не спрашивай «почему» или «как» про то, что автор уже объяснил. Не повторяй тему вопроса, на который автор уже ответил.",
+    "Не спрашивай мелочи («в каком месяце», «какой именно овощ или цвет», «как именно прикрепил»). Предпочитай детали с речью, числом или реакцией: «что сказал», «сколько», «что вы почувствовали».",
+    "Не спрашивай «почему» или «как» про то, что автор уже объяснил. Не повторяй тему вопроса, на который автор уже ответил. Если автор ответил «не помню» или «не знаю», эту тему не возвращай.",
     "Не используй слова: механизм, позиция, вывод, «в теме», «шаг за шагом», «при каких условиях», «донести из», «унести из», «каким образом … приводит».",
-    "Обращайся к автору на «вы». Если сообщение автора — просто команда («уточни»), задай первый вопрос по материалу дубля, а не про это слово.",
-    "Главное правило прежнее: если в ответе автора есть новое содержательное утверждение, верни его словами автора в thoughtUpdate.fact.",
+    "В вопросе должно быть слово из дубля или из двух последних ответов автора.",
+    "Обращайся к автору на «вы», никогда на «ты»; не используй форм «вы сделал/сделала». Если сообщение автора — просто команда («уточни»), задай первый вопрос по материалу дубля, а не про это слово.",
+    FACT_RULE,
     genreRule(genre),
   ].join(" ");
 }
 
 // ---- fallback questions (wording proposed for approval, see R_REPORT.md G5) --------------------------------------------
 
-export const FALLBACK_BY_KIND: Record<string, string> = {
-  no_episode: "Какой случай вы помните лучше всего?",
-  no_thesis: "Если сказать одним предложением, о чём этот ролик?",
-  facts_vs_interpretation: "Что вы сами при этом видели или слышали?",
-  no_mechanism: "С чего это обычно начинается?",
-  unclear_terms: "Что вы имеете в виду под этим словом?",
-  repeat_unchecked: "Бывало ли так ещё раз?",
-  no_boundary: "Для кого это точно не подойдёт?",
-  no_audience: "Кому вы это рассказываете?",
-  multiple_topics: "Про что из этого снимем ролик?",
-  promise_unclear: "Что человек получит, дослушав до конца?",
-  viewer_effect: "Что человек должен сделать после ролика?",
-};
+/** H4: every replacement names the thought. Wording of the kind templates: see G5 in R_REPORT.md. */
+export function anchoredByKind(kind: string, topic: string | null): string | null {
+  const t = topic ? ` про «${topic}»` : "";
+  switch (kind) {
+    case "no_episode": return `Какой случай${t} вы помните лучше всего?`;
+    case "no_thesis": return topic ? `О чём главное в ролике про «${topic}»?` : null;
+    case "facts_vs_interpretation": return `Что вы сами видели или слышали${t}?`;
+    case "no_mechanism": return topic ? `Что на самом деле происходит с «${topic}»?` : null;
+    case "unclear_terms": return topic ? `Что вы имеете в виду под словами из ролика про «${topic}»?` : null;
+    case "repeat_unchecked": return `Бывало ли так ещё раз${t}?`;
+    case "no_boundary": return topic ? `Для кого «${topic}» точно не подойдёт?` : null;
+    case "no_audience": return topic ? `Кому вы рассказываете про «${topic}»?` : null;
+    case "multiple_topics": return topic ? `О чём из этого снимем ролик про «${topic}»?` : null;
+    case "promise_unclear": return topic ? `Что человек получит, дослушав про «${topic}» до конца?` : null;
+    case "viewer_effect": return topic ? `Что человек должен сделать после ролика про «${topic}»?` : null;
+    default: return null;
+  }
+}
 
-export const FALLBACK_BY_GENRE: Record<Genre, string[]> = {
-  humor: ["Какой момент был самым смешным?", "Что было дальше?", "Что тогда сказали?"],
-  story: ["Что было дальше?", "Какой момент был самым ярким?", "Что тогда сказали?"],
-  explanation: ["На каком примере это лучше всего видно?", "Кто с этим сталкивался?"],
-  advice: ["Что человеку сделать завтра утром?", "С чего ему начать?"],
-};
+export function anchoredByGenre(genre: Genre, topic: string | null): string[] {
+  const t = topic ? ` про «${topic}»` : "";
+  switch (genre) {
+    case "humor": return [`Какой момент${t} был самым смешным?`, `Что было дальше${t}?`];
+    case "story": return [`Что было дальше в истории${t}?`, `Какой момент${t} был самым ярким?`];
+    case "explanation": return [`На каком примере видно, как это работает${t}?`];
+    case "advice": return [`Что человеку сделать завтра утром${t}?`];
+  }
+}
 
 /** The first replacement that is not a repeat of a past question. */
 export function pickFallback(candidates: string[], pastQuestions: string[]): string | null {

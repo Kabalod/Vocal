@@ -9,6 +9,8 @@ import { applyThoughtState, getThoughtState } from "../src/lib/thought-state";
 import { askQuestionJson, c00SignalFor, suggestTakeJson, thoughtUpdateForUserText } from "./helpers/agent-action-json";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
+process.env.VOCAL_QUESTION_GUARD = "0"; // 09.10 (H4): this suite predates the question guard (anchor, lexicon, repeats); it is tested in question-guard*.test.ts
+
 async function seedThought(title: string, key: string, fact: string) {
   const { reel } = await createThoughtFromText({
     title,

@@ -32,9 +32,9 @@ test("E5: service markers are cut from the author's message before it is stored 
   const { prisma, reelId } = await setup(t, "Метки");
   const { sendDialogueMessage } = await import("../src/lib/dialogue");
   const { getThoughtState } = await import("../src/lib/thought-state");
-  await sendDialogueMessage(reelId, { text: "Я встаю в шесть утра (факт 2), когда ещё темно (пункт 3).", idempotencyKey: "sh-marks-1" }, askWithFact("Я встаю в шесть утра (факт 2), когда ещё темно") as never);
+  await sendDialogueMessage(reelId, { text: "Я встаю в шесть утра (факт 2), когда ещё темно, и в пункте 3 всё ясно.", idempotencyKey: "sh-marks-1" }, askWithFact("Я встаю в шесть утра (факт 2), когда ещё темно") as never);
   const stored = await prisma.dialogueMessage.findFirstOrThrow({ where: { role: "user", body: { contains: "шесть утра" } } });
-  assert.equal(stored.body, "Я встаю в шесть утра, когда ещё темно.");
+  assert.equal(stored.body, "Я встаю в шесть утра, когда ещё темно, и в пункте 3 всё ясно.", "only the exact (факт N) is cut (H9)");
   const facts = (await getThoughtState(reelId)).facts;
   assert.equal(facts.length, 1);
   assert.doesNotMatch(facts[0].text, /факт|пункт/i);
@@ -94,5 +94,5 @@ test("E3: if the model describes only the author's life, the honest fallback is 
   const { generateV05Script } = await import("../src/lib/v05-script");
   await acceptAuthorAnswer(reelId);
   const built = await generateV05Script(reelId, { idempotencyKey: "sh-bad-changes" }, (async () => reply({ script: "Я хожу на рынок.", changes: ["Внедрила правило", "Перешла на новый график"] })) as never);
-  assert.deepEqual(built.viewingChanges, ["Текст собран из ваших слов; список правок модель не дала."]);
+  assert.deepEqual(built.viewingChanges, ["Правок в тексте нет, он собран из ваших слов."]);
 });

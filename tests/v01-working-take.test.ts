@@ -11,6 +11,8 @@ import { v01TestSeams } from "../src/lib/v01-test-seams";
 import { PrismaClient } from "@prisma/client";
 import { askQuestionJson } from "./helpers/agent-action-json";
 
+process.env.VOCAL_QUESTION_GUARD = "0"; // 09.10 (H4): this suite predates the question guard (anchor, lexicon, repeats); it is tested in question-guard*.test.ts
+
 test("working take is the third take by id, not the first two", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   delete process.env.VOCAL_DAILY_TOKEN_LIMIT;

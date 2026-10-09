@@ -56,12 +56,12 @@ export function cleanTopic(title: string | null | undefined): string | null {
  */
 const NEUTRAL_QUESTIONS: Record<GapKind, (topic: string | null) => string> = {
   no_episode: (topic) => `Расскажите в деталях, какой случай${topic ? ` про «${topic}»` : ""} ярко вспоминается?`,
-  no_thesis: (topic) => `Что зритель должен унести из ролика${topic ? ` про «${topic}»` : ""}?`,
+  no_thesis: (topic) => (topic ? `О чём главное в ролике про «${topic}»?` : "О чём главное в этом ролике?"),
   facts_vs_interpretation: () => "Что в этом случае было видно со стороны?",
-  no_mechanism: (topic) => `Как это происходит${topic ? ` в теме «${topic}»` : ""}, шаг за шагом?`,
+  no_mechanism: (topic) => (topic ? `Что на самом деле происходит с «${topic}»?` : "Что на самом деле происходит?"),
   unclear_terms: () => "Чем для вас отличаются эти два понятия, когда вы видите их в жизни?",
   repeat_unchecked: () => "Был ли похожий случай ещё раз?",
-  no_boundary: () => "В какой ситуации это не сработает?",
+  no_boundary: (topic) => (topic ? `Для кого «${topic}» точно не подойдёт?` : "Для кого это точно не подойдёт?"),
   no_audience: () => "Кому вы это говорите в кадре?",
   multiple_topics: () => "Какую одну тему из названных вы хотите сказать сейчас?",
   promise_unclear: () => "Что зритель поймёт после этого ролика?",

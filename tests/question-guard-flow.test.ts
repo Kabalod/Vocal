@@ -109,3 +109,27 @@ test("G6 (P3/P5 pattern): the build is offered once; again only after two new ac
   assert.equal(marks.filter((m) => m === "policy_understanding_offer").length, 2);
   assert.ok(marks.includes("policy_offer_suppressed"));
 });
+
+test("H7: 'уточни' is a command, not speech: the prompt says so and a question about the word itself is regenerated", async (t) => {
+  const s = await setup(t, "Тетради по ночам", "Я перестала проверять тетради по ночам и впервые за пять лет выспалась.");
+  const prompts: string[] = [];
+  let calls = 0;
+  const shown = await s.say("уточни", async (args) => {
+    calls += 1;
+    prompts.push(args.user);
+    return calls === 1 ? ask("Что ты имел в виду, сказав «уточни»?")(args) : ask("Что изменилось в ваших вечерах без тетрадей?")(args);
+  });
+  assert.equal(calls, 2);
+  assert.equal(shown, "Что изменилось в ваших вечерах без тетрадей?");
+  assert.ok(prompts[0].includes("автор просит задать первый уточняющий вопрос по материалу дубля"), "the command is described, not shown as an answer");
+  assert.ok(prompts[0].includes("это команда"), "marked as a command in the prompt");
+});
+
+test("H3 flow (P4 pattern): after 'не помню' a relative of the closed question is not asked", async (t) => {
+  const s = await setup(t, "Рынок и сметана", "Я начал ходить на рынок в шесть утра, там соседка Марина каждый раз говорит про воздух.");
+  await s.say("уточни", ask("Что именно сказала соседка Марина про воздух в эти ранние часы?"));
+  const next = await s.say("не помню", ask("Какой комментарий Марина обычно делала о воздухе в эти ранние часы?"));
+  assert.doesNotMatch(next, /Марина|комментар/, "the relative of the closed question is replaced");
+  assertPlainQuestion(next, "replacement");
+  assert.ok((await s.marks()).flat().includes("policy_topic_repeat"));
+});

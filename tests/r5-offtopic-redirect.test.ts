@@ -4,6 +4,8 @@ import { resetPrismaClient } from "../src/lib/db";
 import { assertPlainQuestion } from "./helpers/plain-question";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
+process.env.VOCAL_QUESTION_GUARD = "0"; // 09.10 (H4): this suite predates the question guard (anchor, lexicon, repeats); it is tested in question-guard*.test.ts
+
 async function discardedReasons(prisma: import("@prisma/client").PrismaClient, reelId: string) {
   const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId } });
   const rows = await prisma.dialogueMessage.findMany({ where: { threadId: thread.id, role: "assistant", status: "done" } });
@@ -124,5 +126,5 @@ test("08.10: a redirect_to_task that came with the author's fact (a false return
   const state = await getThoughtState(made.reel.id);
   assert.equal(state.facts.length, 0, "current behaviour: the fact that came with a redirect is NOT stored (the redirect schema forbids it)");
   assert.equal(state.openGaps.find((g) => g.id === "gap_no_thesis")?.status, "open");
-  assert.deepEqual((await discardedReasons(prisma, made.reel.id)).sort(), ["policy_lexicon_fallback", "redirect_replaced", "redirect_state"], "the loss is counted, not silent");
+  assert.deepEqual((await discardedReasons(prisma, made.reel.id)).sort(), ["redirect_replaced", "redirect_state"], "the loss is counted, not silent");
 });
