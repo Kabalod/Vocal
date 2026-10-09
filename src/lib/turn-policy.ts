@@ -73,6 +73,15 @@ const END_PHRASES =
 export function isEndPhrase(text: string): boolean {
   return END_PHRASES.test(text.trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " "));
 }
+/**
+ * An answer "по сути" without an accepted fact: more than SHORT_ANSWER_WORDS words and not "не знаю", a command or an end phrase.
+ * Measured on the rich-author run: the model accepted a fact from only about a third of long answers, so a missing fact must not
+ * make a long answer count as "adds nothing".
+ */
+export function isSubstantiveAnswer(text: string): boolean {
+  return wordCount(text) > SHORT_ANSWER_WORDS && !isDontKnow(text) && !isCommandText(text) && !isEndPhrase(text);
+}
+
 export function isYes(text: string): boolean {
   return /^(да|ага|угу|ок|окей|хорошо|давайте|давай|можно|да, закончим|да, давайте)[.!]*$/i.test(text.trim());
 }
@@ -87,11 +96,11 @@ export type PolicyState = {
   openGaps: Pick<ThoughtGap, "id" | "status" | "kind">[];
 };
 
-export function materialState(input: { state: PolicyState; actionNamed: boolean; effectResolved: boolean }): MaterialState {
+export function materialState(input: { state: PolicyState; units: number; actionNamed: boolean; effectResolved: boolean }): MaterialState {
   const { state } = input;
-  if (state.facts.length === 0 && !state.position.trim()) return "insufficient";
+  if (input.units === 0 && state.facts.length === 0 && !state.position.trim()) return "insufficient";
   const open = (kind: string) => state.openGaps.some((gap) => gap.status === "open" && gap.kind === kind);
-  const caseKnown = state.facts.length >= 2 && !open("no_episode");
+  const caseKnown = input.units >= 2 && !open("no_episode");
   const thesisKnown = !open("no_thesis");
   const actionKnown = Boolean(state.takeTask.trim()) || input.actionNamed;
   return caseKnown && thesisKnown && actionKnown && input.effectResolved ? "ready" : "enough";
@@ -109,10 +118,15 @@ export function noFactStreak(turns: PolicyTurn[], factSources: Set<string>): num
   for (let i = turns.length - 1; i >= 0; i -= 1) {
     const turn = turns[i];
     if (turn.role !== "user" || isCommandText(turn.body)) continue;
-    if (factSources.has(turn.id)) break;
+    if (factSources.has(turn.id) || isSubstantiveAnswer(turn.body)) break;
     streak += 1;
   }
   return streak;
+}
+
+/** Author answers that carry material: an accepted fact or a substantive answer. */
+export function materialUnits(turns: PolicyTurn[], factSources: Set<string>): number {
+  return turns.filter((turn) => turn.role === "user" && !isCommandText(turn.body) && (factSources.has(turn.id) || isSubstantiveAnswer(turn.body))).length;
 }
 
 function lastIndex<T>(list: T[], pick: (item: T) => boolean): number {
@@ -140,6 +154,7 @@ export function decideTurnPolicy(input: {
   const factSources = new Set(state.facts.map((fact) => fact.sourceId));
   if (reply.hasFact) factSources.add(current.id);
   const factsAfter = state.facts.length + (reply.hasFact ? 1 : 0);
+  const unitsAfter = materialUnits(turns, factSources);
   const actionNamed = turns.some((turn) => turn.role === "assistant" && (turn.action === "suggest_take" || turn.marks.includes(POLICY_MARKS.suggestReplaced))) || reply.kind === "suggest_take";
   const stateAfterNoEffect = { ...state, facts: new Array(factsAfter).fill(null).map((_, i) => state.facts[i] ?? { id: "new", sourceId: current.id, text: "" }) };
 
@@ -148,7 +163,7 @@ export function decideTurnPolicy(input: {
     return { kind: "replace", question: END_ACK, marks: [POLICY_MARKS.endAck] };
   }
   if (isEndPhrase(current.body)) {
-    if (factsAfter === 0 && !state.position.trim()) {
+    if (unitsAfter === 0 && !state.position.trim()) {
       if (marksOfLast.includes(POLICY_MARKS.endAsk) || marksOfLast.includes(POLICY_MARKS.endAck)) return { kind: "replace", question: END_ACK, marks: [POLICY_MARKS.endAck] };
       return { kind: "replace", question: END_ASK_THIN, marks: [POLICY_MARKS.endAsk] };
     }
@@ -177,12 +192,12 @@ export function decideTurnPolicy(input: {
   const effectAsked = turns.some((turn) => turn.role === "assistant" && turn.marks.includes(POLICY_MARKS.effectAsk));
   const open = (kind: string) => state.openGaps.some((gap) => gap.status === "open" && gap.kind === kind);
   const effectResolved = Boolean(state.intent.trim()) || effectAsked;
-  if (!effectAsked && !state.intent.trim() && factsAfter >= 2 && !open("no_episode") && !open("no_thesis") && !isDontKnow(current.body)) {
+  if (!effectAsked && !state.intent.trim() && unitsAfter >= 2 && !open("no_episode") && !open("no_thesis") && !isDontKnow(current.body)) {
     return { kind: "replace", question: EFFECT_QUESTION, marks: replaceMarks(POLICY_MARKS.effectAsk) };
   }
 
   // A6: ready to offer the build instead of one more question, once until the next fact.
-  const after = materialState({ state: stateAfterNoEffect as PolicyState, actionNamed, effectResolved });
+  const after = materialState({ state: stateAfterNoEffect as PolicyState, units: unitsAfter, actionNamed, effectResolved });
   const offerAfterFact = lastIndex(turns, (turn) => turn.role === "assistant" && turn.marks.includes(POLICY_MARKS.offer)) > lastFactUser;
   if (after === "ready" && input.understanding && !offerAfterFact) {
     return { kind: "replace", question: input.understanding, marks: replaceMarks(POLICY_MARKS.offer) };
@@ -227,10 +242,11 @@ const wordsOf = (text: string): string[] => text.toLowerCase().replace(/ё/g, "�
 const contentWords = (text: string): Set<string> => new Set(wordsOf(text).filter((word) => word.length >= 4));
 
 /** A8: the question's own words are (almost) all already in the author's last answers: it asks what was just said. */
-export const ECHO_CONTAINMENT = 0.6;
+export const ECHO_CONTAINMENT = 0.75;
+export const ECHO_MIN_WORDS = 5;
 export function questionEchoesAuthor(question: string, lastAnswers: string[]): boolean {
   const q = contentWords(question);
-  if (q.size < 4) return false;
+  if (q.size < ECHO_MIN_WORDS) return false;
   const answered = contentWords(lastAnswers.join(" "));
   let shared = 0;
   for (const word of q) if (answered.has(word)) shared += 1;

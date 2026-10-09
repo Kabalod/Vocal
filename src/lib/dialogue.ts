@@ -31,7 +31,7 @@ import {
   thoughtUpdateAfterClassification,
 } from "@/lib/c00-classify-signal";
 import { isC00PolicyEnabled } from "@/lib/c00-policy";
-import { decideTurnPolicy, isCommandText, loadPolicyTurns, questionEchoesAuthor, questionNeedsHintCheck, turnPolicyEnabled } from "@/lib/turn-policy";
+import { decideTurnPolicy, isCommandText, isSubstantiveAnswer, loadPolicyTurns, questionEchoesAuthor, questionNeedsHintCheck, turnPolicyEnabled } from "@/lib/turn-policy";
 import { C00EnvelopeError } from "@/lib/c00-envelope";
 import type { C00SignalCandidate } from "@/lib/c00-signal";
 import {
@@ -985,10 +985,13 @@ async function applyTurnPolicy(input: {
   const turns = await loadPolicyTurns(input.threadId);
   const newFact = reply.thoughtUpdate.fact;
   const { composeUnderstanding } = await import("@/lib/v05-script");
+  const accepted = [...state.facts, ...(newFact ? [{ text: newFact.text }] : [])];
+  // No accepted fact yet but a substantive answer: use the start of the latest one (the model accepts few facts from long answers).
+  const lastSubstantive = [...turns].reverse().find((turn) => turn.role === "user" && isSubstantiveAnswer(turn.body));
   const understanding = composeUnderstanding({
     position: state.position,
     intent: state.intent,
-    facts: [...state.facts, ...(newFact ? [{ text: newFact.text }] : [])],
+    facts: accepted.length > 0 || !lastSubstantive ? accepted : [{ text: lastSubstantive.body.split(/\s+/).slice(0, 25).join(" ") }],
   });
   const decision = decideTurnPolicy({
     turns,
@@ -1056,7 +1059,7 @@ async function guardQuestionContent(input: {
     closeGapIds: reply.thoughtUpdate.closeGapIds,
     ...(reply.thoughtUpdate.answeredGapId ? { answeredGapId: reply.thoughtUpdate.answeredGapId } : {}),
   };
-  if (questionEchoesAuthor(question, answers.slice(-2))) {
+  if (questionEchoesAuthor(question, answers.slice(-1))) {
     const state = await getThoughtState(input.reelId);
     const replaced = { ...neutralQuestionReply(state.openGaps, [], [], await reelTopic(input.reelId)), thoughtUpdate: keptUpdate };
     const rawText = JSON.stringify(replaced);

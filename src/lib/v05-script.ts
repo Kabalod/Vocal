@@ -1,4 +1,4 @@
-import { NO_FACT_NOTICE, NO_FACT_STREAK_LIMIT, THIN_BLOCK_REASON, THIN_NEXT_QUESTION, noFactStreak } from "@/lib/turn-policy";
+import { NO_FACT_NOTICE, NO_FACT_STREAK_LIMIT, THIN_BLOCK_REASON, THIN_NEXT_QUESTION, materialUnits, noFactStreak } from "@/lib/turn-policy";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
@@ -149,6 +149,8 @@ type V05Material = {
   texts: { label: string; text: string }[];
   /** 09.10: consecutive latest author answers without an accepted fact (turn policy A2). */
   noFactStreak: number;
+  /** Author answers with an accepted fact or a substantive answer (turn policy). */
+  materialUnits: number;
 };
 
 export async function lastCorrectionStamp(reelId: string, db: ScriptDb = prisma): Promise<string | null> {
@@ -365,7 +367,7 @@ function pushSource(keys: string[], texts: { label: string; text: string }[], ke
   texts.push({ label, text: body });
 }
 
-async function collectFromLoaded(reelId: string, material: Omit<V05Material, "keys" | "texts" | "noFactStreak">, db: ScriptDb): Promise<{ keys: string[]; texts: { label: string; text: string }[] }> {
+async function collectFromLoaded(reelId: string, material: Omit<V05Material, "keys" | "texts" | "noFactStreak" | "materialUnits">, db: ScriptDb): Promise<{ keys: string[]; texts: { label: string; text: string }[] }> {
   const keys: string[] = [];
   const texts: { label: string; text: string }[] = [];
   const thought = material.thought;
@@ -374,6 +376,7 @@ async function collectFromLoaded(reelId: string, material: Omit<V05Material, "ke
     if (thought.position.trim()) pushSource(keys, texts, "state:position", "Позиция автора", thought.position);
     if (thought.takeTask.trim()) pushSource(keys, texts, "state:takeTask", "Задача дубля", thought.takeTask);
     for (const decision of thought.decisions) {
+      if (isServiceDecision(decision)) continue;
       if (decision.trim()) pushSource(keys, texts, `state:decision:${decision.slice(0, 24)}`, "Решение", decision);
     }
     for (const fact of thought.facts) {
@@ -465,15 +468,24 @@ export async function loadV05Material(reelId: string, db: ScriptDb = prisma): Pr
   };
   const sources = await collectFromLoaded(reelId, base, db);
   let streak = 0;
+  let units = 0;
   const dialogue = await db.dialogueThread.findFirst({ where: { reelId }, select: { id: true } });
   if (dialogue && thought) {
     const rows = await db.dialogueMessage.findMany({ where: { threadId: dialogue.id, role: "user" }, orderBy: { createdAt: "asc" }, select: { id: true, body: true } });
-    streak = noFactStreak(
-      rows.map((row) => ({ role: "user" as const, id: row.id, body: row.body, marks: [], action: "" })),
-      new Set(thought.facts.map((fact) => fact.sourceId)),
-    );
+    const asTurns = rows.map((row) => ({ role: "user" as const, id: row.id, body: row.body, marks: [], action: "" }));
+    const sources = new Set(thought.facts.map((fact) => fact.sourceId));
+    streak = noFactStreak(asTurns, sources);
+    units = materialUnits(asTurns, sources);
   }
-  return { ...base, ...sources, noFactStreak: streak };
+  return { ...base, ...sources, noFactStreak: streak, materialUnits: units };
+}
+
+/**
+ * 09.10 (rich-author finding): the take diagnosis stores service markers in the thought's decisions ("content_mode:…",
+ * "diagnosed:<id>"). They are not author material: sent to the script model they produced "Мне поставили диагноз <id>".
+ */
+export function isServiceDecision(decision: string): boolean {
+  return /^(content_mode|diagnosed):/.test(decision.trim());
 }
 
 function evaluateReadiness(material: V05Material): {
@@ -507,7 +519,7 @@ function evaluateReadiness(material: V05Material): {
     };
   }
   // 09.10 (A1/A2): state Н, no accepted author fact. The base from the take stays saved; a new script needs at least one answer.
-  if (material.thought.facts.length === 0 && !material.thought.position.trim()) {
+  if (material.thought.facts.length === 0 && material.materialUnits === 0 && !material.thought.position.trim()) {
     return {
       ready: false,
       blockReason: material.noFactStreak >= NO_FACT_STREAK_LIMIT ? NO_FACT_NOTICE : THIN_BLOCK_REASON,
@@ -522,7 +534,7 @@ function evaluateReadiness(material: V05Material): {
     material.thought.position.trim() ||
       (material.thought.intent.trim() && !isCraftInstruction(material.thought.intent)) ||
       material.thought.facts.some((fact) => fact.text.trim()) ||
-      material.thought.decisions.some((item) => item.trim() && !isCraftInstruction(item)) ||
+      material.thought.decisions.some((item) => item.trim() && !isCraftInstruction(item) && !isServiceDecision(item)) ||
       authorTexts.length > 0,
   );
   if (structured) {

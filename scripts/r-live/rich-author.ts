@@ -125,7 +125,7 @@ const PERSONAS: Persona[] = [
 
 const SIM_SYSTEM = [
   "Ты играешь роль автора коротких видео, которого расспрашивают о его мысли. Ты ничего не знаешь о том, кто и как тебя расспрашивает.",
-  "Отвечай по-русски, от первого лица, живой речью, от 40 до 120 слов на один ответ.",
+  "Отвечай по-русски, от первого лица, живой речью, от 40 до 120 слов на один ответ. Не называй номера фактов и не говори «пункт»: ты рассказываешь свою жизнь, а не читаешь список.",
   "Отвечай только из своей истории (пронумерованные факты). Если вопрос про то, чего в истории нет, скажи, что не помнишь или не думал об этом, и больше ничего не выдумывай.",
   "Если вопрос спрашивает о том, что ты уже рассказал, начни ответ с метки <уже_говорил> и ответь кратко.",
   "Если тебя спрашивают, готов ли ты закончить или собрать результат, ответь согласием одной короткой фразой.",
@@ -167,7 +167,7 @@ async function main() {
         } else if (args.label === "dialogue") {
           lastDialoguePrompt = args.user;
         }
-        if (RAW && who === "service") appendFileSync(RAW, JSON.stringify({ dialogue: currentWho, label: args.label ?? "chat", text: result.text }) + "\n");
+        if (RAW && who === "service") appendFileSync(RAW, JSON.stringify({ dialogue: currentWho, label: args.label ?? "chat", text: result.text, ...(/script/i.test(String(args.label)) ? { prompt: args.user } : {}) }) + "\n");
         return result;
       } catch (error) {
         const e = error as { status?: number; message?: string; headers?: Record<string, string> };

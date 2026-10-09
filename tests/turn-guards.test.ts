@@ -14,7 +14,8 @@ test("closed lists: end phrases, 'не знаю', yes", () => {
 
 test("A8: a question that only repeats the author's last answer is an echo; a new question is not", () => {
   const answer = "Хочу сказать тем, кто бросает через неделю: не ждите настроения, просто начинайте.";
-  assert.equal(questionEchoesAuthor("Хотите сказать тем, кто бросает через неделю, не ждать настроения и просто начинать?", [answer]), true);
+  assert.equal(questionEchoesAuthor("Хотите сказать тем, кто бросает через неделю: не ждите настроения, просто начинайте?", [answer]), true);
+  assert.equal(questionEchoesAuthor("Что вы почувствовали, когда бросили через неделю?", [answer]), false, "the new part of the question keeps it from being an echo");
   assert.equal(questionEchoesAuthor("Что вы почувствовали в тот день, когда вышли на пробежку?", [answer]), false);
   assert.equal(questionEchoesAuthor("Что дальше?", [answer]), false, "too short to judge");
 });
@@ -27,4 +28,11 @@ test("A10: option lists and assumed roles are flagged only when the author did n
   assert.equal(questionAssumesRole("Приведите случай, когда вы применяли подход при работе с пациентом.", answers), true);
   assert.equal(questionAssumesRole("Приведите случай, когда вы применяли подход при работе с пациентом.", "У меня был пациент в клинике"), false);
   assert.equal(questionNeedsHintCheck("Что было дальше?", answers), null);
+});
+
+test("rich-author finding: service markers in decisions are not author material for the script", async () => {
+  const { isServiceDecision } = await import("../src/lib/v05-script");
+  assert.equal(isServiceDecision("content_mode:personal_story"), true);
+  assert.equal(isServiceDecision("diagnosed:cmv0guas50006dmbop4hva6lm"), true);
+  assert.equal(isServiceDecision("Снять дубль про утро"), false);
 });

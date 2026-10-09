@@ -134,6 +134,7 @@ test("A5: the dryness hint comes after two short answers, once; long answers nev
   assert.equal(third.body, "А потом?", "once per thought");
 
   const rich = await setup(t, "Развёрнутый");
+  await applyThoughtState({ reelId: rich.reelId, expectedRevision: 0, patch: { intent: "Показать, как работает пауза перед ответом" } }); // goal named: no viewer-effect question here
   await rich.say(LONG, ask("Что было?", LONG));
   const r2 = await rich.say(`${LONG} Потом я рассказал об этом друзьям.`, ask("Что дальше?"));
   assert.equal(r2.body, "Что дальше?", "long answers: no hint");
@@ -177,4 +178,17 @@ test("long answers do not lose a fact named before the 12-message window", async
     });
   }
   assert.ok(prompt.includes(early), "the early fact is in the prompt of the 15th turn, outside the 12-message window");
+});
+
+test("rich-author finding: long answers without an accepted fact count as material: no notice, the button opens, 'хватит' offers the build", async (t) => {
+  const s = await setup(t, "Длинные без фактов");
+  const { NO_FACT_NOTICE } = await import("../src/lib/turn-policy");
+  const { evaluateScriptReadiness } = await import("../src/lib/v05-script");
+  const a = await s.say(LONG, ask("Что было потом?"));
+  const b = await s.say(`${LONG} Потом я рассказал об этом друзьям и они удивились.`, ask("Что вы почувствовали?"));
+  const c = await s.say(`${LONG} И с тех пор я так делаю всегда, когда пишу важные письма.`, ask("Что изменилось?"));
+  for (const r of [a, b, c]) assert.notEqual(r.body, NO_FACT_NOTICE, "the model accepted no fact, but the answers were substantive");
+  assert.equal((await evaluateScriptReadiness(s.reelId)).ready, true, "a substantive answer is enough for the button");
+  const end = await s.say("Хватит.", ask("Что ещё?"));
+  assert.match(end.body, /^Я понял так: /);
 });
