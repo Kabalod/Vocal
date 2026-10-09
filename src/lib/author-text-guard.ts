@@ -147,3 +147,32 @@ export function filterServiceProse(text: string, knownIds: (string | null | unde
   const kept = sentences.filter((sentence) => !textLeaksServiceId(sentence, knownIds) && !SERVICE_WORDS.test(sentence) && sentence.split(/\s+/).length >= 2);
   return { text: kept.join(" "), dropped: sentences.length - kept.length };
 }
+
+/**
+ * 09.10 owner rule: the introductory fillers "по вашему мнению", "по-вашему", "пожалуйста" are cut from the model's text
+ * shown to the author, with the commas and the capital letter repaired. Server-side, no model call. "конкретн*" and every
+ * other word is left alone. Display only: the stored action keeps the model's original text.
+ */
+const FILLER = "(?:по вашему мнению|по-вашему|пожалуйста)";
+const WORDS_BEFORE_COMMA = /^[^,]*$/;
+
+export function stripStyleFillers(text: string): string {
+  let out = text;
+  const re = (pattern: string) => new RegExp(pattern, "iu");
+  for (let guard = 0; guard < 6 && re(`(?<![\\p{L}-])${FILLER}(?![\\p{L}-])`).test(out); guard += 1) {
+    const before = out;
+    // start of the reply: "Пожалуйста, расскажите" / "По вашему мнению, почему"
+    out = out.replace(re(`^\\s*${FILLER}\\s*,?\\s*`), "");
+    // between commas: "Что, по вашему мнению, вызывает" -> "Что вызывает"; "Если вы уверены, пожалуйста, объясните" -> "Если вы уверены, объясните"
+    out = out.replace(re(`([^,?.!]*),\\s*${FILLER}\\s*,\\s*`), (_m, head: string) => (WORDS_BEFORE_COMMA.test(head) && head.trim().split(/\s+/).length <= 1 ? `${head} ` : `${head}, `));
+    // end of the reply: "Почему так, по вашему мнению?" / "Расскажите, пожалуйста."
+    out = out.replace(re(`\\s*,?\\s*${FILLER}\\s*(?=[?.!…]\\s*$)`), "");
+    // an opening comma only: "Расскажите, пожалуйста подробнее"
+    out = out.replace(re(`,\\s*${FILLER}\\s+`), " ");
+    // no commas at all: "Что по вашему мнению вызывает"
+    out = out.replace(re(`(?<=\\s)${FILLER}\\s+`), "");
+    if (out === before) break;
+  }
+  out = out.replace(/\s+([?.!,…])/g, "$1").replace(/\s{2,}/g, " ").replace(/,\s*,/g, ",").replace(/^[\s,]+/, "").trim();
+  return out.length > 0 && out !== text ? out.charAt(0).toUpperCase() + out.slice(1) : out;
+}

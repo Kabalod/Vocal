@@ -37,6 +37,7 @@ import {
   actionLeaksServiceId,
   neutralQuestionReply,
   cleanTopic,
+  stripStyleFillers,
   questionsAreNearDuplicates,
   stripOffTopicPhrase,
   withOffTopicPhrase,
@@ -868,7 +869,7 @@ async function varyRepeatedQuestion(input: {
   });
   const recentBodies = recent.map((row) => row.body);
   const repeats = (question: string) =>
-    recentBodies.some((old) => questionsAreNearDuplicates(stripOffTopicPhrase(question), stripOffTopicPhrase(old)));
+    recentBodies.some((old) => questionsAreNearDuplicates(stripStyleFillers(stripOffTopicPhrase(question)), stripOffTopicPhrase(old)));
   if (!repeats(input.reply.action.question)) return { reply: input.reply, rawText: input.rawText };
   const fromRedirect = input.reply.discarded.includes("redirect_invalid") || input.reply.discarded.includes("redirect_replaced");
 

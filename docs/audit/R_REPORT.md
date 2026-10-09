@@ -162,3 +162,5 @@ SHA кандидата — последний коммит `feat/s4-operations` 
 ## Сужение принятых проверок 08.10.2026
 
 Проверки, которые ждали точных строк или `takeTask` в тексте для автора, заменены проверками смысла (один вопрос, нет служебных слов и id, названа тема, показана фиксированная фраза): `tests/v03-agent-actions.test.ts` (четыре проверки: текст возврата и предложение дубля; в счётчиках добавлены `redirect_replaced`), `tests/r3-author-text-guard.test.ts`, `tests/r5-question-repeat.test.ts`, `tests/r5-offtopic-redirect.test.ts`, `tests/recorded/offtopic.json`. Тесты C00 (`c00-*`) не менялись и проходят. Общий помощник: `tests/helpers/plain-question.ts`.
+
+Дополнение 09.10: из-за серверной чистки вводных слов в `tests/r5-question-repeat.test.ts` и `tests/recorded/repeat-after-dont-know.json` ожидаемый показанный вопрос теперь без «по вашему мнению» (сам ответ модели в фикстуре не менялся).

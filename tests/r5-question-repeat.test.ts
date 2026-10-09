@@ -44,6 +44,7 @@ test("R5: a repeated question is regenerated once; a second repeat becomes a neu
   });
   const before = await getThoughtState(reelId);
   const FIRST = "Почему, по вашему мнению, цели помогают двигаться вперёд?";
+  const SHOWN_FIRST = "Почему цели помогают двигаться вперёд?"; // stripStyleFillers(FIRST): what the author sees
   const ask = (text: string, key: string, replies: string[], gapId?: string) => {
     let call = 0;
     const calls = { n: 0 };
@@ -69,7 +70,7 @@ test("R5: a repeated question is regenerated once; a second repeat becomes a neu
   // 1. the first question is never a repeat.
   const first = ask("уточни", "r5-rep-1", [FIRST], "gap_no_mechanism");
   await first.run();
-  assert.deepEqual(await bodies(), [FIRST]);
+  assert.deepEqual(await bodies(), [SHOWN_FIRST], "the filler is cut from the shown text (09.10)");
   assert.equal(first.calls.n, 1);
 
   // 2. a verbatim repeat is regenerated once, and the new question is shown.
@@ -83,7 +84,7 @@ test("R5: a repeated question is regenerated once; a second repeat becomes a neu
   await third.run();
   assert.equal(third.calls.n, 2, "one regeneration only");
   const last = (await bodies()).at(-1);
-  assert.notEqual(last, FIRST);
+  assert.notEqual(last, SHOWN_FIRST);
   assertPlainQuestion(last, "other gap");
   assert.match(last ?? "", /^Что зритель должен унести из ролика/, "the question of the other open gap");
 
@@ -97,7 +98,7 @@ test("R5: a repeated question is regenerated once; a second repeat becomes a neu
   const fourth = ask("хорошо", "r5-rep-4", [FIRST], "gap_no_mechanism");
   await fourth.run();
   assert.equal(fourth.calls.n, 1);
-  assert.equal((await bodies()).at(-1), FIRST);
+  assert.equal((await bodies()).at(-1), SHOWN_FIRST);
 
   // 6. replay returns the stored reply without a model call.
   const replay = await sendDialogueMessage(reelId, { text: "да", idempotencyKey: "r5-rep-3" }, (async () => {

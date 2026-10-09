@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { isC00PolicyEnabled } from "@/lib/c00-policy";
 import { parseC00SignalCandidate, type C00SignalCandidate } from "@/lib/c00-signal";
-import { filterServiceProse } from "@/lib/author-text-guard";
+import { filterServiceProse, stripStyleFillers } from "@/lib/author-text-guard";
 import { parseThoughtStateLists } from "@/lib/thought-state";
 
 export class AgentActionError extends Error {
@@ -247,11 +247,11 @@ export const CONTENT_SUFFICIENT_FALLBACK = "Мысли хватает, можн�
 export const TAKE_PROPOSAL_PHRASE = "Для следующего дубля у вас уже есть опора. Запишите его или соберите сценарий.";
 
 export function actionMessage(action: AgentAction): { kind: "question" | "text"; body: string } {
-  if (action.action === "ask_question") return { kind: "question", body: action.question };
+  if (action.action === "ask_question") return { kind: "question", body: stripStyleFillers(action.question) || action.question };
   if (action.action === "suggest_take") return { kind: "text", body: TAKE_PROPOSAL_PHRASE };
   if (action.action === "content_sufficient") {
     const filtered = filterServiceProse(action.whyNoGaps).text;
-    return { kind: "text", body: filtered || CONTENT_SUFFICIENT_FALLBACK };
+    return { kind: "text", body: stripStyleFillers(filtered) || CONTENT_SUFFICIENT_FALLBACK };
   }
   return { kind: "text", body: action.currentTask };
 }
