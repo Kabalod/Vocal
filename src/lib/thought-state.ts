@@ -43,6 +43,8 @@ export const GAP_KINDS = [
   "no_audience",
   "multiple_topics",
   "promise_unclear",
+  /** 09.10: what the viewer should feel or do after the reel. Asked by the server once per thought, never by the take diagnosis. */
+  "viewer_effect",
 ] as const;
 export type GapKind = (typeof GAP_KINDS)[number];
 

@@ -6,6 +6,8 @@ import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
+process.env.VOCAL_TURN_POLICY = "0"; // 09.10: these suites predate the turn policy; it is tested in turn-policy.test.ts
+
 /**
  * "Claude as the model" stand: the answers are written in advance in tests/recorded/*.json (by Claude, on the real promptText) and
  * replayed through the real dialogue code, with no provider. It checks OUR code on the answers written; it does NOT prove how the

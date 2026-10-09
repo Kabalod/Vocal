@@ -17,6 +17,8 @@ import { applyThoughtMediaFromTranscript } from "../src/lib/thought-media";
 import { getArchiveThoughtPreview } from "../src/lib/archive-preview";
 import { V06_AUTO_WORK_KIND, v06TestSeams } from "../src/lib/v06-working-take";
 
+process.env.VOCAL_TURN_POLICY = "0"; // 09.10: these suites predate the turn policy; it is tested in turn-policy.test.ts
+
 test("V06 ready media take becomes working; late STT, manual choice, reprocess, completed stay put", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();

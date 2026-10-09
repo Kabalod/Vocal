@@ -94,6 +94,17 @@ export const DISCARD_REASONS = [
   "question_repeat_replaced",
   /** suggest_take right after a suggest_take: replaced by a neutral question about an open gap. */
   "proposal_repeat_replaced",
+  /** 09.10 turn policy: markers of server-made replies. They are also what later turns read to avoid repeating a notice. */
+  "policy_end_ask",
+  "policy_end_ack",
+  "policy_understanding_offer",
+  "policy_no_fact_notice",
+  "policy_dontknow_pause",
+  "policy_effect_ask",
+  "policy_dryness_hint",
+  "policy_suggest_replaced",
+  "policy_echo_replaced",
+  "policy_hint_regenerated",
   "question_gap_detached",
   "downgrade_evidence",
   "downgrade_gap",

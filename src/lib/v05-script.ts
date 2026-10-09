@@ -1,3 +1,4 @@
+import { NO_FACT_NOTICE, NO_FACT_STREAK_LIMIT, THIN_BLOCK_REASON, THIN_NEXT_QUESTION, noFactStreak } from "@/lib/turn-policy";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
@@ -146,6 +147,8 @@ type V05Material = {
   selectedTranscript: { id: string; text: string } | null;
   keys: string[];
   texts: { label: string; text: string }[];
+  /** 09.10: consecutive latest author answers without an accepted fact (turn policy A2). */
+  noFactStreak: number;
 };
 
 export async function lastCorrectionStamp(reelId: string, db: ScriptDb = prisma): Promise<string | null> {
@@ -362,7 +365,7 @@ function pushSource(keys: string[], texts: { label: string; text: string }[], ke
   texts.push({ label, text: body });
 }
 
-async function collectFromLoaded(reelId: string, material: Omit<V05Material, "keys" | "texts">, db: ScriptDb): Promise<{ keys: string[]; texts: { label: string; text: string }[] }> {
+async function collectFromLoaded(reelId: string, material: Omit<V05Material, "keys" | "texts" | "noFactStreak">, db: ScriptDb): Promise<{ keys: string[]; texts: { label: string; text: string }[] }> {
   const keys: string[] = [];
   const texts: { label: string; text: string }[] = [];
   const thought = material.thought;
@@ -461,7 +464,16 @@ export async function loadV05Material(reelId: string, db: ScriptDb = prisma): Pr
     selectedTranscript,
   };
   const sources = await collectFromLoaded(reelId, base, db);
-  return { ...base, ...sources };
+  let streak = 0;
+  const dialogue = await db.dialogueThread.findFirst({ where: { reelId }, select: { id: true } });
+  if (dialogue && thought) {
+    const rows = await db.dialogueMessage.findMany({ where: { threadId: dialogue.id, role: "user" }, orderBy: { createdAt: "asc" }, select: { id: true, body: true } });
+    streak = noFactStreak(
+      rows.map((row) => ({ role: "user" as const, id: row.id, body: row.body, marks: [], action: "" })),
+      new Set(thought.facts.map((fact) => fact.sourceId)),
+    );
+  }
+  return { ...base, ...sources, noFactStreak: streak };
 }
 
 function evaluateReadiness(material: V05Material): {
@@ -492,6 +504,14 @@ function evaluateReadiness(material: V05Material): {
       ready: false,
       blockReason: gap.text,
       nextQuestion: { text: gap.text, gapId: gap.id },
+    };
+  }
+  // 09.10 (A1/A2): state Н, no accepted author fact. The base from the take stays saved; a new script needs at least one answer.
+  if (material.thought.facts.length === 0 && !material.thought.position.trim()) {
+    return {
+      ready: false,
+      blockReason: material.noFactStreak >= NO_FACT_STREAK_LIMIT ? NO_FACT_NOTICE : THIN_BLOCK_REASON,
+      nextQuestion: { text: THIN_NEXT_QUESTION, gapId: null },
     };
   }
   const authorTexts = material.texts.filter((item) => {

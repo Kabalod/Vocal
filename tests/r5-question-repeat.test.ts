@@ -4,6 +4,8 @@ import { resetPrismaClient } from "../src/lib/db";
 import { assertPlainQuestion } from "./helpers/plain-question";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
+process.env.VOCAL_TURN_POLICY = "0"; // 09.10: these suites predate the turn policy; it is tested in turn-policy.test.ts
+
 test("R5: near-duplicate detection catches a verbatim and a lightly reworded repeat, not a different question", async () => {
   const { questionsAreNearDuplicates } = await import("../src/lib/author-text-guard");
   const q = "Почему, по вашему мнению, постановка целей помогает вам двигаться вперёд и не топтаться на месте?";

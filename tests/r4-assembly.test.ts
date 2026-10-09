@@ -42,6 +42,7 @@ test("R4: generate stores the changes, shows them for that version, and refuses 
     body: "Я хочу сказать, что чай остыл на подоконнике.",
     idempotencyKey: "r4-create",
   });
+  await (await import("./helpers/author-fact")).acceptAuthorAnswer(reel.id);
   const before = await listScriptWorkspace(reel.id);
   assert.deepEqual(before.viewingChanges, []);
   assert.ok(before.understanding === null || before.understanding.startsWith("Я понял так:"));
@@ -98,7 +99,8 @@ test("R4: the base of the latest take is shown with the button, as the author sa
   const first = await listScriptWorkspace(reel.id);
   assert.deepEqual(first.base, { text: "Первый дубль про чай.", label: "Ваш дубль №1, как он записан" });
   assert.equal(first.readyCount, 0, "showing the base does not make it a script");
-  assert.equal(first.phase, "ready_to_generate");
+  assert.equal(first.phase, "not_ready", "09.10 (A1): no accepted author fact yet, the base stays shown but the button is blocked");
+  assert.equal(first.blockReason, "Основа вашего дубля сохранена. Чтобы собрать новый сценарий, нужен хотя бы один ваш ответ по сути.");
 
   const second = await createTake(reel.id, { inputType: "text", bodyText: "Второй дубль про кофе." });
   await ensureOriginalFromText(second.id, second.bodyText);

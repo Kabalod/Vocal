@@ -31,6 +31,7 @@ import {
   thoughtUpdateAfterClassification,
 } from "@/lib/c00-classify-signal";
 import { isC00PolicyEnabled } from "@/lib/c00-policy";
+import { decideTurnPolicy, isCommandText, loadPolicyTurns, questionEchoesAuthor, questionNeedsHintCheck, turnPolicyEnabled } from "@/lib/turn-policy";
 import { C00EnvelopeError } from "@/lib/c00-envelope";
 import type { C00SignalCandidate } from "@/lib/c00-signal";
 import {
@@ -964,6 +965,123 @@ async function varyRepeatedProposal(input: {
   return { reply: { ...parsed, discarded: [...input.reply.discarded, "proposal_repeat_replaced"] }, rawText };
 }
 
+/**
+ * 09.10 turn policy: the server decides by the material state (see turn-policy.ts) whether the model's reply stays. A
+ * replacement is a fixed author-facing question (one question, no style words), the valid part of the update is kept,
+ * and the markers are written into the reply's counters so that later turns do not repeat the notice.
+ */
+async function applyTurnPolicy(input: {
+  reelId: string;
+  threadId: string;
+  callId: string;
+  reply: ReturnType<typeof parseAgentReply>;
+  rawText: string;
+  authorMessageId: string;
+}): Promise<{ reply: ReturnType<typeof parseAgentReply>; rawText: string }> {
+  const { reply } = input;
+  const kind = reply.action.action;
+  if (reply.c00Signal || !turnPolicyEnabled()) return { reply, rawText: input.rawText };
+  const state = await getThoughtState(input.reelId);
+  const turns = await loadPolicyTurns(input.threadId);
+  const newFact = reply.thoughtUpdate.fact;
+  const { composeUnderstanding } = await import("@/lib/v05-script");
+  const understanding = composeUnderstanding({
+    position: state.position,
+    intent: state.intent,
+    facts: [...state.facts, ...(newFact ? [{ text: newFact.text }] : [])],
+  });
+  const decision = decideTurnPolicy({
+    turns,
+    state: { facts: state.facts, position: state.position, intent: state.intent, takeTask: state.takeTask, openGaps: state.openGaps },
+    reply: {
+      kind,
+      hasFact: Boolean(newFact),
+      hasSignal: Boolean(reply.c00Signal),
+      serverMade: reply.discarded.includes("redirect_invalid") || reply.discarded.includes("redirect_replaced"),
+    },
+    understanding,
+  });
+  if (!decision) return { reply, rawText: input.rawText };
+  const { thoughtUpdate } = reply;
+  const keptUpdate = {
+    fact: thoughtUpdate.fact,
+    closeGapIds: thoughtUpdate.closeGapIds,
+    ...(thoughtUpdate.answeredGapId ? { answeredGapId: thoughtUpdate.answeredGapId } : {}),
+  };
+  let replaced: Record<string, unknown>;
+  if (decision.kind === "prefix" && reply.action.action === "ask_question") {
+    replaced = { ...reply.action, question: `${decision.phrase} ${reply.action.question}`, thoughtUpdate: keptUpdate };
+  } else if (decision.kind === "replace") {
+    replaced = {
+      action: "ask_question",
+      question: decision.question,
+      clarificationReason: "нужно уточнение задачи",
+      whyUnknown: "ответ сервера по состоянию материала",
+      thoughtUpdate: keptUpdate,
+    };
+  } else {
+    return { reply, rawText: input.rawText };
+  }
+  const rawText = JSON.stringify(replaced);
+  await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+  const parsed = parseAgentReply(replaced, { authorMessageId: input.authorMessageId });
+  return { reply: { ...parsed, discarded: [...reply.discarded, ...decision.marks] as typeof reply.discarded }, rawText };
+}
+
+const HINT_QUESTION_NOTE =
+  "\n\nВ вопросе есть подсказка содержания: он перечисляет варианты ответа или приписывает автору роль и обстоятельства, которых автор не называл. Задай тот же вопрос без вариантов и без приписанной роли, обычными словами.";
+
+/**
+ * 09.10 (A8, A10): a question that only repeats the author's last answers is replaced by a neutral one; a question that
+ * lists answer options or assumes a role the author never named is regenerated once, with a note. Display-side only.
+ */
+async function guardQuestionContent(input: {
+  reelId: string;
+  threadId: string;
+  callId: string;
+  reply: ReturnType<typeof parseAgentReply>;
+  rawText: string;
+  userPrompt: string;
+  complete: CompleteJsonFn;
+  authorMessageId: string;
+}): Promise<{ reply: ReturnType<typeof parseAgentReply>; rawText: string }> {
+  const { reply } = input;
+  if (reply.action.action !== "ask_question" || reply.c00Signal || !turnPolicyEnabled()) return { reply, rawText: input.rawText };
+  if (reply.discarded.some((reason) => reason === "redirect_invalid" || reason === "redirect_replaced")) return { reply, rawText: input.rawText };
+  const turns = await loadPolicyTurns(input.threadId);
+  const answers = turns.filter((turn) => turn.role === "user" && !isCommandText(turn.body)).map((turn) => turn.body);
+  const question = reply.action.question;
+  const keptUpdate = {
+    fact: reply.thoughtUpdate.fact,
+    closeGapIds: reply.thoughtUpdate.closeGapIds,
+    ...(reply.thoughtUpdate.answeredGapId ? { answeredGapId: reply.thoughtUpdate.answeredGapId } : {}),
+  };
+  if (questionEchoesAuthor(question, answers.slice(-2))) {
+    const state = await getThoughtState(input.reelId);
+    const replaced = { ...neutralQuestionReply(state.openGaps, [], [], await reelTopic(input.reelId)), thoughtUpdate: keptUpdate };
+    const rawText = JSON.stringify(replaced);
+    await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+    return { reply: { ...parseAgentReply(replaced, { authorMessageId: input.authorMessageId }), discarded: [...reply.discarded, "policy_echo_replaced"] as typeof reply.discarded }, rawText };
+  }
+  if (!questionNeedsHintCheck(question, answers.join(" "))) return { reply, rawText: input.rawText };
+  try {
+    const again = await gatewayComplete(input.complete, {
+      model: LLM_MODEL,
+      system: thoughtDialogueSystemPrompt(),
+      user: input.userPrompt + HINT_QUESTION_NOTE,
+      label: "dialogue",
+    });
+    const retried = parseAgentReply(parseJsonObject(again.text), { authorMessageId: input.authorMessageId });
+    if (retried.action.action === "ask_question" && !questionNeedsHintCheck(retried.action.question, answers.join(" "))) {
+      await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: again.text } });
+      return { reply: { ...retried, discarded: [...retried.discarded, "policy_hint_regenerated"] as typeof reply.discarded }, rawText: again.text };
+    }
+  } catch {
+    // keep the original question: a hint is a quality flaw, not a reason to fail the turn
+  }
+  return { reply, rawText: input.rawText };
+}
+
 async function recentStoredText(threadId: string): Promise<string> {
   const rows = await prisma.dialogueMessage.findMany({
     where: { threadId, kind: { in: ["text", "question", "answer", "script_proposal"] } },
@@ -1371,11 +1489,29 @@ export async function runDialogueTurn(
       rawText: varied.rawText,
       authorMessageId: userMessage.id,
     });
-    const safe = await authorSafeReply({
+    const guarded = await guardQuestionContent({
       reelId,
+      threadId: thread.id,
       callId: call.id,
       reply: proposalVaried.reply,
       rawText: proposalVaried.rawText,
+      userPrompt,
+      complete,
+      authorMessageId: userMessage.id,
+    });
+    const policed = await applyTurnPolicy({
+      reelId,
+      threadId: thread.id,
+      callId: call.id,
+      reply: guarded.reply,
+      rawText: guarded.rawText,
+      authorMessageId: userMessage.id,
+    });
+    const safe = await authorSafeReply({
+      reelId,
+      callId: call.id,
+      reply: policed.reply,
+      rawText: policed.rawText,
       userPrompt,
       complete,
       knownIds: [reelId, userMessage.id, material.workingTakeId, material.transcriptRevisionId, ...thoughtFacts.map((fact) => fact.id)],

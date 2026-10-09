@@ -37,7 +37,7 @@ test("V05 fact correction excludes only the corrected source, not later takes or
   const transcript1 = await prisma.transcriptRevision.findFirstOrThrow({ where: { takeId: take1.id } });
   await applyThoughtState({
     reelId: reel.id,
-    expectedRevision: 0,
+    expectedRevision: await (await import("./helpers/author-fact")).currentRevision(reel.id),
     patch: {
       facts: [
         {
@@ -99,6 +99,7 @@ test("V05 fact correction excludes only the corrected source, not later takes or
   assert.equal(afterT2.keys.includes(`transcript:${transcript2.id}`), true);
 
   let seenPrompt = "";
+  await (await import("./helpers/author-fact")).acceptAuthorAnswer(reel.id); // 09.10 (A1): one accepted author answer after the correction
   await generateV05Script(reel.id, { idempotencyKey: "v05-scope-t2-gen" }, async (req) => {
     seenPrompt = req.user;
     return { text: JSON.stringify({ script: "Только T2." }) };
@@ -121,7 +122,7 @@ test("V05 fact correction excludes only the corrected source, not later takes or
   });
   await applyThoughtState({
     reelId: dialogueReel.reel.id,
-    expectedRevision: 0,
+    expectedRevision: await (await import("./helpers/author-fact")).currentRevision(dialogueReel.reel.id),
     patch: {
       facts: [
         {
@@ -172,7 +173,7 @@ test("V05 fact correction excludes only the corrected source, not later takes or
   const superTranscript = await prisma.transcriptRevision.findFirstOrThrow({ where: { takeId: superTake.id } });
   await applyThoughtState({
     reelId: superReel.reel.id,
-    expectedRevision: 0,
+    expectedRevision: await (await import("./helpers/author-fact")).currentRevision(superReel.reel.id),
     patch: {
       facts: [
         {
@@ -255,7 +256,7 @@ test("V05 initial_note correction excludes creation take original, not later tak
   });
   await applyThoughtState({
     reelId: reel.id,
-    expectedRevision: 0,
+    expectedRevision: await (await import("./helpers/author-fact")).currentRevision(reel.id),
     patch: {
       facts: [
         {
@@ -328,6 +329,7 @@ test("V05 initial_note correction excludes creation take original, not later tak
   assert.equal(afterT2.texts.some((item) => item.text.includes(noteMeaning)), false);
   assert.equal(afterT2.texts.some((item) => item.text.includes(t2Meaning)), true);
   let seenT2 = "";
+  await (await import("./helpers/author-fact")).acceptAuthorAnswer(reel.id); // 09.10 (A1): one accepted author answer after the correction
   await generateV05Script(reel.id, { idempotencyKey: "v05-scope-note-t2-gen" }, async (req) => {
     seenT2 = req.user;
     return { text: JSON.stringify({ script: "Только T2." }) };
@@ -350,7 +352,7 @@ test("V05 initial_note correction excludes creation take original, not later tak
   });
   await applyThoughtState({
     reelId: superReel.reel.id,
-    expectedRevision: 0,
+    expectedRevision: await (await import("./helpers/author-fact")).currentRevision(superReel.reel.id),
     patch: {
       facts: [
         {

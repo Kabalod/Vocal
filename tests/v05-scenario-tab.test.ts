@@ -44,13 +44,13 @@ test("V05 generate is explicit, versions are immutable, STT does not mint a scri
 
   const listed = await listScriptWorkspace(reel.id);
   assert.equal(listed.readyCount, 0);
-  assert.equal(listed.phase, "ready_to_generate");
-  assert.equal(listed.canGenerate, true);
+  assert.equal(listed.phase, "not_ready", "09.10 (A1): no accepted author fact yet");
+  assert.equal(listed.canGenerate, false);
   assert.equal(await prisma.scriptVersion.count({ where: { reelId: reel.id, kind: { not: "from_take" } } }), 0);
 
   await applyThoughtState({
     reelId: reel.id,
-    expectedRevision: 0,
+    expectedRevision: await (await import("./helpers/author-fact")).currentRevision(reel.id),
     patch: { openGaps: [{ id: "gap-position", text: "Какая ваша позиция?", status: "open" }] },
   });
   const blocked = await listScriptWorkspace(reel.id);
@@ -65,7 +65,7 @@ test("V05 generate is explicit, versions are immutable, STT does not mint a scri
 
   await applyThoughtState({
     reelId: reel.id,
-    expectedRevision: 1,
+    expectedRevision: await (await import("./helpers/author-fact")).currentRevision(reel.id),
     patch: { openGaps: [{ id: "gap-position", text: "Какая ваша позиция?", status: "resolved" }], intent: "чай на подоконнике" },
   });
 
@@ -73,6 +73,7 @@ test("V05 generate is explicit, versions are immutable, STT does not mint a scri
   await applyThoughtMediaFromTranscript(take.id, "Я хочу сказать, что чай остыл на подоконнике.");
   assert.equal(await prisma.scriptVersion.count({ where: { reelId: reel.id, kind: { not: "from_take" } } }), 0);
 
+  await (await import("./helpers/author-fact")).acceptAuthorAnswer(reel.id); // 09.10 (A1): one accepted author answer
   let calls = 0;
   const first = await generateV05Script(reel.id, { idempotencyKey: "gen-1" }, async () => {
     calls += 1;

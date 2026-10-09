@@ -33,7 +33,7 @@ const s2Tests = ["tests/s2-data-deletion.test.ts"];
 
 const s4Tests = ["tests/s4-restart.test.ts", "tests/s4-ops.test.ts"];
 
-const rTests = ["tests/r1-base-script.test.ts", "tests/k0-gap-kinds.test.ts", "tests/r2-take-diagnosis.test.ts", "tests/r3-off-topic.test.ts", "tests/r3-author-text-guard.test.ts", "tests/r4-assembly.test.ts", "tests/r5-offtopic-redirect.test.ts", "tests/r5-take-proposal.test.ts", "tests/style-fillers.test.ts", "tests/r5-question-repeat.test.ts", "tests/bad-model-answers.test.ts", "tests/recorded-stand.test.ts"];
+const rTests = ["tests/r1-base-script.test.ts", "tests/k0-gap-kinds.test.ts", "tests/r2-take-diagnosis.test.ts", "tests/r3-off-topic.test.ts", "tests/r3-author-text-guard.test.ts", "tests/r4-assembly.test.ts", "tests/r5-offtopic-redirect.test.ts", "tests/r5-take-proposal.test.ts", "tests/style-fillers.test.ts", "tests/turn-policy.test.ts", "tests/turn-guards.test.ts", "tests/r5-question-repeat.test.ts", "tests/bad-model-answers.test.ts", "tests/recorded-stand.test.ts"];
 
 const dbTests = [
   ...authTests,

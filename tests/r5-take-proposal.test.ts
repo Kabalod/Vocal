@@ -4,6 +4,8 @@ import { resetPrismaClient } from "../src/lib/db";
 import { assertPlainQuestion } from "./helpers/plain-question";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
+process.env.VOCAL_TURN_POLICY = "0"; // 09.10: these suites predate the turn policy; it is tested in turn-policy.test.ts
+
 const PHRASE = "Для следующего дубля у вас уже есть опора. Запишите его или соберите сценарий.";
 
 test("08.10: suggest_take shows the fixed sentence, keeps takeTask in the state, and a repeated proposal becomes a question", async (t) => {

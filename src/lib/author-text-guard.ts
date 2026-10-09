@@ -32,8 +32,13 @@ export function withOffTopicPhrase(question: string): string {
   return `${OFF_TOPIC_RETURN_PHRASE} ${question}`;
 }
 
+/** 09.10 (A5): said once per thought in front of a question after two dry answers. */
+export const DRYNESS_HINT = "Чем подробнее ваши ответы, тем лучше получится сценарий для рилс.";
+
 export function stripOffTopicPhrase(question: string): string {
-  return question.startsWith(OFF_TOPIC_RETURN_PHRASE) ? question.slice(OFF_TOPIC_RETURN_PHRASE.length).trim() : question;
+  let out = question;
+  if (out.startsWith(DRYNESS_HINT)) out = out.slice(DRYNESS_HINT.length).trim();
+  return out.startsWith(OFF_TOPIC_RETURN_PHRASE) ? out.slice(OFF_TOPIC_RETURN_PHRASE.length).trim() : out;
 }
 
 export const GENERIC_NEUTRAL_QUESTION = "Что для вас здесь главное своими словами?";
@@ -60,6 +65,7 @@ const NEUTRAL_QUESTIONS: Record<GapKind, (topic: string | null) => string> = {
   no_audience: () => "Кому вы это говорите в кадре?",
   multiple_topics: () => "Какую одну тему из названных вы хотите сказать сейчас?",
   promise_unclear: () => "Что зритель поймёт после этого ролика?",
+  viewer_effect: () => "Что должен почувствовать или сделать зритель после этого ролика?",
 };
 
 function neutralQuestionText(kind: GapKind | null | undefined, topic: string | null | undefined): string {
@@ -68,7 +74,8 @@ function neutralQuestionText(kind: GapKind | null | undefined, topic: string | n
 }
 
 const CONTENT_TOKEN_MIN = 3;
-export const REPEAT_SIMILARITY = 0.7;
+/** 09.10: 0.7 -> 0.55 (tuned on recorded dialogues: catches rephrased repeats at 0.56-0.62, leaves narrowing questions at 0.50 alone). */
+export const REPEAT_SIMILARITY = 0.55;
 
 function contentTokens(text: string): Set<string> {
   return new Set(

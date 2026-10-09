@@ -70,6 +70,7 @@ test("scripts: manual save, versions, generate, restore, sources, take link", as
   await prisma.$transaction(async (tx) => {
     await ensureThoughtState(tx, { reelId: reel.id, ownerUserId: "local", workingTakeId: take.id });
   });
+  await (await import("./helpers/author-fact")).acceptAuthorAnswer(reel.id); // 09.10 (A1): a script needs one accepted author answer
   let completeCalls = 0;
   const generated = await generateScriptProposal(
     reel.id,

@@ -14,6 +14,8 @@ import { ensureOriginalFromText } from "../src/lib/transcripts";
 import { askQuestionJson, thoughtUpdateForUserText } from "./helpers/agent-action-json";
 import type { PrismaClient } from "@prisma/client";
 
+process.env.VOCAL_TURN_POLICY = "0"; // 09.10: these suites predate the turn policy; it is tested in turn-policy.test.ts
+
 async function committedAssistantActions(prisma: PrismaClient, reelId: string) {
   const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId } });
   return prisma.dialogueMessage.findMany({

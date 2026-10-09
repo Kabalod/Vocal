@@ -13,6 +13,8 @@ import { FIXTURE_CRAFT_CATALOG, v07CraftSeam } from "../src/lib/v07-craft/catalo
 import { askQuestionJson, suggestTakeJson, thoughtUpdateForUserText } from "./helpers/agent-action-json";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
+process.env.VOCAL_TURN_POLICY = "0"; // 09.10: these suites predate the turn policy; it is tested in turn-policy.test.ts
+
 test("synthetic full cycle with craft, correction, several takes, conflict, and model fault", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();

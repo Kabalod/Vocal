@@ -32,6 +32,7 @@ const GAP_KIND_HELP: Record<GapKind, string> = {
   no_audience: "не ясно, кому это сказано",
   multiple_topics: "в дубле несколько самостоятельных тем",
   promise_unclear: "не ясно, что зритель получит",
+  viewer_effect: "не названо, что зритель должен почувствовать или сделать",
 };
 
 const DIAGNOSIS_SYSTEM = [
@@ -42,7 +43,7 @@ const DIAGNOSIS_SYSTEM = [
   `contentMode — одно из: ${CONTENT_MODES.join(", ")}.`,
   `kind — только из списка ниже; не больше ${DIAGNOSIS_MAX_GAPS} пробелов, самые важные первыми; пустой список допустим, если дубль цельный.`,
   "text — одна короткая нейтральная фраза о том, чего не хватает (не вопрос и не цитата дубля).",
-  ...GAP_KINDS.map((kind) => `- ${kind}: ${GAP_KIND_HELP[kind]}`),
+  ...GAP_KINDS.filter((kind) => kind !== "viewer_effect").map((kind) => `- ${kind}: ${GAP_KIND_HELP[kind]}`),
 ].join("\n");
 
 const diagnosisSchema = z

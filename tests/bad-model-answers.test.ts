@@ -5,6 +5,8 @@ import { test } from "node:test";
 import { resetPrismaClient } from "../src/lib/db";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
 
+process.env.VOCAL_TURN_POLICY = "0"; // 09.10: these suites predate the turn policy; it is tested in turn-policy.test.ts
+
 /**
  * Regression set "bad model answers": the real shapes of broken replies seen in the live runs of 2026-10-07, one fixture
  * per shape in tests/fixtures/bad-model-answers. Each goes through the mock model input and must not break the turn

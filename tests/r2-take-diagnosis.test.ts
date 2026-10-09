@@ -173,9 +173,10 @@ test("R2: typed diagnosis gaps do not block the script button; an untyped gap st
   const { applyThoughtState } = await import("../src/lib/thought-state");
   const { listScriptWorkspace } = await import("../src/lib/scripts");
   const made = await createThoughtFromText({ title: "Кнопка", body: "Я хочу сказать, что чай остыл.", idempotencyKey: "r2-ready" });
+  await (await import("./helpers/author-fact")).acceptAuthorAnswer(made.reel.id);
   await applyThoughtState({
     reelId: made.reel.id,
-    expectedRevision: 0,
+    expectedRevision: await (await import("./helpers/author-fact")).currentRevision(made.reel.id),
     patch: { openGaps: [{ id: "gap_no_episode", text: "Нет случая.", status: "open", kind: "no_episode" }] },
   });
   const typed = await listScriptWorkspace(made.reel.id);
@@ -183,7 +184,7 @@ test("R2: typed diagnosis gaps do not block the script button; an untyped gap st
   assert.equal(typed.phase, "ready_to_generate");
   await applyThoughtState({
     reelId: made.reel.id,
-    expectedRevision: 1,
+    expectedRevision: await (await import("./helpers/author-fact")).currentRevision(made.reel.id),
     patch: {
       openGaps: [
         { id: "gap_no_episode", text: "Нет случая.", status: "open", kind: "no_episode" },
@@ -206,9 +207,10 @@ test("R2: the script button builds a script while a typed gap is open (regressio
   const { applyThoughtState, getThoughtState } = await import("../src/lib/thought-state");
   const { generateV05Script } = await import("../src/lib/v05-script");
   const made = await createThoughtFromText({ title: "Сборка с пробелом", body: "Я хочу сказать, что чай остыл.", idempotencyKey: "r2-ready-gen" });
+  await (await import("./helpers/author-fact")).acceptAuthorAnswer(made.reel.id);
   await applyThoughtState({
     reelId: made.reel.id,
-    expectedRevision: 0,
+    expectedRevision: await (await import("./helpers/author-fact")).currentRevision(made.reel.id),
     patch: { openGaps: [{ id: "gap_no_episode", text: "Нет случая.", status: "open", kind: "no_episode" }] },
   });
   const built = await generateV05Script(made.reel.id, { idempotencyKey: "r2-ready-gen-1" }, (async () => ({
