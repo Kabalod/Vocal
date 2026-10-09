@@ -44,7 +44,7 @@ test("R5: an invalid redirect_to_task does not fail the turn; the author is retu
     assert.equal(calls, 1, "no regeneration: the model already said the message is off topic");
     assert.equal(page.messages.at(-1)?.kind, "question");
     if (index === 0) {
-      assert.ok(page.messages.at(-1)?.body.startsWith("Это в сторону от нашей мысли, давайте вернёмся к ней. Что зритель должен унести из ролика"), "the fixed phrase, then a neutral question about the first open gap");
+      assert.ok(page.messages.at(-1)?.body.startsWith("Это в сторону от нашей мысли, давайте вернёмся к ней. "), "the fixed phrase, then a neutral question about the first open gap (09.10 G2: the old template with 'унести из' is replaced by the compliant fallback)");
       assertPlainQuestion(page.messages.at(-1)?.body, "first return");
     } else {
       assert.notEqual(page.messages.at(-1)?.body, page.messages.at(-2 - (page.messages.at(-2)?.role === "user" ? 0 : 1))?.body ?? "", "a second return does not repeat the first question");
@@ -52,7 +52,7 @@ test("R5: an invalid redirect_to_task does not fail the turn; the author is retu
   }
   const questions = (await prisma.dialogueMessage.findMany({ where: { role: "assistant", kind: "question", status: "done" }, orderBy: { createdAt: "asc" } })).map((m) => m.body);
   assert.equal(questions.length, 3);
-  assert.ok(questions[0].startsWith("Это в сторону от нашей мысли, давайте вернёмся к ней. Что зритель должен унести из ролика"));
+  assert.ok(questions[0].startsWith("Это в сторону от нашей мысли, давайте вернёмся к ней. "));
   for (const q of questions) assertPlainQuestion(q, "return");
   assert.ok(questions.every((q) => q.startsWith("Это в сторону от нашей мысли, давайте вернёмся к ней.")), "every return starts with the fixed phrase");
   assert.notEqual(questions[1], questions[0], "the second return is varied");
@@ -62,7 +62,7 @@ test("R5: an invalid redirect_to_task does not fail the turn; the author is retu
   assert.deepEqual(after.openGaps, before.openGaps);
   const reasons = await discardedReasons(prisma, reelId);
   assert.equal(reasons.filter((reason) => reason === "redirect_invalid").length, 3, "each invalid redirect is counted");
-  assert.ok(reasons.every((reason) => reason === "redirect_invalid" || reason === "question_repeat_replaced"), "the only other reason is the variety replacement");
+  assert.ok(reasons.every((reason) => reason === "redirect_invalid" || reason === "question_repeat_replaced" || reason === "policy_lexicon_fallback" || reason === "policy_topic_repeat"), "the only other reasons are the variety replacement and the 09.10 question guards");
 
   const replay = await sendDialogueMessage(reelId, { text: "А какая сегодня погода?", idempotencyKey: "r5-off-0" }, (async () => {
     throw new Error("replay must not call the model");
@@ -124,5 +124,5 @@ test("08.10: a redirect_to_task that came with the author's fact (a false return
   const state = await getThoughtState(made.reel.id);
   assert.equal(state.facts.length, 0, "current behaviour: the fact that came with a redirect is NOT stored (the redirect schema forbids it)");
   assert.equal(state.openGaps.find((g) => g.id === "gap_no_thesis")?.status, "open");
-  assert.deepEqual((await discardedReasons(prisma, made.reel.id)).sort(), ["redirect_replaced", "redirect_state"], "the loss is counted, not silent");
+  assert.deepEqual((await discardedReasons(prisma, made.reel.id)).sort(), ["policy_lexicon_fallback", "redirect_replaced", "redirect_state"], "the loss is counted, not silent");
 });

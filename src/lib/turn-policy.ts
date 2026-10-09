@@ -94,7 +94,7 @@ export function isYes(text: string): boolean {
   return /^(да|ага|угу|ок|окей|хорошо|давайте|давай|можно|да, закончим|да, давайте)[.!]*$/i.test(text.trim());
 }
 
-export type PolicyTurn = { role: "user" | "assistant"; id: string; body: string; marks: string[]; action: string };
+export type PolicyTurn = { role: "user" | "assistant"; id: string; body: string; marks: string[]; action: string; gapId?: string };
 
 export type PolicyState = {
   facts: Pick<ThoughtFact, "id" | "sourceId" | "text">[];
@@ -118,6 +118,8 @@ export type ReplyShape = { kind: "ask_question" | "suggest_take" | "content_suff
 
 export type PolicyDecision =
   | { kind: "replace"; question: string; marks: string[] }
+  /** G6: a second offer to build before two new accepted facts: the caller replaces the reply with another question. */
+  | { kind: "suppress"; marks: string[] }
   | { kind: "prefix"; phrase: string; marks: string[] };
 
 /** Consecutive latest author answers (commands skipped) with no accepted fact; the current answer counts as accepted when the reply carries a fact. */
@@ -209,12 +211,16 @@ export function decideTurnPolicy(input: {
     return { kind: "replace", question: EFFECT_QUESTION, marks: replaceMarks(POLICY_MARKS.effectAsk) };
   }
 
-  // A6: ready to offer the build instead of one more question, once until the next fact.
+  // A6 / G6: ready to offer the build instead of one more question. Offered once; again only after two new accepted facts.
+  // An offer is the "what we have" reply and also a shown suggest_take ("записать дубль или собрать сценарий").
+  const lastOffer = lastIndex(turns, (turn) => turn.role === "assistant" && (turn.marks.includes(POLICY_MARKS.offer) || turn.action === "suggest_take"));
+  const factsSinceOffer = lastOffer < 0 ? Infinity : turns.slice(lastOffer + 1).filter((turn) => turn.role === "user" && factSources.has(turn.id)).length;
+  const offerAllowed = factsSinceOffer >= 2;
   const after = materialState({ state: stateAfterNoEffect as PolicyState, units: unitsAfter, actionNamed, effectResolved });
-  const offerAfterFact = lastIndex(turns, (turn) => turn.role === "assistant" && turn.marks.includes(POLICY_MARKS.offer)) > lastFactUser;
-  if (after === "ready" && input.understanding && !offerAfterFact) {
+  if (after === "ready" && input.understanding && offerAllowed) {
     return { kind: "replace", question: input.understanding, marks: replaceMarks(POLICY_MARKS.offer) };
   }
+  if (reply.kind === "suggest_take" && !offerAllowed) return { kind: "suppress", marks: [POLICY_MARKS.suggestReplaced, "policy_offer_suppressed"] };
 
   // A5: dry answers, once per thought, put in front of the next question.
   if (reply.kind === "ask_question" && !turns.some((turn) => turn.role === "assistant" && turn.marks.includes(POLICY_MARKS.dryness))) {
@@ -236,16 +242,18 @@ export async function loadPolicyTurns(threadId: string): Promise<PolicyTurn[]> {
   return rows.map((row) => {
     let marks: string[] = [];
     let action = "";
+    let gapId: string | undefined;
     if (row.role === "assistant") {
       try {
-        const payload = JSON.parse(row.payloadJson) as { action?: { action?: string }; discardedUpdates?: unknown };
+        const payload = JSON.parse(row.payloadJson) as { action?: { action?: string; gapId?: string }; discardedUpdates?: unknown };
         marks = Array.isArray(payload.discardedUpdates) ? (payload.discardedUpdates as string[]) : [];
         action = payload.action?.action ?? "";
+        gapId = payload.action?.gapId;
       } catch {
         // an unreadable payload carries no markers
       }
     }
-    return { role: row.role as "user" | "assistant", id: row.id, body: row.body, marks, action };
+    return { role: row.role as "user" | "assistant", id: row.id, body: row.body, marks, action, gapId };
   });
 }
 

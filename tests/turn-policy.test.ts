@@ -117,7 +117,7 @@ test("A4: 'хочу закончить' in state Н asks once, 'да' creates no
   const second = await setup(t, "Конец Д");
   await second.say(LONG, ask("Что было потом?", LONG));
   const end = await second.say("Хватит.", ask("Расскажите ещё?"));
-  assert.match(end.body, /^Я понял так: /);
+  assert.match(end.body, /^Пока у нас так:/);
   assert.ok(end.body.endsWith("Собрать сценарий?"));
   assert.equal((end.body.match(/\?/g) ?? []).length, 1);
 });
@@ -150,7 +150,7 @@ test("A6/A7: effect question once, then the build is offered once; 'не зна�
   assertPlainQuestion(EFFECT_QUESTION, "effect");
   const third = await s.say("Не знаю.", suggest("Нет ответа"));
   assert.notEqual(third.body, EFFECT_QUESTION, "not asked again");
-  assert.match(third.body, /^Я понял так: /, "the effect is skipped, the build is offered");
+  assert.match(third.body, /^Пока у нас так:/, "the effect is skipped, the build is offered");
   const fourth = await s.say("Нет, это всё.", ask("Что ещё?"));
   assert.doesNotMatch(fourth.body, /Собрать сценарий/, "the offer is not repeated until a new fact");
   assert.equal((await s.marks()).flat().filter((m) => m === "policy_effect_ask").length, 1);
@@ -190,5 +190,5 @@ test("rich-author finding: long answers without an accepted fact count as materi
   for (const r of [a, b, c]) assert.notEqual(r.body, NO_FACT_NOTICE, "the model accepted no fact, but the answers were substantive");
   assert.equal((await evaluateScriptReadiness(s.reelId)).ready, true, "a substantive answer is enough for the button");
   const end = await s.say("Хватит.", ask("Что ещё?"));
-  assert.match(end.body, /^Я понял так: /);
+  assert.match(end.body, /^Пока у нас так:/);
 });

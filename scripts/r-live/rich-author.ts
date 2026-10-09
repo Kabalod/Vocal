@@ -11,6 +11,8 @@ import { resetPrismaClient } from "../../src/lib/db";
 import { changeLooksLikeEdit, stripServiceMarks } from "../../src/lib/author-speech";
 import { closePostgresTestDb, openPostgresTestDb } from "../../tests/helpers/postgres-test-db";
 import { factShares, fillersIn, phraseShares } from "./script-metrics-lib";
+import { detectGenre, questionProblem, topicRepeat } from "../../src/lib/question-guard";
+import { isSubstantiveAnswer } from "../../src/lib/turn-policy";
 import { toTranscript } from "./transcript-mode";
 
 (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
@@ -26,6 +28,7 @@ const MAX_TOKENS = Number(argOf("max-tokens") ?? "600000");
 const MODE = argOf("mode") === "written" ? "written" : "transcript";
 const STOP_AT = Number(argOf("stop-at") ?? "0.8");
 const ONLY = argOf("only") ? Number(argOf("only")) : null;
+const PERSONAS_ARG = argOf("personas")?.split(",") ?? null;
 const TURNS_OVERRIDE = argOf("turns") ? Number(argOf("turns")) : null;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -199,6 +202,7 @@ async function main() {
 
   for (const persona of PERSONAS) {
     if (ONLY && Number(persona.id.slice(1)) !== ONLY) continue;
+    if (PERSONAS_ARG && !PERSONAS_ARG.includes(persona.id)) continue;
     if ((await spent()) > MAX_TOKENS * STOP_AT) {
       notExecuted = true;
       results.push({ persona: persona.id, notExecuted: true, reason: `${Math.round(STOP_AT * 100)}% of the run budget reached` });
@@ -316,6 +320,20 @@ async function main() {
     const newContent = scriptSentences.filter((s) => containment(s, authorCorpus) < 0.5);
     const traced = changes.filter((c) => containment(c, `${authorCorpus} ${scriptText}`) >= 0.5).length;
     const qCount = assistantRows.filter((r) => r.kind === "question" && r.status === "done").length;
+    // G1/G2: replay the guards over the questions that were SHOWN: how many would still be stopped (should be 0), and their length.
+    const shown = assistantRows.filter((r) => r.kind === "question" && r.status === "done" && !/^(Пока у нас так|Я понял так)/.test(r.body));
+    const genre = detectGenre([persona.opening, ...answers.map((r) => r.body)]);
+    let leftoverRepeats = 0, leftoverProblems = 0;
+    const pastQ: { q: string; answered: boolean }[] = [];
+    for (const row of shown) {
+      const idx = rows.findIndex((r) => r.id === row.id);
+      const before = rows.slice(0, idx).filter((r) => r.role === "user" && !/^уточни$/i.test(r.body)).map((r) => r.body);
+      const next = rows.slice(idx + 1).find((r) => r.role === "user");
+      if (topicRepeat({ question: row.body, answeredQuestions: pastQ.filter((p) => p.answered).map((p) => p.q), allQuestions: pastQ.map((p) => p.q), authorTexts: before })) leftoverRepeats += 1;
+      if (questionProblem(row.body, { genre, lastAnswer: before[before.length - 1] })) leftoverProblems += 1;
+      pastQ.push({ q: row.body, answered: Boolean(next) && isSubstantiveAnswer(next!.body, row.body) });
+    }
+    const lengths = shown.map((r) => r.body.split(/\s+/).length);
     const dialogueTokens = (await aiTokens()) - startTokens;
     const simTokens = stats.simTokens - startSim;
     results.push({
@@ -328,6 +346,8 @@ async function main() {
       earlyFactsInLastPrompt: `${inPrompt}/${earlyFacts.length}`,
       scriptStatus, scriptWords: scriptText.split(/\s+/).filter(Boolean).length,
       authorSentences: sentencesOfAuthor.length, preservedInScript: preserved,
+      shownQuestions: shown.length, leftoverRepeats, leftoverProblems, questionWordsAvg: lengths.length ? Math.round((10 * lengths.reduce((a, b) => a + b, 0)) / lengths.length) / 10 : 0, questionWordsMax: Math.max(0, ...lengths), genre,
+      guardTopicRepeat: allMarks.filter((m) => m === "policy_topic_repeat").length, guardLexiconRegenerated: allMarks.filter((m) => m === "policy_lexicon_regenerated").length, guardLexiconFallback: allMarks.filter((m) => m === "policy_lexicon_fallback").length, offersSuppressed: allMarks.filter((m) => m === "policy_offer_suppressed").length, offers: allMarks.filter((m) => m === "policy_understanding_offer").length,
       changes: changes.length, changesAreEdits: editChanges, changesTraced: traced, newSentencesInScript: newContent.length,
       phrasesRaw: phraseM ? `${phraseM.raw.found}/${phraseM.raw.total}` : null, phrasesClean: phraseM ? `${phraseM.clean.found}/${phraseM.clean.total}` : null,
       factsInScriptRaw: factM ? `${factM.raw.found}/${factM.raw.total}` : null, factsInScriptClean: factM ? `${factM.clean.found}/${factM.clean.total}` : null,
