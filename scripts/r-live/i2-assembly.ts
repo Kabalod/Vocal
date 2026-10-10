@@ -66,6 +66,7 @@ async function main() {
       const chars = sources.texts.reduce((a, t) => a + t.label.length + t.text.length, 0);
       row[`inputChars_${quotes}`] = chars;
       row[`quotesInInput_${quotes}`] = sources.texts.filter((t) => t.text.includes("Слова автора:")).length;
+      row[`quotesText_${quotes}`] = sources.texts.filter((t) => t.text.includes("Слова автора:")).map((t) => t.text.split("Слова автора:")[1].trim());
       if (DRY) continue;
       let scriptText = "";
       let tokens = 0;
