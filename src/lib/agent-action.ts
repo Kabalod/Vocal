@@ -97,6 +97,8 @@ export const DISCARD_REASONS = [
   "proposal_repeat_replaced",
   /** 09.10 turn policy: markers of server-made replies. They are also what later turns read to avoid repeating a notice. */
   "fact_duplicate",
+  /** K1: the fact was a statement of not knowing ("не помню…"); dropped, or cut to its useful remainder. */
+  "fact_dontknow",
   "quota_ceiling",
   "policy_topic_repeat",
   "policy_lexicon_regenerated",

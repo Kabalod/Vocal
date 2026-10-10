@@ -9,7 +9,7 @@
  *  - G6 the "what we have so far" reply: second person list in the author's words, <= 45 words.
  */
 import { isCommandText, isDontKnow, isEndPhrase } from "@/lib/turn-policy";
-import { meaningfulWords } from "@/lib/author-speech";
+import { materialAfterDontKnow, meaningfulWords, startsWithDontKnow } from "@/lib/author-speech";
 
 // ---- stems -------------------------------------------------------------------------------------------------------------
 
@@ -56,10 +56,13 @@ export type TopicRepeat = "past_question" | "already_told" | "viewer_again" | "c
  * H3: "не помню / не знаю" closes the topic. An answer with fewer than four meaningful words once the "don't know" phrase and the
  * fillers are cut says nothing: the question is answered with "unknown", and its relatives are not asked again.
  */
-const DONT_KNOW_PHRASES = /не помню|не знаю|не думал[аи]?(?:\s+об\s+этом)?|не обращал[аи]?\s+внимани[яе]|не могу сказать|затрудняюсь|без понятия|точно\s+не|честно\s+говоря|честно/giu;
+const DONT_KNOW_PHRASES = /не помню|не знаю|не думал[аи]?(?:\s+об\s+этом)?|не обращал[аи]?\s+внимани[яе]|не могу сказать|затрудняюсь|без понятия|нет\s+ни(?![\p{L}])|точно\s+не|честно\s+говоря|честно/giu;
 export function isUnknownAnswer(text: string): boolean {
   const rest = text.replace(DONT_KNOW_PHRASES, " ");
-  return meaningfulWords(rest).length < 4;
+  if (meaningfulWords(rest).length < 4) return true;
+  // K1: an answer that OPENS with "не помню / не знаю / нет ни …" and has no useful remainder (the I2b threshold) is "unknown" too:
+  // "я не помню, о чём именно речь" has five words left after the phrase is cut, but nothing in them is material.
+  return startsWithDontKnow(text) && materialAfterDontKnow(text) === null;
 }
 
 /** Relatives of a closed question: two shared stems and 40 % of the smaller one ("впервые / обычно", "что сказала / какой комментарий делала"). */

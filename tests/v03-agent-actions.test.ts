@@ -416,7 +416,9 @@ test("a mistaken fact on не знаю or повтори is dropped, counted, an
   assert.deepEqual(after.facts, before.facts, "a command or «не знаю» never becomes a fact");
   assert.deepEqual(after.openGaps, before.openGaps, "and never closes a gap");
   assert.equal((await committedAssistantActions(prisma, reel.id)).length, actionsBefore + phrases.length);
-  assert.deepEqual(await discardedUpdates(prisma, reel.id), phrases.map(() => "update_dropped_at_commit"));
+  // K1: the two «не знаю» answers are now stopped before the commit by the don't-know filter (fact_dontknow); the command and the
+  // «не понял» answers still reach the commit guard. The state assertions above are unchanged.
+  assert.deepEqual(await discardedUpdates(prisma, reel.id), ["fact_dontknow", "fact_dontknow", "update_dropped_at_commit", "update_dropped_at_commit"]);
 });
 
 test("off-topic answer does not close the current gap", async (t) => {

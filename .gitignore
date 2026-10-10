@@ -65,3 +65,6 @@ tmp-backup-dir.txt
 
 # Owner-supplied raw transcripts for authors missing from the repo (K3 verification only)
 Analyz/_private_raw/
+
+# local run (docs/LOCAL_LIVE_RUN.md)
+.local-media/

@@ -304,7 +304,7 @@ function detailFeatures(candidate: string, original: string): number {
 /** An answer that opens with "не помню / не знаю / не думал…" (the don't-know clause is at the start). */
 export function startsWithDontKnow(text: string): boolean {
   const opening = meaningfulWords(text).slice(0, 6).join(" ");
-  return /не помню|не знаю|не думал|не задумывал|затрудняюсь|без понятия/.test(opening);
+  return /не помню|не знаю|не думал|не задумывал|затрудняюсь|без понятия|нет ни/.test(opening);
 }
 
 const STILL_UNKNOWN = /не помн|не зна|не думал|не задум|нет ни|нет никак|записях|не фиксиров|не могу|без понятия|затрудня/i;
@@ -321,6 +321,17 @@ export function materialAfterDontKnow(text: string): string | null {
   const rest = text.slice(match.index + match[0].length).trim();
   if (meaningfulWords(rest).length < 4 || STILL_UNKNOWN.test(rest)) return null;
   return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
+/**
+ * K1: what may enter the fact state. An author answer that is only "не помню / не знаю / нет ни …" gives no fact at all; a fact that is
+ * itself a statement of not knowing is cut to its useful remainder (the I2b threshold: four or more meaningful words) or dropped.
+ * Returns the text to store, or null when nothing is left. The question's topic is closed separately (G1, `isUnknownAnswer`).
+ */
+export function acceptableFactText(factText: string, authorText: string): string | null {
+  if (startsWithDontKnow(authorText) && materialAfterDontKnow(authorText) === null) return null;
+  if (!startsWithDontKnow(factText)) return factText;
+  return materialAfterDontKnow(factText);
 }
 
 // ---- I2b: Latin look-alikes inside Cyrillic words; repeats in a script ------------------------------------------------------

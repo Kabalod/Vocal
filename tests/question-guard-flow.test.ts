@@ -133,3 +133,22 @@ test("H3 flow (P4 pattern): after 'не помню' a relative of the closed que
   assertPlainQuestion(next, "replacement");
   assert.ok((await s.marks()).flat().includes("policy_topic_repeat"));
 });
+
+test("K1/R1: a retried reply whose question is rejected still gives its valid fact to the fixed question", async (t) => {
+  const answers = answersOf("P6");
+  const s = await setup(t, "Поезд и факт", "Я решил проехать двое суток на поезде без телефона, потому что в вагоне не оказалось розетки.");
+  const { applyThoughtState } = await import("../src/lib/thought-state");
+  const { getThoughtState } = await import("../src/lib/thought-state");
+  await applyThoughtState({ reelId: s.reelId, expectedRevision: 0, patch: { intent: "Показать, как поездка без телефона меняет внимание" } });
+  await s.say("уточни", ask("А что вы взяли в дорогу?"));
+  const fact = "К вечеру первого дня телефон сел, и я остался с книгой";
+  let calls = 0;
+  const shown = await s.say(answers[1], async (args) => {
+    calls += 1;
+    return calls === 1 ? ask("Какой вывод вы сделали из поездки?")(args) : ask("Какой механизм делает поездку без телефона запоминающейся?", fact)(args);
+  });
+  assert.equal(calls, 2);
+  assertPlainQuestion(shown, "fixed question");
+  assert.deepEqual((await getThoughtState(s.reelId)).facts.map((f) => f.text), [fact], "the fact of the rejected retry is kept");
+  assert.ok((await s.marks()).flat().includes("policy_lexicon_fallback"));
+});

@@ -31,7 +31,7 @@ import {
   thoughtUpdateAfterClassification,
 } from "@/lib/c00-classify-signal";
 import { isC00PolicyEnabled } from "@/lib/c00-policy";
-import { stripServiceMarks } from "@/lib/author-speech";
+import { acceptableFactText, stripServiceMarks } from "@/lib/author-speech";
 import { CEILING_REPLY, checkRequestRate, thoughtCeilingReached } from "@/lib/quota";
 import {
   composeUnderstandingList,
@@ -1160,8 +1160,8 @@ async function guardQuestionStyle(input: {
     closeGapIds: reply.thoughtUpdate.closeGapIds,
     ...(reply.thoughtUpdate.answeredGapId ? { answeredGapId: reply.thoughtUpdate.answeredGapId } : {}),
   };
-  const replaceWith = async (question: string, marks: string[], fromReply = reply) => {
-    const replaced = { action: "ask_question", question, clarificationReason: "нужно уточнение задачи", whyUnknown: "ответ сервера по состоянию материала", thoughtUpdate: kept };
+  const replaceWith = async (question: string, marks: string[], fromReply = reply, update: typeof kept = kept) => {
+    const replaced = { action: "ask_question", question, clarificationReason: "нужно уточнение задачи", whyUnknown: "ответ сервера по состоянию материала", thoughtUpdate: update };
     const rawText = JSON.stringify(replaced);
     await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
     return { reply: { ...parseAgentReply(replaced, { authorMessageId: input.authorMessageId }), discarded: [...fromReply.discarded, ...marks] as typeof reply.discarded }, rawText };
@@ -1176,6 +1176,9 @@ async function guardQuestionStyle(input: {
   if (serverMade || prefix) {
     return replaceWith(withPrefix(await fallbackQuestion({ reelId: input.reelId, turns, genre })), ["policy_lexicon_fallback"]);
   }
+  // K1/R1: a retried reply whose QUESTION is rejected may still carry a valid fact from the same author message; the fixed question
+  // must not throw it away (it did in R1: the retry held the fact, the fallback kept the first reply's empty update).
+  let retriedUpdate: typeof kept | null = null;
   try {
     const again = await gatewayComplete(input.complete, {
       model: LLM_MODEL,
@@ -1188,10 +1191,17 @@ async function guardQuestionStyle(input: {
       await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: again.text } });
       return { reply: { ...retried, discarded: [...retried.discarded, "policy_lexicon_regenerated"] as typeof reply.discarded }, rawText: again.text };
     }
+    if (!kept.fact && retried.thoughtUpdate.fact) {
+      retriedUpdate = {
+        fact: retried.thoughtUpdate.fact,
+        closeGapIds: retried.thoughtUpdate.closeGapIds,
+        ...(retried.thoughtUpdate.answeredGapId ? { answeredGapId: retried.thoughtUpdate.answeredGapId } : {}),
+      };
+    }
   } catch {
     // fall through to the fixed replacement
   }
-  return replaceWith(withPrefix(await fallbackQuestion({ reelId: input.reelId, turns, genre })), ["policy_lexicon_fallback"]);
+  return replaceWith(withPrefix(await fallbackQuestion({ reelId: input.reelId, turns, genre })), ["policy_lexicon_fallback"], reply, retriedUpdate ?? kept);
 }
 
 const HINT_QUESTION_NOTE =
@@ -1274,6 +1284,35 @@ async function dropDuplicateFact(input: {
   await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
   const parsed = parseAgentReply(replaced, { authorMessageId: input.authorMessageId });
   return { reply: { ...parsed, c00Signal: input.reply.c00Signal, discarded: [...input.reply.discarded, "fact_duplicate"] as typeof input.reply.discarded }, rawText };
+}
+
+/**
+ * K1: the last guard before the fact is stored. A fact from an answer "не помню / не знаю / нет ни …" is not accepted (the gap closure
+ * that depended on it goes with it); a fact that opens with such a clause keeps only its useful remainder (four or more words, as in I2b).
+ * It runs after every regeneration, so a retried reply cannot bring such a fact back. The topic is closed by G1, not here.
+ */
+async function dropDontKnowFact(input: {
+  callId: string;
+  reply: ReturnType<typeof parseAgentReply>;
+  rawText: string;
+  authorMessageId: string;
+  authorText: string;
+}): Promise<{ reply: ReturnType<typeof parseAgentReply>; rawText: string }> {
+  const fact = input.reply.thoughtUpdate.fact;
+  if (!fact) return { reply: input.reply, rawText: input.rawText };
+  const kept = acceptableFactText(fact.text, input.authorText);
+  if (kept === fact.text) return { reply: input.reply, rawText: input.rawText };
+  const { thoughtUpdate: _dropped, c00Signal: _signal, ...action } = input.reply.action as Record<string, unknown> & { action: string };
+  void _dropped;
+  void _signal;
+  const update = kept === null
+    ? { fact: null, closeGapIds: [] }
+    : { fact: { text: kept, sourceType: fact.sourceType, sourceId: fact.sourceId }, closeGapIds: input.reply.thoughtUpdate.closeGapIds, ...(input.reply.thoughtUpdate.answeredGapId ? { answeredGapId: input.reply.thoughtUpdate.answeredGapId } : {}) };
+  const replaced = { ...action, thoughtUpdate: update };
+  const rawText = JSON.stringify(replaced);
+  await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+  const parsed = parseAgentReply(replaced, { authorMessageId: input.authorMessageId });
+  return { reply: { ...parsed, c00Signal: input.reply.c00Signal, discarded: [...input.reply.discarded, "fact_dontknow"] as typeof input.reply.discarded }, rawText };
 }
 
 /** J1: what the stored model reply looks like after the per-thought ceiling (no model call). */
@@ -1757,11 +1796,18 @@ export async function runDialogueTurn(
         complete,
         authorMessageId: userMessage.id,
       });
-      return await authorSafeReply({
-        reelId,
+      const noUnknownFact = await dropDontKnowFact({
         callId: call.id,
         reply: styled.reply,
         rawText: styled.rawText,
+        authorMessageId: userMessage.id,
+        authorText: text,
+      });
+      return await authorSafeReply({
+        reelId,
+        callId: call.id,
+        reply: noUnknownFact.reply,
+        rawText: noUnknownFact.rawText,
         userPrompt,
         complete,
         knownIds: [reelId, userMessage.id, material.workingTakeId, material.transcriptRevisionId, ...thoughtFacts.map((fact) => fact.id)],

@@ -180,3 +180,31 @@ test("I2b: an answer 'не помню имя, но это было в мае' ke
   assert.equal(answers.length, 1);
   assert.match(answers[0], /^Это было в мае на рынке/);
 });
+
+test("K1: a fact from 'я не помню, о чём именно речь…' is not stored; a normal fact after it is", async (t) => {
+  const { reelId } = await setup(t, "Не помню");
+  const { sendDialogueMessage } = await import("../src/lib/dialogue");
+  const { getThoughtState } = await import("../src/lib/thought-state");
+  const unknown = "Честно говоря, я не помню, о чём именно речь в этом ролике.";
+  await sendDialogueMessage(reelId, { text: unknown, idempotencyKey: "k1-1" }, askWithFact(unknown) as never);
+  assert.equal((await getThoughtState(reelId)).facts.length, 0, "an answer of not knowing gives no fact");
+  const known = "Тётя Люба продаёт сметану развесную, в банке она слишком жидкая.";
+  await sendDialogueMessage(reelId, { text: known, idempotencyKey: "k1-2" }, askWithFact(known) as never);
+  assert.deepEqual((await getThoughtState(reelId)).facts.map((f) => f.text), [known]);
+});
+
+test("K1: 'не помню имя, но это было в мае…' keeps only its useful remainder as the fact; 'нет ни …' gives none", async (t) => {
+  const { prisma, reelId } = await setup(t, "Остаток факта");
+  const { sendDialogueMessage } = await import("../src/lib/dialogue");
+  const { getThoughtState } = await import("../src/lib/thought-state");
+  const mixed = "Не помню имя, но это было в мае на рынке у входа, там продавали первую клубнику";
+  await sendDialogueMessage(reelId, { text: mixed, idempotencyKey: "k1-3" }, askWithFact(mixed) as never);
+  assert.deepEqual((await getThoughtState(reelId)).facts.map((f) => f.text), ["Это было в мае на рынке у входа, там продавали первую клубнику"]);
+  const none = "Нет ни записей, ни фото, ничего подходящего у меня не осталось";
+  await sendDialogueMessage(reelId, { text: none, idempotencyKey: "k1-4" }, askWithFact(none) as never);
+  assert.equal((await getThoughtState(reelId)).facts.length, 1, "no second fact");
+  const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId } });
+  const rows = await prisma.dialogueMessage.findMany({ where: { threadId: thread.id, role: "assistant", status: "done" }, orderBy: { createdAt: "asc" } });
+  const marks = rows.map((r) => (JSON.parse(r.payloadJson) as { discardedUpdates?: string[] }).discardedUpdates ?? []);
+  assert.deepEqual(marks.map((m) => m.includes("fact_dontknow")), [true, true]);
+});

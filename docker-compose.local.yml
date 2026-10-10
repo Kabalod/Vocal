@@ -1,0 +1,21 @@
+# Local Postgres for running Vocal on your own machine (docs/LOCAL_LIVE_RUN.md). NOT the production compose file (docker-compose.yml).
+# Only the database: the app runs with `npm`/Next on the host. Listens on 127.0.0.1 only; data survives restarts in the named volume.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: vocal_local
+      POSTGRES_DB: vocal_local
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - vocal-local-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d vocal_local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+volumes:
+  vocal-local-pgdata:

@@ -111,3 +111,20 @@ test("I2c: an answer that opens with 'не помню' gives no quote, its usefu
   assert.ok(q && /августе/.test(q), q ?? "null");
   assert.doesNotMatch(q!, /не помню/i);
 });
+
+// ---- K1: facts from "не помню / не знаю / нет ни …" ------------------------------------------------------------------------------
+
+test("K1: acceptableFactText drops a don't-know fact, keeps a useful remainder of four or more words, and leaves normal facts alone", async () => {
+  const { acceptableFactText } = await import("../src/lib/author-speech");
+  const { isUnknownAnswer } = await import("../src/lib/question-guard");
+  assert.equal(acceptableFactText("Честно говоря, я не помню, о чём именно речь.", "Честно говоря, я не помню, о чём именно речь."), null);
+  assert.equal(acceptableFactText("Нет ни записей, ни фото.", "Нет ни записей, ни фото."), null);
+  assert.equal(acceptableFactText("Я не знаю.", "Я не знаю."), null);
+  assert.equal(acceptableFactText("Не помню имя, но это было в мае на рынке у входа", "Не помню имя, но это было в мае на рынке у входа"), "Это было в мае на рынке у входа");
+  assert.equal(acceptableFactText("Тётя Люба продаёт сметану развесную", "Не помню имя, но тётя Люба продаёт сметану развесную"), "Тётя Люба продаёт сметану развесную");
+  assert.equal(acceptableFactText("Я ходил на рынок в шесть утра", "Я ходил на рынок в шесть утра"), "Я ходил на рынок в шесть утра");
+  assert.equal(acceptableFactText("Я не помню", "Не помню"), null);
+  // the topic closes: G1 reads these answers as "unknown"
+  assert.equal(isUnknownAnswer("Нет ни записей, ни фото."), true);
+  assert.equal(isUnknownAnswer("Честно говоря, я не помню, о чём именно речь."), true);
+});
