@@ -8,7 +8,8 @@ import path from "node:path";
 import { resetPrismaClient } from "../../src/lib/db";
 import { closePostgresTestDb, openPostgresTestDb } from "../../tests/helpers/postgres-test-db";
 import { scriptRepeats } from "../../src/lib/author-speech";
-import { factShares, fillersIn, phraseShares } from "./script-metrics-lib";
+import { factShares, factSharesStem, fillersIn, phraseShares } from "./script-metrics-lib";
+import { legacyFactQuote } from "./legacy-quote";
 
 (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
 process.env.VOCAL_TAKE_DIAGNOSIS = "1";
@@ -22,6 +23,9 @@ const SEED = argOf("seed") ?? "1";
 const DRY = process.argv.includes("--dry");
 // --quotes-only: a single build per dialogue, with quotes (at most two per script); the "without quotes" build is not repeated.
 const QUOTES_ONLY = process.argv.includes("--quotes-only");
+// --compare: offline only. Per dialogue the two quotes the old and the new picker would give, and the coverage of the facts in a saved script file (--rescore=<md>) by the old and the new metric.
+const COMPARE = process.argv.includes("--compare");
+const RESCORE = argOf("rescore");
 
 type Raw = { dialogue: string; label: string; text: string };
 
@@ -60,6 +64,27 @@ async function main() {
     const row: Record<string, unknown> = { persona: pid };
     const facts = JSON.parse((await prisma.thoughtState.findUniqueOrThrow({ where: { reelId: made.reel.id }, select: { factsJson: true } })).factsJson) as { text: string }[];
     row.factsInState = facts.length;
+    if (COMPARE) {
+      const { factQuote } = await import("../../src/lib/author-speech");
+      const bodies = new Map<string, string>();
+      const state = JSON.parse((await prisma.thoughtState.findUniqueOrThrow({ where: { reelId: made.reel.id }, select: { factsJson: true } })).factsJson) as { text: string; sourceId: string }[];
+      const rows = await prisma.dialogueMessage.findMany({ where: { thread: { reelId: made.reel.id }, role: "user" }, select: { id: true, body: true } });
+      for (const r of rows) bodies.set(r.id, r.body);
+      const pick = (fn: (f: string, m: string) => string | null) =>
+        state.map((f) => fn(f.text, bodies.get(f.sourceId) ?? "")).filter((q): q is string => Boolean(q)).sort((a, b) => b.split(/\s+/).length - a.split(/\s+/).length).slice(0, 2);
+      row.quotesOld = pick(legacyFactQuote);
+      row.quotesNew = pick(factQuote);
+      if (RESCORE) {
+        const saved = readFileSync(RESCORE, "utf8").split(/\n## /).slice(1).find((b) => b.startsWith(pid));
+        const script = saved ? (saved.split("**С цитатами:**")[1] ?? saved).trim() : "";
+        const texts = state.map((f) => f.text);
+        const oldM = factShares(texts, script), newM = factSharesStem(texts, script);
+        row.coverageOld = `${oldM.raw.found}/${oldM.raw.total}`;
+        row.coverageStem = `${newM.found}/${newM.total}`;
+      }
+      results.push(row);
+      continue;
+    }
     row.factTexts = facts.map((f) => f.text.slice(0, 110));
     for (const quotes of QUOTES_ONLY ? ["1"] : ["0", "1"]) {
       process.env.VOCAL_FACT_QUOTES = quotes;

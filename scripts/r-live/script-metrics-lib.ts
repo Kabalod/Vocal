@@ -55,3 +55,25 @@ export function fillersIn(script: string): number {
   for (let i = 0; i + 1 < tokens.length; i += 1) if (tokens[i] === "как" && tokens[i + 1] === "бы") n += 1;
   return n;
 }
+
+const PERSON_WORDS = new Set(["автор", "автора", "автору", "он", "она", "они", "его", "её", "их", "ему", "ей", "мне", "меня", "мой", "моя", "мои", "мы", "нас", "наш", "вы", "вас", "ваш", "себя", "свой", "своя", "свои"]);
+
+/**
+ * I2c: facts found in the script by word stems (first five letters), ignoring the person of the sentence ("Автор проиграл…" and
+ * "Я проиграл…" are the same fact) and the pronouns: at least 60 % of the fact's stems are in the script. Next to the old, exact-word metric.
+ */
+export function factSharesStem(facts: string[], script: string): { found: number; total: number } {
+  const stems = (text: string) => new Set(rawTokens(text).filter((w) => w.length >= 4 && !PERSON_WORDS.has(w)).map((w) => w.slice(0, 5)));
+  const scriptStems = stems(script);
+  let found = 0;
+  let total = 0;
+  for (const fact of facts) {
+    const f = stems(fact);
+    if (f.size === 0) continue;
+    total += 1;
+    let hit = 0;
+    for (const x of f) if (scriptStems.has(x)) hit += 1;
+    if (hit / f.size >= 0.6) found += 1;
+  }
+  return { found, total };
+}

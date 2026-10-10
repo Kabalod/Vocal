@@ -168,11 +168,19 @@ function stemSet(text: string): Set<string> {
 }
 
 /**
- * The part of the author's own message (cleaned of fillers and repeats) that the fact is about: the sentence with the largest
- * overlap, at most 30 words. Null when the fact is not mostly a restatement of this message: a fact the author corrected or replaced
- * has little in common with the message it points to, so no quote is made and the retracted wording cannot come back through it.
+ * The part of the author's own message (cleaned of fillers and repeats) that the fact is about (I2c). Null when the fact is not mostly
+ * a restatement of this message: a fact the author corrected or replaced has little in common with the message it points to, so the
+ * retracted wording cannot come back through a quote.
+ *
+ * Choice: the message is cut at the normalized sentence boundaries; a long sentence is cut into windows of at most 30 words that
+ * start at the sentence start or after a conjunction. A window loses its leading discourse words ("знаете", "честно говоря"…) and a
+ * trailing conjunction/preposition. Rejected: a window shorter than 6 words, a window with a stray digit ("3 а…") near the end or
+ * a digit followed by a one-letter word, a window that still ends on a hanging word. Among the rest the one that covers most of the fact
+ * wins, with a bonus for a concrete detail (a number, a spoken line, a name, a past action).
  */
-export function factQuote(factText: string, message: string): string | null {
+export function factQuote(factText: string, rawMessage: string): string | null {
+  const message = materialAfterDontKnow(rawMessage);
+  if (!message) return null;
   const fact = stemSet(factText);
   const whole = stemSet(message);
   if (fact.size === 0 || whole.size === 0) return null;
@@ -180,17 +188,117 @@ export function factQuote(factText: string, message: string): string | null {
   for (const stem of fact) if (whole.has(stem)) inMessage += 1;
   if (inMessage / fact.size < QUOTE_MIN_FACT_OVERLAP) return null;
   const sentences = normalizeTranscript(message).split(/(?<=[.!?…])\s+/).filter(Boolean);
-  let best = "";
-  let bestScore = 0;
+  let best: { text: string; score: number } | null = null;
   for (const sentence of sentences) {
-    const stems = stemSet(sentence);
-    let score = 0;
-    for (const stem of fact) if (stems.has(stem)) score += 1;
-    if (score > bestScore) { best = sentence; bestScore = score; }
+    for (const raw of quoteCandidates(sentence)) {
+      const hard = raw.startsWith(HARD_CUT);
+      const candidate = hard ? raw.slice(1) : raw;
+      const stems = stemSet(candidate);
+      let overlap = 0;
+      for (const stem of fact) if (stems.has(stem)) overlap += 1;
+      if (overlap === 0) continue;
+      const score = overlap + 0.5 * Math.min(2, detailFeatures(candidate, message)) - (hard ? 1 : 0);
+      if (!best || score > best.score) best = { text: candidate, score };
+    }
   }
-  if (!best || bestScore === 0) return null;
-  const words = best.replace(/[.!?…]+$/u, "").split(/\s+/);
-  return words.length > QUOTE_MAX_WORDS ? `${words.slice(0, QUOTE_MAX_WORDS).join(" ")}…` : words.join(" ");
+  return best ? best.text : null;
+}
+
+const INTRO_WORDS = /^(?:знаете|понимаете|слушайте|смотрите|значит|конечно|кстати|вообще|в общем|в принципе|если честно|честно говоря|честно сказать|так вот|ну вот|итак|собственно|короче)[,.\s]+/iu;
+const HANGING = new Set(["и", "а", "но", "что", "как", "в", "на", "с", "к", "по", "за", "у", "о", "от", "до", "из", "для", "же", "бы", "то", "или", "когда", "потому", "чтобы", "где", "который", "я", "мы", "он", "она", "они", "не", "ни", "его", "её", "их", "мне", "мой", "моя", "это", "этот", "там", "тут"]);
+const SPLIT_AFTER = new Set(["но", "потом", "когда", "тогда", "поэтому"]);
+/** A long sentence is cut BEFORE one of these (a clause ends there), not in the middle of a clause. */
+const CLAUSE_STARTERS = new Set(["но", "потом", "когда", "тогда", "поэтому", "потому", "чтобы", "а", "и", "после", "так"]);
+const MAX_WORDS = QUOTE_MAX_WORDS;
+/** Marker for a candidate cut in the middle of a clause; it is scored lower and the marker is removed before use. */
+const HARD_CUT = "\u0001";
+const MIN_WORDS = 6;
+
+function stripIntro(text: string): string {
+  let out = text.trim();
+  for (let i = 0; i < 3 && INTRO_WORDS.test(out); i += 1) out = out.replace(INTRO_WORDS, "");
+  return out.replace(/^[,;\s]+/, "").replace(/^(?:а|и|ну|так|да)(?![\p{L}])[,\s]+/iu, "");
+}
+
+function trimTail(words: string[]): string[] {
+  const out = [...words];
+  while (out.length > 0 && HANGING.has(out[out.length - 1].toLowerCase().replace(/[^\p{L}]/gu, ""))) out.pop();
+  return out;
+}
+
+/** A digit that is a fragment: alone in the last four words, or followed by a one-letter word. */
+function strayDigitAt(words: string[]): number {
+  for (let i = 0; i < words.length; i += 1) {
+    if (!/^\d{1,2}$/.test(words[i])) continue;
+    const next = (words[i + 1] ?? "").replace(/[^\p{L}]/gu, "");
+    if (i >= words.length - 4 || next.length === 1) return i;
+  }
+  return -1;
+}
+
+const MODAL = new Set(["может", "могут", "можно", "должен", "должна", "должны", "нужно", "надо"]);
+
+/** "…может привести" / "…нужно" at the end is a cut-off clause: drop the modal together with its infinitive. */
+function trimModalTail(words: string[]): string[] {
+  const out = [...words];
+  const word = (i: number) => (out[i] ?? "").toLowerCase().replace(/[^\p{L}]/gu, "");
+  if (out.length >= 2 && MODAL.has(word(out.length - 2))) out.splice(-2);
+  else if (out.length >= 1 && MODAL.has(word(out.length - 1))) out.pop();
+  return out;
+}
+
+/** A lone 1-2 digit token in a transcript is a list-number artifact ("3 а тётя люба…"): it is a boundary, never part of a quote. */
+function quoteCandidates(sentence: string): string[] {
+  const parts = sentence.replace(/[.!?…]+$/u, "").split(/(?<![\p{L}\d/])\d{1,2}(?![\p{L}\d/])/u);
+  const seenAll = new Set<string>();
+  return parts.flatMap((part) => windowCandidates(stripIntro(part))).filter((c) => (seenAll.has(c) ? false : (seenAll.add(c), true)));
+}
+
+function windowCandidates(clean: string): string[] {
+  const words = clean.split(/\s+/).filter(Boolean);
+  const starts = [0];
+  for (let i = 0; i < words.length - 1; i += 1) if (SPLIT_AFTER.has(words[i].toLowerCase().replace(/[^\p{L}]/gu, ""))) starts.push(i + 1);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const start of starts) {
+    const rest = words.slice(start);
+    let end = Math.min(rest.length, MAX_WORDS);
+    let hardCut = false;
+    if (rest.length > MAX_WORDS) {
+      // end before the last clause starter between the 12th and the 30th word; with none, the cut is hard (the candidate is penalized)
+      let boundary = -1;
+      for (let j = Math.min(MAX_WORDS, rest.length - 1); j >= 12; j -= 1) {
+        if (CLAUSE_STARTERS.has(rest[j].toLowerCase().replace(/[^\p{L}]/gu, ""))) { boundary = j; break; }
+      }
+      if (boundary > 0) end = boundary;
+      else hardCut = true;
+    }
+    let piece = trimTail(rest.slice(0, end));
+    const stray = strayDigitAt(piece);
+    if (stray >= 0) piece = trimTail(piece.slice(0, stray));
+    piece = trimTail(trimModalTail(piece));
+    if (piece.length < MIN_WORDS || strayDigitAt(piece) >= 0) continue;
+    const text = piece.join(" ");
+    if (seen.has(text)) continue;
+    seen.add(text);
+    out.push((hardCut ? HARD_CUT : "") + text.charAt(0).toUpperCase() + text.slice(1));
+  }
+  return out;
+}
+
+const NUMBER_WORDS = /(?<![\p{L}])(?:один|одна|одно|два|две|три|четыре|пять|шесть|семь|восемь|девять|десять|двенадцать|двадцать|сто|тысяч\p{L}*|пол\p{L}*|первый|первая|первые|второй|третий)(?![\p{L}])/iu;
+const SPEECH = /(?<![\p{L}])(?:сказал\p{L}*|ответил\p{L}*|спросил\p{L}*|говорил\p{L}*|говорит|посоветовал\p{L}*|предложил\p{L}*|крикнул\p{L}*|написал\p{L}*)(?![\p{L}])/iu;
+const PAST_ACTION = /(?<![\p{L}])\p{L}{3,}(?:л|ла|ли|ло)(?![\p{L}])/u;
+
+/** Concrete detail in a window: a number, a spoken line, a name (a capital letter inside a sentence of the original), a past action. */
+function detailFeatures(candidate: string, original: string): number {
+  let features = 0;
+  if (/\d/.test(candidate) || NUMBER_WORDS.test(candidate)) features += 1;
+  if (SPEECH.test(candidate)) features += 1;
+  const names = (original.match(/(?<=[\p{L}]\s)[А-ЯЁ][а-яё]{2,}/gu) ?? []).map((n) => n.toLowerCase());
+  if (names.some((n) => candidate.toLowerCase().includes(n))) features += 1;
+  if (PAST_ACTION.test(candidate)) features += 1;
+  return features;
 }
 
 /** An answer that opens with "не помню / не знаю / не думал…" (the don't-know clause is at the start). */
