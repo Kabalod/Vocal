@@ -1,5 +1,5 @@
 import { checkRequestRate } from "@/lib/quota";
-import { changeLooksLikeEdit, cleanSpeechText, factQuote, NO_EDIT_LIST_FALLBACK, startsWithDontKnow } from "@/lib/author-speech";
+import { changeLooksLikeEdit, cleanSpeechText, dedupeScript, factQuote, fixHomoglyphs, materialAfterDontKnow, NO_EDIT_LIST_FALLBACK } from "@/lib/author-speech";
 import { NO_FACT_NOTICE, NO_FACT_STREAK_LIMIT, THIN_BLOCK_REASON, THIN_NEXT_QUESTION, isCommandText, isDontKnow, isEndPhrase, materialUnits, noFactStreak, speechWords } from "@/lib/turn-policy";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -367,6 +367,8 @@ export function factQuotesEnabled(env: Record<string, string | undefined> = proc
   return env.VOCAL_FACT_QUOTES !== "0";
 }
 
+export const MAX_FACT_QUOTES = 2;
+
 async function loadFactQuotes(
   reelId: string,
   facts: { id: string; text: string; sourceType: string; sourceId: string }[],
@@ -385,6 +387,9 @@ async function loadFactQuotes(
     const quote = body ? factQuote(fact.text, body) : null;
     if (quote) out.set(fact.id, quote);
   }
+  // I2b: at most two quotes per script (the two longest, ties by order): more of them made the script repeat itself
+  const best = [...out.entries()].sort((a, b) => b[1].split(/\s+/).length - a[1].split(/\s+/).length).slice(0, MAX_FACT_QUOTES).map(([id]) => id);
+  for (const id of [...out.keys()]) if (!best.includes(id)) out.delete(id);
   return out;
 }
 
@@ -475,12 +480,13 @@ async function collectFromLoaded(reelId: string, material: Omit<V05Material, "ke
     const picked: { id: string; text: string }[] = [];
     for (const row of rows) {
       if (isCommandText(row.body) || isDontKnow(row.body) || isEndPhrase(row.body) || speechWords(row.body) < 4) continue;
-      if (startsWithDontKnow(row.body)) continue; // I2 live check: "не помню, кому рассказываю…" ended up in two scripts as content
+      const remainder = materialAfterDontKnow(row.body); // I2 live check: "не помню, кому рассказываю…" ended up in two scripts; I2b: a useful remainder ("не помню имя, но это было в мае") stays
+      if (remainder === null || speechWords(remainder) < 4) continue;
       if (isNonContentUtterance(normalizeDialogueUtterance(row.body))) continue;
       // A message that already has an accepted fact is represented by that fact: the fact is the curated (possibly corrected)
       // version, and a retracted statement must not come back through the raw answer. Only answers without a fact are added.
       if (factByMessage.has(row.id)) continue;
-      picked.push({ id: row.id, text: cleanSpeechText(row.body) });
+      picked.push({ id: row.id, text: cleanSpeechText(remainder) });
     }
     let used = 0;
     const chosen: { id: string; text: string }[] = [];
@@ -1170,6 +1176,8 @@ export async function generateV05Script(
 
         // 09.10 (E7): the stored script carries no speech fillers, self-repeats or service markers, whatever the model returned.
         parsed.data.script = cleanSpeechText(parsed.data.script) || parsed.data.script;
+        // I2b: Latin look-alikes inside Cyrillic words are fixed; a repeated sentence (a fact or a quote said twice) is dropped, without a new model call.
+        parsed.data.script = dedupeScript(fixHomoglyphs(parsed.data.script)).text || parsed.data.script;
         if (scriptLeaksInternalIds(parsed.data.script, [reelId, frozen.world.workingTakeId, frozen.world.selectedTranscriptId])) {
           throw new ScriptError("Ответ модели содержит служебные данные и не сохранён как сценарий.", "LLM_INVALID");
         }

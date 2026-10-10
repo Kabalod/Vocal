@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { resetPrismaClient } from "../../src/lib/db";
 import { closePostgresTestDb, openPostgresTestDb } from "../../tests/helpers/postgres-test-db";
+import { scriptRepeats } from "../../src/lib/author-speech";
 import { factShares, fillersIn, phraseShares } from "./script-metrics-lib";
 
 (process.env as { NODE_ENV?: string }).NODE_ENV = "test";
@@ -19,6 +20,8 @@ const argOf = (name: string) => process.argv.find((a) => a.startsWith(`--${name}
 const DIR = argOf("dir") ?? ".";
 const SEED = argOf("seed") ?? "1";
 const DRY = process.argv.includes("--dry");
+// --quotes-only: a single build per dialogue, with quotes (at most two per script); the "without quotes" build is not repeated.
+const QUOTES_ONLY = process.argv.includes("--quotes-only");
 
 type Raw = { dialogue: string; label: string; text: string };
 
@@ -57,17 +60,20 @@ async function main() {
     const row: Record<string, unknown> = { persona: pid };
     const facts = JSON.parse((await prisma.thoughtState.findUniqueOrThrow({ where: { reelId: made.reel.id }, select: { factsJson: true } })).factsJson) as { text: string }[];
     row.factsInState = facts.length;
-    for (const quotes of ["0", "1"]) {
+    for (const quotes of QUOTES_ONLY ? ["1"] : ["0", "1"]) {
       process.env.VOCAL_FACT_QUOTES = quotes;
       const sources = await collectV05SourceTexts(made.reel.id);
       const chars = sources.texts.reduce((a, t) => a + t.label.length + t.text.length, 0);
       row[`inputChars_${quotes}`] = chars;
+      row[`quotesInInput_${quotes}`] = sources.texts.filter((t) => t.text.includes("Слова автора:")).length;
       if (DRY) continue;
       let scriptText = "";
       let tokens = 0;
+      let modelScript = "";
       try {
         const complete = (async (args: Parameters<typeof defaultCompleteJson>[0]) => {
           const result = await defaultCompleteJson(args);
+          try { modelScript = String((JSON.parse(result.text) as { script?: string }).script ?? ""); } catch { /* none */ }
           liveCalls += 1;
           tokens += (result.usage?.promptTokens ?? 0) + (result.usage?.completionTokens ?? 0);
           return result;
@@ -84,6 +90,8 @@ async function main() {
       row[`facts_${quotes}`] = f ? `${f.raw.found}/${f.raw.total}` : null;
       row[`fillers_${quotes}`] = scriptText ? fillersIn(scriptText) : null;
       row[`tokens_${quotes}`] = tokens;
+      row[`repeatsModel_${quotes}`] = modelScript ? scriptRepeats(modelScript) : null;
+      row[`repeatsFinal_${quotes}`] = scriptText ? scriptRepeats(scriptText) : null;
       row[`script_${quotes}`] = scriptText;
     }
     results.push(row);

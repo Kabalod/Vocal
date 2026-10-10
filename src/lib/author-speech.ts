@@ -193,8 +193,82 @@ export function factQuote(factText: string, message: string): string | null {
   return words.length > QUOTE_MAX_WORDS ? `${words.slice(0, QUOTE_MAX_WORDS).join(" ")}…` : words.join(" ");
 }
 
-/** An answer that opens with "не помню / не знаю / не думал…" says there is nothing to tell: it is not material for the script. */
+/** An answer that opens with "не помню / не знаю / не думал…" (the don't-know clause is at the start). */
 export function startsWithDontKnow(text: string): boolean {
   const opening = meaningfulWords(text).slice(0, 6).join(" ");
   return /не помню|не знаю|не думал|не задумывал|затрудняюсь|без понятия/.test(opening);
+}
+
+const STILL_UNKNOWN = /не помн|не зна|не думал|не задум|нет ни|нет никак|записях|не фиксиров|не могу|без понятия|затрудня/i;
+
+/**
+ * I2b: what is left of an answer for the script. An answer without a don't-know opening is returned as it is. An answer that opens
+ * with "не помню имя, но это было в мае" keeps its useful remainder ("это было в мае"): the part after "но / а / зато / ; / —" if it has
+ * four or more meaningful words and is not itself a statement of not knowing. Otherwise nothing is left (null).
+ */
+export function materialAfterDontKnow(text: string): string | null {
+  if (!startsWithDontKnow(text)) return text;
+  const match = /(?:,|;|—|–|\.)\s*(?:но|а|зато|однако)\s+|\s(?:но|зато|однако)\s+|[;—–.]\s+/iu.exec(text);
+  if (!match) return null;
+  const rest = text.slice(match.index + match[0].length).trim();
+  if (meaningfulWords(rest).length < 4 || STILL_UNKNOWN.test(rest)) return null;
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
+// ---- I2b: Latin look-alikes inside Cyrillic words; repeats in a script ------------------------------------------------------
+
+const HOMOGLYPHS: Record<string, string> = {
+  a: "а", e: "е", o: "о", p: "р", c: "с", x: "х", y: "у",
+  A: "А", B: "В", C: "С", E: "Е", H: "Н", K: "К", M: "М", O: "О", P: "Р", T: "Т", X: "Х", Y: "У",
+};
+
+/** A Latin look-alike letter inside a word that has Cyrillic letters is a typo of the model ("Любa" with a Latin a): put the Cyrillic letter. Words fully in Latin are left alone. */
+export function fixHomoglyphs(text: string): string {
+  return text.replace(/[\p{L}]+/gu, (word) => {
+    if (!/[\u0400-\u04FF]/.test(word) || !/[A-Za-z]/.test(word)) return word;
+    return word.replace(/[A-Za-z]/g, (ch) => HOMOGLYPHS[ch] ?? ch);
+  });
+}
+
+function sentenceStems(sentence: string): Set<string> {
+  return new Set(meaningfulWords(sentence).filter((w) => w.length >= 4).map((w) => w.slice(0, 5)));
+}
+
+const REPEAT_CONTAINMENT = 0.8;
+const REPEAT_MIN_STEMS = 4;
+
+function isRepeatOf(candidate: Set<string>, earlier: Set<string>): boolean {
+  if (candidate.size < REPEAT_MIN_STEMS) return false;
+  let shared = 0;
+  for (const stem of candidate) if (earlier.has(stem)) shared += 1;
+  return shared / candidate.size >= REPEAT_CONTAINMENT;
+}
+
+/**
+ * Deterministic, after the model's answer, no new model call: a sentence whose content words (stems of five letters) are 80 % or more
+ * contained in an EARLIER sentence is a repeat of a fact or a quote and is dropped; paragraphs and the first occurrence stay.
+ */
+export function dedupeScript(script: string): { text: string; removed: number } {
+  const kept: Set<string>[] = [];
+  let removed = 0;
+  const lines = script.split("\n").map((line) => {
+    const sentences = line.split(/(?<=[.!?…])\s+/).filter(Boolean);
+    const out: string[] = [];
+    for (const sentence of sentences) {
+      const stems = sentenceStems(sentence);
+      if (kept.some((earlier) => isRepeatOf(stems, earlier))) {
+        removed += 1;
+        continue;
+      }
+      kept.push(stems);
+      out.push(sentence);
+    }
+    return out.join(" ");
+  });
+  return { text: lines.filter((line, i) => line || (i > 0 && lines[i - 1])).join("\n").trim(), removed };
+}
+
+/** How many sentences of a script repeat an earlier one (the same test as dedupeScript). */
+export function scriptRepeats(script: string): number {
+  return dedupeScript(script).removed;
 }

@@ -47,3 +47,32 @@ test("H9: only the exact form (факт N) is cut", () => {
   assert.equal(stripServiceMarks("Я купил 3 яблока и факт 5"), "Я купил 3 яблока и факт 5");
   assert.equal(stripServiceMarks("(пункт 4) тоже остаётся"), "(пункт 4) тоже остаётся");
 });
+
+import { dedupeScript, fixHomoglyphs, materialAfterDontKnow, scriptRepeats } from "../src/lib/author-speech";
+
+test("I2b: Latin look-alikes inside Cyrillic words become Cyrillic; Latin words stay", () => {
+  assert.equal(fixHomoglyphs("тётя Любa сказала"), "тётя Люба сказала", "Latin a in «Любa»");
+  assert.equal(fixHomoglyphs("Тётя Любa, торгующая сметаной"), "Тётя Люба, торгующая сметаной");
+  assert.equal(fixHomoglyphs("cметана и pынок"), "сметана и рынок", "c and p");
+  assert.equal(fixHomoglyphs("Я купил iPhone и OK"), "Я купил iPhone и OK", "words fully in Latin are left alone");
+  assert.equal(fixHomoglyphs("Обычный текст."), "Обычный текст.");
+});
+
+test("I2b: 'не помню' keeps a useful remainder and drops a statement of not knowing", () => {
+  assert.equal(materialAfterDontKnow("Не помню имя, но это было в мае"), "Это было в мае", "the useful remainder stays");
+  assert.equal(materialAfterDontKnow("Не помню имя, а встретились мы на рынке у входа"), "Встретились мы на рынке у входа");
+  assert.equal(materialAfterDontKnow("Честно говоря, я не помню, кому именно рассказываю эту историю; в моих записях нет ни упоминания зрителей"), null, "the remainder is not knowing again");
+  assert.equal(materialAfterDontKnow("Не помню"), null);
+  assert.equal(materialAfterDontKnow("Не помню имя, но в мае"), null, "a remainder of fewer than four words");
+  assert.equal(materialAfterDontKnow("Я помню, что это было в мае"), "Я помню, что это было в мае", "no don't-know opening: unchanged");
+});
+
+test("I2b: a sentence that repeats an earlier one is dropped once, paragraphs and the first occurrence stay", () => {
+  const script = "Тётя Люба советует брать сметану развесную, потому что в банке она жидкая.\nЯ хожу на рынок в шесть утра по вторникам.\nТётя Люба всегда советует брать развесную сметану, в банке она слишком жидкая. Потом я иду домой.";
+  const out = dedupeScript(script);
+  assert.equal(out.removed, 1);
+  assert.equal(out.text, "Тётя Люба советует брать сметану развесную, потому что в банке она жидкая.\nЯ хожу на рынок в шесть утра по вторникам.\nПотом я иду домой.");
+  assert.equal(scriptRepeats(script), 1);
+  assert.equal(scriptRepeats(out.text), 0);
+  assert.equal(dedupeScript("Я пошёл домой. Там было тихо.").removed, 0, "short different sentences are kept");
+});

@@ -143,3 +143,40 @@ test("I2 live finding: an answer that opens with 'не помню' is not build 
   assert.equal(answers.length, 1);
   assert.match(answers[0], /рынок/);
 });
+
+test("I2b: at most two quotes per script; the script has no Latin look-alikes and no repeated sentence, without a new model call", async (t) => {
+  const { reelId } = await setup(t, "Две цитаты");
+  const { sendDialogueMessage } = await import("../src/lib/dialogue");
+  const { collectV05SourceTexts, generateV05Script, MAX_FACT_QUOTES } = await import("../src/lib/v05-script");
+  assert.equal(MAX_FACT_QUOTES, 2);
+  const answers = [
+    "Я встаю в шесть утра по вторникам и четвергам и иду на рынок пока там тихо и почти нет людей",
+    "Тётя Люба на углу продаёт сметану и советует брать развесную потому что в банке она слишком жидкая",
+    "Первые две недели я переплатил за красивую форель потому что она лежала на самом видном месте",
+    "Теперь я сначала смотрю что есть на прилавках и только потом решаю что готовить на ужин",
+  ];
+  for (const [i, text] of answers.entries()) await sendDialogueMessage(reelId, { text, idempotencyKey: `sh-q2-${i}` }, askWithFact(text) as never);
+  const sources = await collectV05SourceTexts(reelId);
+  const quoted = sources.texts.filter((item) => item.label === "Факт мысли" && item.text.includes("Слова автора:"));
+  assert.equal(quoted.length, 2, "four facts, two quotes");
+  let calls = 0;
+  const built = await generateV05Script(reelId, { idempotencyKey: "sh-q2-build" }, (async () => {
+    calls += 1;
+    return reply({
+      script: "Тётя Любa советует брать сметану развесную, потому что в банке она жидкая. Я хожу на рынок в шесть утра. Тётя Люба всегда советует брать развесную сметану, в банке она слишком жидкая.",
+      changes: ["Убрал лишнее."],
+    });
+  }) as never);
+  assert.equal(calls, 1, "the repeat is removed on the server, no second call");
+  assert.equal(built.viewing?.body, "Тётя Люба советует брать сметану развесную, потому что в банке она жидкая. Я хожу на рынок в шесть утра.");
+});
+
+test("I2b: an answer 'не помню имя, но это было в мае' keeps its useful remainder in the build input", async (t) => {
+  const { reelId } = await setup(t, "Остаток");
+  const { sendDialogueMessage } = await import("../src/lib/dialogue");
+  const { collectV05SourceTexts } = await import("../src/lib/v05-script");
+  await sendDialogueMessage(reelId, { text: "Не помню имя, но это было в мае на рынке у входа, там продавали первую клубнику", idempotencyKey: "sh-rest-1" }, askWithFact(null) as never);
+  const answers = (await collectV05SourceTexts(reelId)).texts.filter((item) => item.label === "Ответ автора").map((item) => item.text);
+  assert.equal(answers.length, 1);
+  assert.match(answers[0], /^Это было в мае на рынке/);
+});
