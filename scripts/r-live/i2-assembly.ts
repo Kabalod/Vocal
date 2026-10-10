@@ -60,6 +60,7 @@ async function main() {
     const row: Record<string, unknown> = { persona: pid };
     const facts = JSON.parse((await prisma.thoughtState.findUniqueOrThrow({ where: { reelId: made.reel.id }, select: { factsJson: true } })).factsJson) as { text: string }[];
     row.factsInState = facts.length;
+    row.factTexts = facts.map((f) => f.text.slice(0, 110));
     for (const quotes of QUOTES_ONLY ? ["1"] : ["0", "1"]) {
       process.env.VOCAL_FACT_QUOTES = quotes;
       const sources = await collectV05SourceTexts(made.reel.id);
