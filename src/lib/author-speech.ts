@@ -192,3 +192,9 @@ export function factQuote(factText: string, message: string): string | null {
   const words = best.replace(/[.!?…]+$/u, "").split(/\s+/);
   return words.length > QUOTE_MAX_WORDS ? `${words.slice(0, QUOTE_MAX_WORDS).join(" ")}…` : words.join(" ");
 }
+
+/** An answer that opens with "не помню / не знаю / не думал…" says there is nothing to tell: it is not material for the script. */
+export function startsWithDontKnow(text: string): boolean {
+  const opening = meaningfulWords(text).slice(0, 6).join(" ");
+  return /не помню|не знаю|не думал|не задумывал|затрудняюсь|без понятия/.test(opening);
+}

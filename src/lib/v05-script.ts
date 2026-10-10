@@ -1,5 +1,5 @@
 import { checkRequestRate } from "@/lib/quota";
-import { changeLooksLikeEdit, cleanSpeechText, factQuote, NO_EDIT_LIST_FALLBACK } from "@/lib/author-speech";
+import { changeLooksLikeEdit, cleanSpeechText, factQuote, NO_EDIT_LIST_FALLBACK, startsWithDontKnow } from "@/lib/author-speech";
 import { NO_FACT_NOTICE, NO_FACT_STREAK_LIMIT, THIN_BLOCK_REASON, THIN_NEXT_QUESTION, isCommandText, isDontKnow, isEndPhrase, materialUnits, noFactStreak, speechWords } from "@/lib/turn-policy";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -475,6 +475,7 @@ async function collectFromLoaded(reelId: string, material: Omit<V05Material, "ke
     const picked: { id: string; text: string }[] = [];
     for (const row of rows) {
       if (isCommandText(row.body) || isDontKnow(row.body) || isEndPhrase(row.body) || speechWords(row.body) < 4) continue;
+      if (startsWithDontKnow(row.body)) continue; // I2 live check: "не помню, кому рассказываю…" ended up in two scripts as content
       if (isNonContentUtterance(normalizeDialogueUtterance(row.body))) continue;
       // A message that already has an accepted fact is represented by that fact: the fact is the curated (possibly corrected)
       // version, and a retracted statement must not come back through the raw answer. Only answers without a fact are added.

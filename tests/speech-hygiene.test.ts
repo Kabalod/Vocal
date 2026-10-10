@@ -128,3 +128,18 @@ test("I2: a fact goes into the build with a short verbatim quote; a replaced fac
   const replaced = await collectV05SourceTexts(reelId);
   assert.equal(replaced.texts.find((item) => item.label === "Факт мысли")?.text, "Теперь я хожу на рынок после обеда, чтобы не вставать рано.", "no quote of the old wording");
 });
+
+test("I2 live finding: an answer that opens with 'не помню' is not build material", async (t) => {
+  const { reelId } = await setup(t, "Не помню");
+  const { sendDialogueMessage } = await import("../src/lib/dialogue");
+  const { collectV05SourceTexts } = await import("../src/lib/v05-script");
+  const { startsWithDontKnow } = await import("../src/lib/author-speech");
+  assert.equal(startsWithDontKnow("Честно говоря, я не помню, кому именно рассказываю эту историю, в моих записях нет зрителей"), true);
+  assert.equal(startsWithDontKnow("Я помню, что тётя Люба сказала брать сметану развесную"), false);
+  await sendDialogueMessage(reelId, { text: "Честно говоря, я не помню, кому именно рассказываю эту историю и в моих записях нет ни зрителей ни людей", idempotencyKey: "sh-dk-1" }, askWithFact(null) as never);
+  await sendDialogueMessage(reelId, { text: "Я хожу на рынок в шесть утра по вторникам и четвергам, там тихо и продавцы рассказывают, что привезли", idempotencyKey: "sh-dk-2" }, askWithFact(null) as never);
+  const sources = await collectV05SourceTexts(reelId);
+  const answers = sources.texts.filter((item) => item.label === "Ответ автора").map((item) => item.text);
+  assert.equal(answers.length, 1);
+  assert.match(answers[0], /рынок/);
+});
