@@ -6,7 +6,7 @@
 // Run: DATABASE_URL=$TEST_DATABASE_URL DIRECT_URL=$TEST_DATABASE_URL node --env-file=.env --import tsx scripts/r-live/rich-author.ts \
 //        --out=<json> --md=<md> [--max-tokens=600000] [--only=<n>] [--turns=<n>]
 // Local test Postgres only. Budget: stops at 80% of --max-tokens (counted from AiCall + simulator usage) and reports "не выполнено".
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { resetPrismaClient } from "../../src/lib/db";
 import { changeLooksLikeEdit, stripServiceMarks } from "../../src/lib/author-speech";
 import { closePostgresTestDb, openPostgresTestDb } from "../../tests/helpers/postgres-test-db";
@@ -38,7 +38,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type Persona = { id: string; genre: string; title: string; style: string; opening: string; turns: number; story: string[] };
 
-const PERSONAS: Persona[] = [
+const BUILT_IN_PERSONAS: Persona[] = [
   {
     id: "P1", genre: "личная история", title: "Тетради по ночам", turns: 9,
     style: "Марина, 34, учитель русского языка. Говорит тепло и просто, короткими живыми фразами, иногда смеётся над собой.",
@@ -135,6 +135,9 @@ const PERSONAS: Persona[] = [
     ],
   },
 ];
+// I2c-live: --personas-file=<json> replaces the built-in personas (real Whisper transcripts as the first message, its sentences as the hidden story).
+const PERSONAS_FILE = argOf("personas-file");
+const PERSONAS: Persona[] = PERSONAS_FILE ? (JSON.parse(readFileSync(PERSONAS_FILE, "utf8")) as Persona[]) : BUILT_IN_PERSONAS;
 
 const SIM_SYSTEM = [
   "Ты играешь роль автора коротких видео, которого расспрашивают о его мысли. Ты ничего не знаешь о том, кто и как тебя расспрашивает.",
