@@ -1,12 +1,12 @@
 /** J1: who the quota and the abuse protections apply to. See quota.ts. */
 import { ownerUserId } from "@/lib/auth/session";
 
-/** On in production and when VOCAL_QUOTA=on; VOCAL_QUOTA=off forces it off (local dev/test contour). */
+/**
+ * Off by default (also in production): enabled only by an explicit VOCAL_QUOTA=on.
+ * Migration 11_user_quota must be applied before turning it on.
+ */
 export function quotaEnforced(env: Record<string, string | undefined> = process.env): boolean {
-  const raw = env.VOCAL_QUOTA?.trim().toLowerCase();
-  if (raw === "on") return true;
-  if (raw === "off") return false;
-  return env.NODE_ENV === "production";
+  return env.VOCAL_QUOTA?.trim().toLowerCase() === "on";
 }
 
 /** Owner/dev users (VOCAL_OWNER_USER_IDS, comma separated): no quota, the daily token limit stays. */

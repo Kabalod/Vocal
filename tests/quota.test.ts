@@ -186,3 +186,13 @@ test("J1: outside production without VOCAL_QUOTA=on nothing is enforced; owners 
   delete env.VOCAL_OWNER_USER_IDS;
   await assert.rejects(create(), (e: unknown) => e instanceof quota.QuotaExhaustedError);
 });
+
+test("J1: quota is off by default, in production too; only explicit VOCAL_QUOTA=on enables it", async () => {
+  const { quotaEnforced } = await import("@/lib/quota-env");
+  assert.equal(quotaEnforced({ NODE_ENV: "production" }), false);
+  assert.equal(quotaEnforced({ NODE_ENV: "production", VOCAL_QUOTA: "off" }), false);
+  assert.equal(quotaEnforced({ NODE_ENV: "production", VOCAL_QUOTA: "" }), false);
+  assert.equal(quotaEnforced({ NODE_ENV: "development" }), false);
+  assert.equal(quotaEnforced({ NODE_ENV: "production", VOCAL_QUOTA: "on" }), true);
+  assert.equal(quotaEnforced({ NODE_ENV: "test", VOCAL_QUOTA: " ON " }), true);
+});
