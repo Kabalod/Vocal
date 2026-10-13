@@ -446,7 +446,7 @@ test("V05 keep draft is bound to draft+token+world and C00 retract drops raw tak
     body: "основа черновика",
     idempotencyKey: "v05-keep-bind",
   });
-  let draft = await replaceScriptDraft(draftReel.reel.id, { body: "черновик до коррекции" });
+  const draft = await replaceScriptDraft(draftReel.reel.id, { body: "черновик до коррекции" });
   await sendDialogueMessage(
     draftReel.reel.id,
     { text: "Это сказал оператор, не я.", idempotencyKey: "v05-keep-corr-1" },
