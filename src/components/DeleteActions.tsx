@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
+import { ConfirmAlert } from "@/components/vocal-ui/ConfirmAlert";
 import { Field } from "@/components/vocal-ui/Field";
 import { InlineError } from "@/components/vocal-ui/InlineError";
 import { VocalModal } from "@/components/vocal-ui/VocalModal";
@@ -111,6 +112,59 @@ export function DeleteThoughtAction({ reelId, title }: { reelId: string; title: 
         onConfirm={() => void confirm()}
       />
     </>
+  );
+}
+
+/**
+ * Desktop: the same deletion as `DeleteThoughtAction`, opened from the "…" menu of the thought toolbar and confirmed in an iOS alert.
+ * Controlled: the toolbar owns `open`. The safe answer ("Оставить") has the initial focus; a failure is shown in the alert's text.
+ */
+export function DeleteThoughtConfirm({
+  reelId,
+  title,
+  open,
+  onClose,
+}: {
+  reelId: string;
+  title: string;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirm() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const result = await sendDelete(`/api/reels/${reelId}`);
+    if (!result.ok) {
+      setError(result.message);
+      setBusy(false);
+      return;
+    }
+    router.push("/reels");
+  }
+
+  return (
+    <ConfirmAlert
+      open={open}
+      title="Удалить мысль?"
+      message={
+        error ??
+        `«${title}» исчезнет вместе с дублями, записями, расшифровками, диалогом и сценариями. Это нельзя отменить.`
+      }
+      confirmLabel={busy ? "Удаляем…" : "Удалить"}
+      cancelLabel="Оставить"
+      destructive
+      onCancel={() => {
+        if (busy) return;
+        setError(null);
+        onClose();
+      }}
+      onConfirm={() => void confirm()}
+    />
   );
 }
 

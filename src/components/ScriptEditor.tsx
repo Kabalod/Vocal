@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { CanonicalExportActions } from "@/components/CanonicalExportActions";
 import { ScriptDraftComposer } from "@/components/ScriptDraftComposer";
 import { ScriptVersionTimeline } from "@/components/ScriptVersionTimeline";
+import { splitParagraphs } from "@/components/thought-desktop";
+import { ActionButton } from "@/components/vocal-ui/ActionButton";
+import { ChevronDown, Check, Pencil, Sparkles } from "lucide-react";
 import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
 import { GenerationGuard } from "@/lib/generation-guard";
 import { DraftSaveError, ScriptDraftSaveSession } from "@/lib/script-draft-save";
@@ -54,12 +57,23 @@ export function ScriptEditor({
   thoughtCompleted = false,
   onChanged,
   onAnswerQuestion,
+  desktop = false,
+  generateRequested = false,
+  onGenerateHandled,
+  onHelp,
 }: {
   reelId: string;
   reloadToken?: number;
   thoughtCompleted?: boolean;
   onChanged?: () => void;
   onAnswerQuestion?: (question: { text: string; gapId: string | null }) => void;
+  /** P3a: versions list on the left, reader on the right (from the desktop shell breakpoint). */
+  desktop?: boolean;
+  /** Set by the dialogue chip "Собрать сценарий": start the existing generation once, then `onGenerateHandled` clears it. */
+  generateRequested?: boolean;
+  onGenerateHandled?: () => void;
+  /** "Помочь со сценарием": goes to the dialogue. */
+  onHelp?: () => void;
 }) {
   const [workspace, setWorkspace] = useState<ScriptWorkspaceDto | null>(null);
   const [viewing, setViewing] = useState<ScriptVersionDto | null>(null);
@@ -134,6 +148,15 @@ export function ScriptEditor({
       setLoadError(err instanceof Error ? err.message : "Ошибка.");
     }
   }
+
+  useEffect(() => {
+    // A chip click is the only thing that generates from here; merely opening the tab never does.
+    if (!generateRequested || !workspace) return;
+    onGenerateHandled?.();
+    if (!workspace.canGenerate || thoughtCompleted || generating || snap.mode !== "ready") return;
+    void generate(keyStateRef.current.nextExplicitKey).catch((err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generateRequested, workspace]);
 
   useEffect(() => {
     if (snap.mode !== "draft" || snap.expectedSaveToken == null || !workspace?.draft) return;
@@ -279,20 +302,8 @@ export function ScriptEditor({
   const staleTarget = snap.mode === "draft" ? "draft" : "viewing";
   const versionTitle = currentMeta?.number ? `Сценарий, версия ${currentMeta.number}` : "Черновик сценария";
 
-  return (
-    <section className="space-y-4" data-script-phase={phase} data-script-generating={generating ? "1" : "0"} data-script-stale-target={staleTarget}>
-      <div>
-        <h2 className="font-[family-name:var(--font-display)] text-2xl">
-          {snap.mode === "draft" ? "Черновик сценария" : "Сценарий"}
-        </h2>
-        <p className="text-sm text-muted">
-          {snap.mode === "draft"
-            ? baseNumber
-              ? `На основе версии ${baseNumber}`
-              : "Новый черновик без номера"
-            : "Сценарий собирается только кнопкой на этой вкладке. Открытие вкладки ничего не генерирует."}
-        </p>
-      </div>
+  const notices = (
+    <>
       {error ? <ShellError message={error} onRetry={() => void load()} /> : null}
       {generateFault?.kind === "conflict" ? (
         <div className="vocal-card space-y-3 p-4" data-script-fault="conflict" role="alert">
@@ -315,7 +326,7 @@ export function ScriptEditor({
           />
         </div>
       ) : null}
-      {generating ? <p className="text-sm text-muted">Собираем сценарий…</p> : null}
+      {generating && !desktop ? <p className="text-sm text-muted">Собираем сценарий…</p> : null}
       {snap.status && !snap.saving ? <p className="text-sm text-muted">{snap.status}</p> : null}
       {workspace && workspace.blockReason && (phase === "not_ready" || workspace.readyCount > 0 || workspace.draft) ? (
         <div className="vocal-card space-y-3 p-4">
@@ -353,6 +364,218 @@ export function ScriptEditor({
           </div>
         </div>
       ) : null}
+    </>
+  );
+
+  if (desktop) {
+    const sorted = [...ready].sort((x, y) => (y.number ?? 0) - (x.number ?? 0));
+    const reading = viewing && isHeadKind(viewing.kind) ? splitParagraphs(viewing.body) : [];
+    const isFinal = Boolean(viewingId) && workspace?.finalScriptId === viewingId;
+    const isCurrent = Boolean(viewingId) && workspace?.headId === viewingId;
+    const buildDisabled = generating || thoughtCompleted || !workspace?.canGenerate || snap.mode !== "ready";
+    const failOpen = (err: unknown) => setLoadError(err instanceof Error ? err.message : "Ошибка.");
+    return (
+      <section
+        className="grid grid-cols-[260px_minmax(0,1fr)] items-start gap-6"
+        data-script-phase={phase}
+        data-script-generating={generating ? "1" : "0"}
+        data-script-stale-target={staleTarget}
+        data-script-desktop
+      >
+        <aside aria-label="Версии сценария" className="space-y-3">
+          <ActionButton
+            variant="primary"
+            className="w-full"
+            disabled={buildDisabled}
+            onClick={() => void generate(keyStateRef.current.nextExplicitKey).catch(failOpen)}
+          >
+            <Sparkles className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            {generating ? "Собираем…" : "Собрать новую версию"}
+          </ActionButton>
+          <h2 className="pt-2 text-[11px] font-medium uppercase tracking-[0.06em] text-muted">Версии</h2>
+          {workspace ? (
+            sorted.length > 0 ? (
+              <ul className="flex flex-col gap-2">
+                {sorted.map((row) => {
+                  const selected = row.id === viewingId;
+                  return (
+                    <li key={row.id}>
+                      <button
+                        type="button"
+                        aria-current={selected ? "true" : undefined}
+                        data-script-version={row.id}
+                        onClick={() => void selectVersion(row.id)}
+                        className={`flex w-full flex-col gap-1.5 rounded-xl border px-3.5 py-3 text-left transition-colors ${
+                          selected ? "border-accent/60 bg-accent/10" : "border-line bg-white/[0.02] hover:bg-white/[0.05]"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 text-sm font-semibold">
+                          {row.number ? `Версия ${row.number}` : "Версия"}
+                          {row.id === workspace.headId ? <em className="text-[11px] font-medium not-italic text-accent-soft">текущая</em> : null}
+                          {row.id === workspace.finalScriptId ? (
+                            <b className="ml-auto rounded-md border border-accent px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.05em] text-text-soft">
+                              итоговая
+                            </b>
+                          ) : null}
+                        </span>
+                        <span className="text-xs text-muted">{row.sourceLabel}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted">Версий пока нет.</p>
+            )
+          ) : (
+            <ShellLoading label="Загрузка версий…" />
+          )}
+        </aside>
+        <article
+          aria-label="Ридер сценария"
+          aria-busy={generating}
+          className="flex min-h-[calc(100dvh-210px)] min-w-0 flex-col rounded-[14px] border border-line bg-white/[0.02] px-8 pb-7 pt-6"
+        >
+          <header className="mb-5 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-accent-soft">
+                {snap.mode === "draft"
+                  ? baseNumber
+                    ? `Черновик · на основе версии ${baseNumber}`
+                    : "Черновик"
+                  : currentMeta
+                    ? `${currentMeta.number ? `Версия ${currentMeta.number}` : "Версия"}${isCurrent ? " · текущая" : ""}${isFinal ? " · итоговая" : ""}`
+                    : "Версий пока нет"}
+              </p>
+              <h2 className="font-[family-name:var(--font-display)] text-2xl font-medium leading-tight">Сценарий</h2>
+            </div>
+            {snap.mode === "ready" ? (
+              <div className="flex shrink-0 flex-nowrap justify-end gap-2">
+                <ActionButton
+                  variant="secondary"
+                  disabled={generating || (!workspace?.draft && !currentMeta)}
+                  onClick={() => void openDraft().catch(failOpen)}
+                >
+                  <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                  {workspace?.draft ? "Продолжить черновик" : "Редактировать"}
+                </ActionButton>
+                <ActionButton variant="ghost" disabled={generating} onClick={() => onHelp?.()}>
+                  Помочь со сценарием
+                </ActionButton>
+                <ActionButton
+                  variant="primary"
+                  disabled={!viewingId || thoughtCompleted || !currentMeta || generating}
+                  onClick={() => void setFinal().catch(failOpen)}
+                >
+                  {isFinal ? (
+                    <>
+                      <Check className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" /> Итоговый
+                    </>
+                  ) : (
+                    "Сделать итоговым"
+                  )}
+                </ActionButton>
+              </div>
+            ) : null}
+          </header>
+          <div className="mb-4 space-y-4">{notices}</div>
+          {generating ? (
+            <div role="status" aria-live="polite" className="max-w-[64ch] space-y-3" data-script-building>
+              <p className="text-sm text-text-soft">Vocal собирает сценарий…</p>
+              {[92, 100, 78, 96, 64].map((width, index) => (
+                <div key={index} className="h-4 animate-pulse rounded bg-white/[0.07]" style={{ width: `${width}%` }} />
+              ))}
+            </div>
+          ) : snap.mode === "draft" ? (
+            <ScriptDraftComposer
+              draftBody={snap.body}
+              saving={snap.saving}
+              finalizing={snap.finalizing}
+              status={snap.status}
+              expectedUpdatedAt={snap.expectedUpdatedAt}
+              onBodyChange={(body) => session.setBody(body)}
+              onFinalize={() => void finalize()}
+              onBackToReady={() => void session.backToReady()}
+              onDelete={() => void removeDraft().catch(failOpen)}
+            />
+          ) : viewing ? (
+            <>
+              <div
+                className="max-w-[64ch] flex-1 font-[family-name:var(--font-display)] text-xl font-normal leading-[1.65]"
+                data-script-reader-text
+              >
+                {reading.map((paragraph, index) => (
+                  <p key={index} className="mb-5 whitespace-pre-wrap">
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+              <div className="mt-4">
+                <CanonicalExportActions
+                  disabled={!viewing.body || !isHeadKind(viewing.kind)}
+                  filename={sanitizeExportFilename("сценарий")}
+                  text={
+                    viewing.body && isHeadKind(viewing.kind)
+                      ? buildCanonicalExportTxt({ title: versionTitle, scriptBody: viewing.body })
+                      : ""
+                  }
+                />
+              </div>
+            </>
+          ) : workspace ? (
+            <div className="space-y-4">
+              {workspace.base && !thoughtCompleted ? (
+                <div className="vocal-card space-y-2 p-4" data-script-base>
+                  <p className="text-sm font-medium">{workspace.base.label}</p>
+                  <p className="max-h-48 overflow-y-auto whitespace-pre-wrap text-sm text-muted">{workspace.base.text}</p>
+                </div>
+              ) : null}
+              {workspace.understanding && !thoughtCompleted ? (
+                <div className="vocal-card p-4" data-script-understanding>
+                  <p className="text-sm">{workspace.understanding}</p>
+                </div>
+              ) : null}
+              <ShellEmpty title="Нет готовой версии" description="Соберите сценарий кнопкой или напишите черновик вручную." />
+            </div>
+          ) : (
+            <ShellLoading label="Загрузка сценария…" />
+          )}
+          {!generating && snap.mode === "ready" && workspace && workspace.viewingChanges.length > 0 ? (
+            <details className="group mt-6 border-t border-line pt-4" data-script-changes key={viewingId ?? "none"}>
+              <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 text-[13px] font-medium text-text-soft [&::-webkit-details-marker]:hidden">
+                Что изменено
+                <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" strokeWidth={1.5} aria-hidden="true" />
+              </summary>
+              <ul className="mt-3.5 flex flex-col gap-2">
+                {workspace.viewingChanges.map((item) => (
+                  <li key={item} className="flex items-start gap-2 text-[13px] leading-normal text-text-soft">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent-soft" strokeWidth={1.75} aria-hidden="true" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </article>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-4" data-script-phase={phase} data-script-generating={generating ? "1" : "0"} data-script-stale-target={staleTarget}>
+      <div>
+        <h2 className="font-[family-name:var(--font-display)] text-2xl">
+          {snap.mode === "draft" ? "Черновик сценария" : "Сценарий"}
+        </h2>
+        <p className="text-sm text-muted">
+          {snap.mode === "draft"
+            ? baseNumber
+              ? `На основе версии ${baseNumber}`
+              : "Новый черновик без номера"
+            : "Сценарий собирается только кнопкой на этой вкладке. Открытие вкладки ничего не генерирует."}
+        </p>
+      </div>
+      {notices}
       {workspace ? (
         <ScriptVersionTimeline
           versions={ready}

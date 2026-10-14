@@ -93,6 +93,8 @@ export function VocalAppShell({ children }: { children: ReactNode }) {
 function VocalAppShellFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
   const archiveDesktop = pathname === "/reels";
+  // P3a: on the desktop shell a thought has its own toolbar (inside the page) and scrolls inside the work column.
+  const thoughtDesktop = /^\/reels\/[^/]+$/.test(pathname);
   const [dateHost, setDateHost] = useState<HTMLElement | null>(null);
   const [statusHost, setStatusHost] = useState<HTMLElement | null>(null);
   const [sheetStatusHost, setSheetStatusHost] = useState<HTMLElement | null>(null);
@@ -197,9 +199,9 @@ function VocalAppShellFrame({ children }: { children: ReactNode }) {
         data-archive-work={archiveDesktop ? "true" : undefined}
         className={`flex min-w-0 flex-1 flex-col ${
           archiveDesktop ? "archive-workspace-desk shell:h-screen shell:overflow-y-auto" : ""
-        }`}
+        } ${thoughtDesktop ? "shell:h-screen shell:overflow-y-auto" : ""}`}
       >
-        <header className={`flex min-h-11 items-center gap-3 border-b border-line px-4 py-3 shell:px-6 ${archiveDesktop ? "shell:hidden" : ""}`}>
+        <header className={`flex min-h-11 items-center gap-3 border-b border-line px-4 py-3 shell:px-6 ${archiveDesktop || thoughtDesktop ? "shell:hidden" : ""}`}>
           <button
             ref={menuButtonRef}
             type="button"
@@ -225,9 +227,19 @@ function VocalAppShellFrame({ children }: { children: ReactNode }) {
 
         <main
           className={`mx-auto min-w-0 w-full flex-1 ${
-            archiveDesktop ? "px-0 py-0" : "px-4 py-6 pb-24 shell:px-6 shell:pb-16"
+            archiveDesktop
+              ? "px-0 py-0"
+              : thoughtDesktop
+                ? "px-4 py-6 pb-24 shell:px-0 shell:py-0 shell:pb-0"
+                : "px-4 py-6 pb-24 shell:px-6 shell:pb-16"
           } ${
-            pathname === "/reels" ? "max-w-none" : pathname.startsWith("/reels/") ? "max-w-6xl" : "max-w-5xl"
+            pathname === "/reels"
+              ? "max-w-none"
+              : thoughtDesktop
+                ? "max-w-6xl shell:max-w-none"
+                : pathname.startsWith("/reels/")
+                  ? "max-w-6xl"
+                  : "max-w-5xl"
           }`}
         >
           {children}

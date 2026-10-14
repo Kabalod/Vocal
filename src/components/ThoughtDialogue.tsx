@@ -20,7 +20,16 @@ import {
   voiceReplyRetryTarget,
   type VoiceCaptureSession,
 } from "@/lib/media-session";
+import { Lightbulb } from "lucide-react";
 import { ShellError, ShellLoading } from "@/components/shell-status";
+import { DialogueChips } from "@/components/DialogueChips";
+import {
+  QUESTION_HINT,
+  formatThoughtStamp,
+  readingCaption,
+  showDialogueTimeLabel,
+  splitParagraphs,
+} from "@/components/thought-desktop";
 import {
   abortDialogueRequest,
   canSendDialogueText,
@@ -33,10 +42,39 @@ import type { ScriptNextQuestionDto } from "@/types/script";
 
 function MessageBubble({
   message,
+  desktop = false,
 }: {
   message: DialogueMessageDto;
+  desktop?: boolean;
 }) {
   const mine = message.role === "user";
+  if (desktop) {
+    // P3a: the author's bubble is violet, Vocal's is graphite; a hint caption sits under a Vocal question.
+    return (
+      <article className={`max-w-[92%] ${mine ? "ml-auto" : ""}`} data-dialogue-role={mine ? "author" : "vocal"}>
+        <p className="mb-1 text-[11px] text-muted">{mine ? "Вы" : "Vocal"}</p>
+        <div
+          className={`break-words rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+            mine ? "text-on-accent" : "border border-line bg-surface-raised"
+          }`}
+        >
+          {message.voice ? (
+            <p className={mine ? "opacity-80" : "text-muted"}>Голосовой ответ · {message.voice.durationLabel}</p>
+          ) : null}
+          <p className="whitespace-pre-wrap">{message.body}</p>
+          {message.kind === "script_proposal" ? (
+            <p className="mt-3 text-sm text-muted">Сохранено в переписке. Сбор сценария — во вкладке «Сценарий».</p>
+          ) : null}
+        </div>
+        {!mine && message.kind === "question" ? (
+          <p className="mt-1.5 flex items-start gap-1.5 px-1.5 text-xs text-muted" data-dialogue-hint>
+            <Lightbulb className="mt-px h-3.5 w-3.5 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+            {QUESTION_HINT}
+          </p>
+        ) : null}
+      </article>
+    );
+  }
   return (
     <article className={`max-w-[92%] shell:max-w-[88%] ${mine ? "ml-auto" : ""}`}>
       <p className="mb-1 text-xs text-muted">{mine ? "Вы" : "Vocal"}</p>
@@ -67,6 +105,8 @@ export function ThoughtDialogue({
   onReopen,
   autoFocusComposer = false,
   pinnedQuestion = null,
+  desktop = false,
+  onBuildScript,
 }: {
   reelId: string;
   draft: string;
@@ -77,6 +117,10 @@ export function ThoughtDialogue({
   onReopen?: () => void;
   autoFocusComposer?: boolean;
   pinnedQuestion?: ScriptNextQuestionDto | null;
+  /** P3a: the desktop layout (reading column + 380 px chat, chips). Below the shell breakpoint the earlier layout stays. */
+  desktop?: boolean;
+  /** The "Собрать сценарий" chip: the owner starts the existing generation and moves to the script tab. */
+  onBuildScript?: () => void;
 }) {
   const [page, setPage] = useState<DialoguePageDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +132,11 @@ export function ThoughtDialogue({
   const [seconds, setSeconds] = useState(0);
   const [voiceError, setVoiceError] = useState(false);
   const [scriptPreview, setScriptPreview] = useState("");
+  const [reading, setReading] = useState<{ versionNumber: number | null; baseLabel: string | null; baseText: string }>({
+    versionNumber: null,
+    baseLabel: null,
+    baseText: "",
+  });
   const scrollerRef = useRef<HTMLDivElement>(null);
   const stickBottom = useRef(true);
   const fetchRef = useRef<AbortController | null>(null);
@@ -101,22 +150,36 @@ export function ThoughtDialogue({
   const lastVoiceRef = useRef<{ blob: Blob; duration: string } | null>(null);
 
   useEffect(() => {
-    if (!hasReadyScript) {
+    if (!hasReadyScript && !desktop) {
       setScriptPreview("");
       return;
     }
     let cancelled = false;
+    type Workspace = {
+      selectedScriptId?: string | null;
+      viewing?: { body?: string; id?: string };
+      headId?: string | null;
+      versions?: { id: string; number: number | null }[];
+      base?: { text: string; label: string } | null;
+    };
     void fetch(`/api/reels/${reelId}/scripts`, { cache: "no-store" })
       .then((res) => res.json())
-      .then(async (data: { selectedScriptId?: string | null; viewing?: { body?: string }; headId?: string | null }) => {
+      .then(async (data: Workspace) => {
         if (cancelled) return;
+        const id = data.viewing?.id ?? data.selectedScriptId ?? data.headId ?? null;
+        const number = id ? (data.versions?.find((row) => row.id === id)?.number ?? null) : null;
+        setReading({ versionNumber: number, baseLabel: data.base?.label ?? null, baseText: data.base?.text ?? "" });
+        if (!hasReadyScript) {
+          setScriptPreview("");
+          return;
+        }
         if (data.viewing?.body) {
           setScriptPreview(data.viewing.body);
           return;
         }
-        const id = data.selectedScriptId ?? data.headId;
-        if (!id) return;
-        const version = await fetch(`/api/reels/${reelId}/scripts/${id}`, { cache: "no-store" });
+        const versionId = data.selectedScriptId ?? data.headId;
+        if (!versionId) return;
+        const version = await fetch(`/api/reels/${reelId}/scripts/${versionId}`, { cache: "no-store" });
         const body = (await version.json()) as { body?: string };
         if (!cancelled && typeof body.body === "string") setScriptPreview(body.body);
       })
@@ -124,7 +187,7 @@ export function ThoughtDialogue({
     return () => {
       cancelled = true;
     };
-  }, [hasReadyScript, reelId]);
+  }, [desktop, hasReadyScript, reelId]);
 
   const applyPage = useCallback((next: DialoguePageDto, mode: "replace" | "prepend") => {
     setPage((prev) => {
@@ -203,7 +266,7 @@ export function ThoughtDialogue({
     applyPage(data, "replace");
   }
 
-  async function sendText(text: string) {
+  async function sendText(text: string, options?: { keepDraft?: boolean }) {
     if (!canSendDialogueText({ recording, finalizing, sending })) return;
     setSending(true);
     setError(null);
@@ -212,7 +275,7 @@ export function ThoughtDialogue({
     try {
       await postJson(`/api/thoughts/${reelId}/dialogue`, { text, idempotencyKey: textKeyRef.current });
       textKeyRef.current = null;
-      onDraftChange("");
+      if (!options?.keepDraft) onDraftChange("");
     } catch (err) {
       if (isDialogueAbortError(err)) return;
       setError(err instanceof Error ? err.message : "Ошибка.");
@@ -338,6 +401,177 @@ export function ThoughtDialogue({
 
   const messages = page?.messages ?? [];
   const empty = Boolean(page) && messages.length === 0 && !page?.analyzing;
+
+  if (desktop) {
+    const readingText = scriptPreview || reading.baseText;
+    const paragraphs = splitParagraphs(readingText);
+    const caption = readingCaption({
+      versionNumber: scriptPreview ? reading.versionNumber : null,
+      baseLabel: reading.baseLabel,
+    });
+    const busy = !canSendDialogueText({ recording, finalizing, sending });
+    return (
+      <section className="grid h-[calc(100dvh-224px)] min-h-[520px] grid-cols-[minmax(0,1fr)_380px] gap-6" aria-label="Диалог с Vocal">
+        <article
+          aria-label="Сценарий для чтения"
+          className="min-w-0 overflow-y-auto rounded-[14px] border border-line bg-white/[0.02] px-10 py-8"
+        >
+          <p className="mb-[18px] text-[11px] font-medium uppercase tracking-[0.06em] text-muted">{caption}</p>
+          {paragraphs.length > 0 ? (
+            <div className="max-w-[62ch] font-[family-name:var(--font-display)] text-[22px] font-normal leading-[1.6]" data-dialogue-reading>
+              {paragraphs.map((paragraph, index) => (
+                <p key={index} className="mb-[22px] whitespace-pre-wrap">
+                  {paragraph}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted">
+              Сценарий появится здесь, когда сохраните готовую версию. Чат справа — не запись дубля.
+            </p>
+          )}
+        </article>
+        <aside aria-label="Чат с Vocal" className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[14px] border border-line bg-surface">
+          <div className="border-b border-line px-4 py-3.5">
+            <h2 className="text-sm font-semibold">Диалог с Vocal</h2>
+            <p className="text-xs text-muted">Уточняющие вопросы по сценарию</p>
+          </div>
+          <div ref={scrollerRef} onScroll={onScroll} className="min-h-0 flex-1 space-y-3.5 overflow-y-auto p-4">
+            {page?.nextCursor ? (
+              <div className="text-center">
+                <ActionButton
+                  variant="compact"
+                  disabled={loadingOlder}
+                  onClick={() => {
+                    if (!page.nextCursor) return;
+                    const node = scrollerRef.current;
+                    const before = node?.scrollHeight ?? 0;
+                    setLoadingOlder(true);
+                    void load(page.nextCursor)
+                      .then(() => {
+                        if (node) node.scrollTop = node.scrollHeight - before;
+                      })
+                      .catch((err: unknown) => {
+                        if (isDialogueAbortError(err)) return;
+                        setError(err instanceof Error ? err.message : "Ошибка.");
+                      })
+                      .finally(() => setLoadingOlder(false));
+                  }}
+                >
+                  {loadingOlder ? "Загружаем…" : "Загрузить более ранние"}
+                </ActionButton>
+              </div>
+            ) : null}
+            {page === null && !error ? <ShellLoading label="Загрузка диалога…" /> : null}
+            {empty ? (
+              <EmptyState title="Пока нет переписки" description="Напишите или скажите мысль — Vocal ответит здесь." />
+            ) : null}
+            {messages.map((message, index) => (
+              <div key={message.id} className="space-y-3.5">
+                {showDialogueTimeLabel(messages[index - 1]?.createdAt ?? null, message.createdAt) ? (
+                  <time dateTime={message.createdAt} className="block text-center text-[11px] text-muted" data-dialogue-time>
+                    {formatThoughtStamp(message.createdAt)}
+                  </time>
+                ) : null}
+                <MessageBubble message={message} desktop />
+              </div>
+            ))}
+            {page?.analyzing ? <ProcessingState label="Разбираю вашу мысль…" /> : null}
+          </div>
+          {stuck ? (
+            <div className="pb-2 text-center">
+              <ActionButton
+                variant="compact"
+                onClick={() => {
+                  stickBottom.current = true;
+                  setStuck(false);
+                  const node = scrollerRef.current;
+                  if (node) node.scrollTop = node.scrollHeight;
+                }}
+              >
+                К новым сообщениям
+              </ActionButton>
+            </div>
+          ) : null}
+          {error ? (
+            <div className="space-y-2 px-3 pb-2">
+              {page === null ? (
+                <ShellError message={error} onRetry={() => void refreshHistory()} />
+              ) : (
+                <>
+                  <InlineError message={error} />
+                  <ActionButton
+                    variant="compact"
+                    onClick={() => {
+                      const target = voiceReplyRetryTarget({
+                        voiceError,
+                        hasVoicePayload: Boolean(lastVoiceRef.current),
+                        hasDraft: Boolean(draft.trim()),
+                      });
+                      if (target === "voice" && lastVoiceRef.current) void postVoiceReply(lastVoiceRef.current);
+                      else if (target === "text") void sendText(draft);
+                      else void refreshHistory();
+                    }}
+                  >
+                    Повторить
+                  </ActionButton>
+                </>
+              )}
+              {voiceError ? (
+                <p className="text-sm text-muted">Можно записать голос заново или отправить ту же мысль текстом.</p>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="space-y-2.5 border-t border-line px-3 pb-3 pt-2.5">
+            {pinnedQuestion?.text ? (
+              <p className="text-sm" data-dialogue-pinned-question={pinnedQuestion.gapId ?? ""}>
+                {pinnedQuestion.text}
+              </p>
+            ) : null}
+            {thoughtCompleted ? (
+              <ActionButton variant="secondary" onClick={onReopen}>
+                Вернуть в работу
+              </ActionButton>
+            ) : recording || finalizing ? (
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <p className="mr-auto text-sm text-muted">
+                  {finalizing ? "Собираем запись…" : `Запись · ${formatRecordingDuration(seconds)}`}
+                </p>
+                {finalizing ? null : (
+                  <>
+                    <ActionButton variant="secondary" onClick={stopMicTracks}>
+                      Отмена
+                    </ActionButton>
+                    <ActionButton variant="primary" onClick={() => void sendVoice()}>
+                      Отправить голос
+                    </ActionButton>
+                  </>
+                )}
+              </div>
+            ) : (
+              <>
+                <DialogueChips
+                  disabled={busy}
+                  onSend={(text) => void sendText(text, { keepDraft: true })}
+                  onBuild={onBuildScript}
+                />
+                <Composer
+                  value={draft}
+                  onChange={onDraftChange}
+                  disabled={sending}
+                  clearOnSend={false}
+                  autoFocus={autoFocusComposer}
+                  onSend={(text) => void sendText(text)}
+                  onMic={() => void startMic()}
+                  micLabel="Ответить голосом"
+                />
+              </>
+            )}
+          </div>
+        </aside>
+      </section>
+    );
+  }
 
   return (
     <section className="flex min-h-[28rem] flex-col gap-4 shell:flex-row shell:items-stretch" aria-label="Диалог с Vocal">

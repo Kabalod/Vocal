@@ -12,6 +12,8 @@ import { ScriptEditor } from "@/components/ScriptEditor";
 import { ThoughtDialogue } from "@/components/ThoughtDialogue";
 import { DeleteThoughtAction } from "@/components/DeleteActions";
 import { ThoughtStudioHeader } from "@/components/ThoughtStudioHeader";
+import { ThoughtDesktopTitle, ThoughtDesktopToolbar } from "@/components/ThoughtDesktopToolbar";
+import { useDesktopShell } from "@/components/use-desktop-shell";
 import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
 import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
 import { parseStudioTab, studioThoughtHref, writeStudioTab, type StudioMobileTab } from "@/components/reel-studio";
@@ -35,6 +37,10 @@ export function ReelStudio({ reelId }: { reelId: string }) {
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
   const [scriptNumber, setScriptNumber] = useState<number | null>(null);
   const [thoughtTitle, setThoughtTitle] = useState("Мысль");
+  const [thoughtCreatedAt, setThoughtCreatedAt] = useState<string | null>(null);
+  // P3a: the "Собрать сценарий" chip of the dialogue asks the script tab to start the existing generation once per click.
+  const [generateRequested, setGenerateRequested] = useState(false);
+  const desktop = useDesktopShell();
   const [recording, setRecording] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState(false);
   const [watchJobId, setWatchJobId] = useState<string | null>(null);
@@ -69,7 +75,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
     try {
       const res = await fetch(`/api/reels/${reelId}`, { cache: "no-store" });
       const data = (await res.json()) as {
-        reel?: { title?: string; status?: ReelStatus };
+        reel?: { title?: string; status?: ReelStatus; createdAt?: string };
         error?: string;
         code?: string;
       };
@@ -79,6 +85,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
       }
       if (!res.ok || !data.reel) throw new Error(data.error ?? "Не удалось открыть мысль.");
       setThoughtTitle(data.reel.title ?? "Мысль");
+      setThoughtCreatedAt(data.reel.createdAt ?? null);
       if (data.reel.status) setThoughtStatus(data.reel.status);
       setLoad("ok");
     } catch (err) {
@@ -147,6 +154,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
   }, [hasManualDraft, hasReadyScript, load, reelId, router, searchParams, thoughtStatus, workspaceReady]);
 
   function changeTab(next: StudioMobileTab) {
+    if (next !== "script") setGenerateRequested(false);
     writeStudioTab(reelId, next);
     router.replace(studioThoughtHref(reelId, next), { scroll: false });
   }
@@ -164,6 +172,11 @@ export function ReelStudio({ reelId }: { reelId: string }) {
       return;
     }
     openRecording();
+  }
+
+  function buildScriptFromDialogue() {
+    setGenerateRequested(true);
+    changeTab("script");
   }
 
   function answerScriptQuestion(question?: ScriptNextQuestionDto) {
@@ -187,8 +200,118 @@ export function ReelStudio({ reelId }: { reelId: string }) {
 
   const showTakes = recording || tab === "takes";
 
+  const takesNode =
+    showTakes ? (
+      recording ? (
+        <RecordingView
+          reelId={reelId}
+          thoughtTitle={thoughtTitle}
+          scriptVersionId={selectedScriptId}
+          scriptNumber={scriptNumber}
+          onClose={() => setRecording(false)}
+          onSaved={(info) => {
+            setTakesTick((value) => value + 1);
+            if (info.jobId) setWatchJobId(info.jobId);
+            setRecording(false);
+          }}
+        />
+      ) : (
+        <ReelTakes
+          reelId={reelId}
+          reloadToken={takesTick}
+          canRecord={studioRecordGate({ hasReadyScript, hasDraft: hasManualDraft }) === "ok"}
+          recordBlockedReason="Сначала закройте черновик сценария"
+          recordScriptId={selectedScriptId}
+          onTakeJobStarted={setWatchJobId}
+          onStartVoiceRecord={requestRecording}
+          thoughtCompleted={thoughtStatus === "completed"}
+          onChanged={() => setTakesTick((value) => value + 1)}
+        >
+          {({ media }) => (
+            <div className="space-y-8">
+              {watchJobId ? <StudioJobWatch jobId={watchJobId} onSettled={refreshStudioAfterJob} /> : null}
+              {media}
+              <AutoTakeCompare reelId={reelId} reloadToken={takesTick} />
+              <CompletionSummary
+                reelId={reelId}
+                reloadToken={takesTick + scriptTick}
+                onPickTake={() => changeTab("takes")}
+                onPickScript={() => changeTab("script")}
+                onStatusChange={setThoughtStatus}
+              />
+            </div>
+          )}
+        </ReelTakes>
+      )
+    ) : null;
+
+  const scriptNode =
+    tab === "script" && !recording ? (
+      <ScriptEditor
+        reelId={reelId}
+        reloadToken={scriptTick}
+        desktop={desktop}
+        generateRequested={generateRequested}
+        onGenerateHandled={() => setGenerateRequested(false)}
+        thoughtCompleted={thoughtStatus === "completed"}
+        onAnswerQuestion={(question) => answerScriptQuestion(question)}
+        onHelp={() => answerScriptQuestion()}
+        onChanged={() => setScriptTick((value) => value + 1)}
+      />
+    ) : null;
+
+  const dialogNode =
+    tab === "dialog" && !recording ? (
+      <ThoughtDialogue
+        key={`${reelId}:${dialogTick}`}
+        reelId={reelId}
+        desktop={desktop}
+        draft={draft}
+        onDraftChange={setDraft}
+        hasReadyScript={hasReadyScript}
+        autoFocusComposer={focusDialogue}
+        pinnedQuestion={scriptQuestion}
+        thoughtCompleted={thoughtStatus === "completed"}
+        onGoRecord={requestRecording}
+        onBuildScript={buildScriptFromDialogue}
+        onReopen={() => {
+          void fetch(`/api/reels/${reelId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "in_progress" }),
+          }).then((res) => {
+            if (!res.ok) return;
+            setThoughtStatus("in_progress");
+            setDialogTick((value) => value + 1);
+            setTakesTick((value) => value + 1);
+          });
+        }}
+      />
+    ) : null;
+
+  const activeTab = recording ? "takes" : tab;
+
   return (
     <>
+      {desktop ? (
+        <div data-thought-desktop>
+          <ThoughtDesktopToolbar
+            reelId={reelId}
+            title={thoughtTitle}
+            tab={activeTab}
+            onTab={changeTab}
+            hideTabs={recording}
+            thoughtCompleted={thoughtStatus === "completed"}
+            onRecord={requestRecording}
+          />
+          <div className="mx-auto w-full max-w-[1064px] px-8 pb-12">
+            <ThoughtDesktopTitle title={thoughtTitle} status={thoughtStatus} createdAt={thoughtCreatedAt} />
+            <section aria-label={activeTab === "takes" ? "Дубли" : activeTab === "dialog" ? "Диалог с Vocal" : "Сценарий"}>
+              {activeTab === "takes" ? takesNode : activeTab === "dialog" ? dialogNode : scriptNode}
+            </section>
+          </div>
+        </div>
+      ) : (
         <ReelStudioFrame
           header={
             <ThoughtStudioHeader
@@ -197,93 +320,14 @@ export function ReelStudio({ reelId }: { reelId: string }) {
               action={<DeleteThoughtAction reelId={reelId} title={thoughtTitle} />}
             />
           }
-          tab={recording ? "takes" : tab}
+          tab={activeTab}
           onTab={changeTab}
           hideTabs={recording}
-          takes={
-            showTakes ? (
-            recording ? (
-              <RecordingView
-                reelId={reelId}
-                thoughtTitle={thoughtTitle}
-                scriptVersionId={selectedScriptId}
-                scriptNumber={scriptNumber}
-                onClose={() => setRecording(false)}
-                onSaved={(info) => {
-                  setTakesTick((value) => value + 1);
-                  if (info.jobId) setWatchJobId(info.jobId);
-                  setRecording(false);
-                }}
-              />
-            ) : (
-              <ReelTakes
-                reelId={reelId}
-                reloadToken={takesTick}
-                canRecord={studioRecordGate({ hasReadyScript, hasDraft: hasManualDraft }) === "ok"}
-                recordBlockedReason="Сначала закройте черновик сценария"
-                recordScriptId={selectedScriptId}
-                onTakeJobStarted={setWatchJobId}
-                onStartVoiceRecord={requestRecording}
-                thoughtCompleted={thoughtStatus === "completed"}
-                onChanged={() => setTakesTick((value) => value + 1)}
-              >
-                {({ media }) => (
-                  <div className="space-y-8">
-                    {watchJobId ? <StudioJobWatch jobId={watchJobId} onSettled={refreshStudioAfterJob} /> : null}
-                    {media}
-                    <AutoTakeCompare reelId={reelId} reloadToken={takesTick} />
-                    <CompletionSummary
-                      reelId={reelId}
-                      reloadToken={takesTick + scriptTick}
-                      onPickTake={() => changeTab("takes")}
-                      onPickScript={() => changeTab("script")}
-                      onStatusChange={setThoughtStatus}
-                    />
-                  </div>
-                )}
-              </ReelTakes>
-            )
-            ) : null
-          }
-          script={
-            tab === "script" && !recording ? (
-            <ScriptEditor
-              reelId={reelId}
-              reloadToken={scriptTick}
-              thoughtCompleted={thoughtStatus === "completed"}
-              onAnswerQuestion={(question) => answerScriptQuestion(question)}
-              onChanged={() => setScriptTick((value) => value + 1)}
-            />
-            ) : null
-          }
-          dialog={
-            tab === "dialog" && !recording ? (
-            <ThoughtDialogue
-              key={`${reelId}:${dialogTick}`}
-              reelId={reelId}
-              draft={draft}
-              onDraftChange={setDraft}
-              hasReadyScript={hasReadyScript}
-              autoFocusComposer={focusDialogue}
-              pinnedQuestion={scriptQuestion}
-              thoughtCompleted={thoughtStatus === "completed"}
-              onGoRecord={requestRecording}
-              onReopen={() => {
-                void fetch(`/api/reels/${reelId}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ status: "in_progress" }),
-                }).then((res) => {
-                  if (!res.ok) return;
-                  setThoughtStatus("in_progress");
-                  setDialogTick((value) => value + 1);
-                  setTakesTick((value) => value + 1);
-                });
-              }}
-            />
-            ) : null
-          }
+          takes={takesNode}
+          script={scriptNode}
+          dialog={dialogNode}
         />
+      )}
       <VocalModal
         open={draftPrompt}
         title="Сначала закройте черновик"
