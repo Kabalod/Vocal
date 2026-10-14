@@ -51,7 +51,14 @@ test("L1 report: per user, per kind, STT apart, the day's total against the prov
   assert.deepEqual([dialogue.calls, dialogue.totalTokens], [3, 200]);
   assert.equal(report.byKind.find((k) => k.kind === "stt")!.totalTokens, 0, "STT never adds to tokens");
 
+  // peak per minute: u1 dialogue 150 + u1 script 300 + u2 dialogue 50 (+ one queued row) are all at `now`; yesterday's call is 20 h earlier
+  assert.equal(report.peak.tokensPerMinute.value, 500);
+  assert.equal(report.peak.requestsPerMinute.value, 4, "chat calls only (no STT)");
+  assert.equal(report.limits.providerTokensPerMinute, 8000);
+  assert.equal(report.peak.tokensPerMinuteUsedPercent, 6.3);
+
   const md = renderDailyReportMarkdown(report);
+  assert.match(md, /Пик токенов за 60 с/);
   assert.match(md, /500 из 1 000 \(50%\)/);
   assert.doesNotMatch(md, /SECRET/);
   assert.doesNotMatch(JSON.stringify(report), /SECRET/);
@@ -72,4 +79,14 @@ test("L1 report: the script writes a .md and a .json file for the day", async (t
   assert.ok(mdPath.startsWith(dir) && mdPath.endsWith(".md") && jsonPath.endsWith(".json"));
   assert.match(readFileSync(mdPath, "utf8"), /Расход модели за \d{4}-\d{2}-\d{2}/);
   assert.equal(JSON.parse(readFileSync(jsonPath, "utf8")).chatTokensDay, 15);
+});
+
+test("L1 report: peak per minute uses a sliding 60 s window and ignores STT", async () => {
+  const { peakPerMinute } = await import("../src/lib/ai/daily-report");
+  const at = (s: number) => new Date(Date.UTC(2026, 9, 15, 10, 0, s));
+  const row = (s: number, p: number, kind = "dialogue", status = "done") => ({ kind, status, ownerUserId: "u", promptTokens: p, completionTokens: 0, createdAt: at(s) });
+  const peak = peakPerMinute([row(0, 100), row(30, 200), row(59, 300), row(61, 50), row(62, 9999, "stt"), row(125, 400), row(130, 700, "dialogue", "rate_limited")]);
+  assert.equal(peak.tokens.value, 600, "0–59 s window: 100+200+300; the rate_limited row has no tokens");
+  assert.equal(peak.requests.value, 3, "at most three chat calls in any 60 s (the row at 0 leaves the window when 61 arrives; STT is not counted)");
+  assert.equal(peak.requests.at, "2026-10-15T10:00:00.000Z");
 });

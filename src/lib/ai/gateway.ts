@@ -5,11 +5,13 @@ import { ownerUserId } from "@/lib/auth/session";
 import { LLM_MODEL, STT_MODEL } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { extractAudio, probeDuration } from "@/lib/ffmpeg";
+import { isProviderRateLimit, providerRetryAfterSeconds } from "@/lib/groq";
 import { transcribeAudio } from "@/lib/stt";
 import {
   AiBudgetError,
   assertDailySttBudget,
   assertDailyTokenBudget,
+  ProviderBusyError,
   STT_CALL_KIND,
   withAiInflight,
 } from "@/lib/ai/usage-guard";
@@ -105,6 +107,20 @@ export async function gatewayComplete(
     }
     return result;
   } catch (error) {
+    if (isProviderRateLimit(error)) {
+      // The provider refused the call (429): nothing was spent on their side, so nothing is charged to the author's budget.
+      await recordCall({
+        kind: selfRecording ? `${label}_failed` : label,
+        owner,
+        reelId: opts.reelId,
+        model: args.model ?? LLM_MODEL,
+        status: "rate_limited",
+        promptTokens: 0,
+        completionTokens: 0,
+        errorMessage: "PROVIDER_429",
+      }).catch(() => undefined);
+      throw new ProviderBusyError(providerRetryAfterSeconds(error));
+    }
     // Failed calls still cost quota. Self-recording callers leave tokens null on error rows,
     // so charge an estimate on a separate row instead of double-counting successes.
     await recordCall({
@@ -126,7 +142,7 @@ async function recordCall(input: {
   owner: string;
   reelId?: string | null;
   model: string;
-  status: "done" | "error";
+  status: "done" | "error" | "rate_limited";
   promptTokens: number;
   completionTokens: number;
   errorMessage?: string;
@@ -200,6 +216,20 @@ export async function meteredTranscribe(
     }).catch(() => undefined);
     return result;
   } catch (error) {
+    if (isProviderRateLimit(error)) {
+      await recordCall({
+        kind: STT_CALL_KIND,
+        owner,
+        reelId: opts.reelId,
+        model: STT_MODEL,
+        status: "rate_limited",
+        promptTokens: 0,
+        completionTokens: 0,
+        errorMessage: "PROVIDER_429",
+        snapshot: { gateway: true, seconds },
+      }).catch(() => undefined);
+      throw new ProviderBusyError(providerRetryAfterSeconds(error));
+    }
     await recordCall({
       kind: STT_CALL_KIND,
       owner,

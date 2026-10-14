@@ -6,7 +6,7 @@ import { defaultCompleteJson, LLM_MODEL, parseJsonObject } from "@/lib/ai/comple
 import { extractAudio } from "@/lib/ffmpeg";
 import { gatewayComplete, transcribeVoiceOnce } from "@/lib/ai/gateway";
 import { transcribeAudio } from "@/lib/stt";
-import { aiOperationKey, assertDailyTokenBudget, StateVersionError, withAiInflight } from "@/lib/ai/usage-guard";
+import { aiOperationKey, assertDailyTokenBudget, ProviderBusyError, StateVersionError, withAiInflight } from "@/lib/ai/usage-guard";
 import { pageDialogueItems, decodeDialogueCursor } from "@/lib/dialogue-cursor";
 import { getReelContext } from "@/lib/reel-context";
 import { ReelError } from "@/lib/reels";
@@ -1885,6 +1885,8 @@ export async function runDialogueTurn(
       return listDialoguePage(reelId);
     }
     if (error instanceof StateVersionError) throw error;
+    // L1: the provider is busy (429 after bounded retries): the author's message and the turn's key are kept, the route answers 503 AI_BUSY.
+    if (error instanceof ProviderBusyError) throw error;
     if (error instanceof ReelError) throw new StateVersionError();
     if (error instanceof AgentActionError) throw error;
     if (error instanceof DialogueTurnExecError || error instanceof C00EnvelopeError) {

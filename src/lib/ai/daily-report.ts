@@ -14,6 +14,24 @@ export function providerDailyTokenLimit(env: Record<string, string | undefined> 
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : DEFAULT_PROVIDER_DAILY_TOKEN_LIMIT;
 }
 
+export const DEFAULT_PROVIDER_TOKENS_PER_MINUTE = 8_000;
+export const DEFAULT_PROVIDER_REQUESTS_PER_MINUTE = 30;
+
+function positiveFromEnv(env: Record<string, string | undefined>, name: string, fallback: number): number {
+  const value = Number(env[name]?.trim());
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+/** The provider's per-minute token limit (Groq, openai/gpt-oss-120b: 8 000 per organization). Report only. */
+export function providerTokensPerMinute(env: Record<string, string | undefined> = process.env): number {
+  return positiveFromEnv(env, "VOCAL_PROVIDER_TPM_LIMIT", DEFAULT_PROVIDER_TOKENS_PER_MINUTE);
+}
+
+/** The provider's per-minute request limit (30 per organization). Report only. */
+export function providerRequestsPerMinute(env: Record<string, string | undefined> = process.env): number {
+  return positiveFromEnv(env, "VOCAL_PROVIDER_RPM_LIMIT", DEFAULT_PROVIDER_REQUESTS_PER_MINUTE);
+}
+
 export type CallRow = {
   kind: string;
   status: string;
@@ -36,10 +54,25 @@ export type UserTotals = {
   tokenLimitUsedPercent: number | null;
   byKind: KindTotals[];
 };
+export type PeakWindow = { value: number; at: string | null };
 export type DailyReport = {
   day: string;
   generatedAt: string;
-  limits: { providerDailyTokens: number; globalDailyTokenCap: number; perUserDailyTokens: number; perUserDailySttSeconds: number };
+  limits: {
+    providerDailyTokens: number;
+    providerTokensPerMinute: number;
+    providerRequestsPerMinute: number;
+    globalDailyTokenCap: number;
+    perUserDailyTokens: number;
+    perUserDailySttSeconds: number;
+  };
+  /**
+   * Busiest 60 seconds of the day, from AiCall.createdAt (a row is created when the call starts, so tokens are attributed to the
+   * start; the provider counts them as the request is made and answered). One row per finished call: the retries inside a call are not rows.
+   */
+  peak: { tokensPerMinute: PeakWindow; requestsPerMinute: PeakWindow; tokensPerMinuteUsedPercent: number | null; requestsPerMinuteUsedPercent: number | null };
+  /** Calls the provider refused with 429 after the bounded retries (status rate_limited). */
+  rateLimitedCalls: number;
   /** Chat tokens (done + error), all users, the calendar day. STT is not tokens and is not included. */
   chatTokensDay: number;
   chatTokensLast24h: number;
@@ -77,6 +110,25 @@ const percent = (value: number, limit: number): number | null => (limit > 0 ? Ma
 const counted = (row: CallRow) => row.status === "done" || row.status === "error";
 const tokens = (row: CallRow) => (row.promptTokens ?? 0) + (row.completionTokens ?? 0);
 
+/** Busiest sliding 60 s window over chat calls (done, error, rate_limited; STT is audio seconds, not tokens). */
+export function peakPerMinute(rows: CallRow[]): { tokens: PeakWindow; requests: PeakWindow } {
+  const chat = rows.filter((row) => row.kind !== STT_CALL_KIND).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  let left = 0;
+  let windowTokens = 0;
+  const best = { tokens: { value: 0, at: null as string | null }, requests: { value: 0, at: null as string | null } };
+  for (let right = 0; right < chat.length; right += 1) {
+    windowTokens += counted(chat[right]) ? tokens(chat[right]) : 0;
+    while (chat[right].createdAt.getTime() - chat[left].createdAt.getTime() >= 60_000) {
+      windowTokens -= counted(chat[left]) ? tokens(chat[left]) : 0;
+      left += 1;
+    }
+    const startedAt = chat[left].createdAt.toISOString();
+    if (windowTokens > best.tokens.value) best.tokens = { value: windowTokens, at: startedAt };
+    if (right - left + 1 > best.requests.value) best.requests = { value: right - left + 1, at: startedAt };
+  }
+  return best;
+}
+
 /** Pure: rows of the day (and, for the rolling window, of the 24 hours before `now`) → report. */
 export function buildDailyReport(
   dayRows: CallRow[],
@@ -87,6 +139,9 @@ export function buildDailyReport(
   const providerLimit = providerDailyTokenLimit(env);
   const perUserLimit = dailyTokenLimit();
   const sttLimit = dailySttSecondsLimit();
+  const tpmLimit = providerTokensPerMinute(env);
+  const rpmLimit = providerRequestsPerMinute(env);
+  const peak = peakPerMinute(dayRows);
 
   const kinds = new Map<string, KindTotals>();
   const users = new Map<string, UserTotals & { kinds: Map<string, KindTotals> }>();
@@ -147,7 +202,21 @@ export function buildDailyReport(
   return {
     day: options.day,
     generatedAt: (options.now ?? new Date()).toISOString(),
-    limits: { providerDailyTokens: providerLimit, globalDailyTokenCap: globalDailyTokenCap(env), perUserDailyTokens: perUserLimit, perUserDailySttSeconds: sttLimit },
+    limits: {
+      providerDailyTokens: providerLimit,
+      providerTokensPerMinute: tpmLimit,
+      providerRequestsPerMinute: rpmLimit,
+      globalDailyTokenCap: globalDailyTokenCap(env),
+      perUserDailyTokens: perUserLimit,
+      perUserDailySttSeconds: sttLimit,
+    },
+    peak: {
+      tokensPerMinute: peak.tokens,
+      requestsPerMinute: peak.requests,
+      tokensPerMinuteUsedPercent: percent(peak.tokens.value, tpmLimit),
+      requestsPerMinuteUsedPercent: percent(peak.requests.value, rpmLimit),
+    },
+    rateLimitedCalls: statuses.get("rate_limited") ?? 0,
     chatTokensDay,
     chatTokensLast24h,
     providerUsedPercentDay: percent(chatTokensDay, providerLimit),
@@ -189,8 +258,11 @@ export function renderDailyReportMarkdown(report: DailyReport): string {
   lines.push(`| Глобальный выключатель \`VOCAL_GLOBAL_DAILY_TOKEN_CAP\` | ${l.globalDailyTokenCap > 0 ? fmt(l.globalDailyTokenCap) : "выключен (0)"} |`);
   lines.push(`| Лимит на человека \`VOCAL_DAILY_TOKEN_LIMIT\` | ${l.perUserDailyTokens > 0 ? fmt(l.perUserDailyTokens) : "выключен (0)"} |`);
   lines.push(`| Расшифровка голоса (отдельно, секунды звука) | ${fmt(report.sttSecondsDay)} с в ${report.sttCallsDay} вызовах; лимит на человека ${l.perUserDailySttSeconds > 0 ? fmt(l.perUserDailySttSeconds) + " с" : "выключен"} |`);
+  lines.push(`| Пик токенов за 60 с (лимит провайдера ${fmt(l.providerTokensPerMinute)}/мин) | ${fmt(report.peak.tokensPerMinute.value)} (${pct(report.peak.tokensPerMinuteUsedPercent)})${report.peak.tokensPerMinute.at ? `, окно с ${report.peak.tokensPerMinute.at}` : ""} |`);
+  lines.push(`| Пик вызовов за 60 с (лимит провайдера ${fmt(l.providerRequestsPerMinute)}/мин) | ${report.peak.requestsPerMinute.value} (${pct(report.peak.requestsPerMinuteUsedPercent)})${report.peak.requestsPerMinute.at ? `, окно с ${report.peak.requestsPerMinute.at}` : ""} |`);
+  lines.push(`| Отказов провайдера 429 после повторов (\`rate_limited\`) | ${report.rateLimitedCalls} |`);
   lines.push(`| Вызовов всего / с ошибкой / без чисел токенов | ${report.callsDay} / ${report.errorsDay} / ${report.callsWithoutTokens} |`);
-  lines.push("", "Считаются вызовы со статусом `done` и `error` (как в лимитах приложения). Вызовы в очереди и без чисел токенов в итог токенов не входят.", "");
+  lines.push("", "Считаются вызовы со статусом `done` и `error` (как в лимитах приложения). Вызовы в очереди, отказы 429 и вызовы без чисел токенов в итог токенов не входят. Пик за минуту — по времени создания записи (начало вызова), скользящее окно 60 с, считает вызовы приложения целиком: повторы внутри одного вызова отдельными строками не пишутся, поэтому пик **может занижать** то, что видит провайдер.", "");
   lines.push("## По пользователям", "");
   if (report.byUser.length === 0) lines.push("Вызовов за день нет.", "");
   else {

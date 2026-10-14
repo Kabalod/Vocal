@@ -33,6 +33,28 @@ export class AiPausedError extends AiBudgetError {
   }
 }
 
+/**
+ * L1: the provider answered 429 (requests, tokens per minute or per day) and the bounded retries did not get through.
+ * The author's text is kept; sending again with the same idempotency key resumes the same turn (no second turn).
+ * A subclass of AiBudgetError so every route that already maps budget errors answers it with this status and code.
+ */
+export class ProviderBusyError extends AiBudgetError {
+  override readonly code: string = "AI_BUSY";
+  override readonly status: number = 503;
+  /** The provider asked to wait longer than a few minutes (a daily limit): "a minute" would be a lie. */
+  readonly longWait: boolean;
+  constructor(readonly retryAfterSeconds: number | null = null) {
+    const longWait = retryAfterSeconds !== null && retryAfterSeconds > 600;
+    super(
+      longWait
+        ? "Vocal сейчас недоступен: исчерпан лимит модели. Ваш ответ сохранён, попробуйте позже."
+        : "Vocal сейчас занят. Повторю через минуту.",
+    );
+    this.longWait = longWait;
+    this.name = "ProviderBusyError";
+  }
+}
+
 export class AiInflightError extends Error {
   readonly code = "AI_INFLIGHT";
   readonly status = 409;

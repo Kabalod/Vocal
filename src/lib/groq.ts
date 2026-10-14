@@ -49,7 +49,11 @@ function createGroqClient(): Groq {
   });
 }
 
+/** Test seam: a fake provider client. Production keeps it null. */
+export const groqClientSeam: { client: Groq | null } = { client: null };
+
 export function getGroq(): Groq {
+  if (groqClientSeam.client) return groqClientSeam.client;
   if (!groqClient) {
     groqClient = createGroqClient();
   }
@@ -140,6 +144,26 @@ export function groqRetryAfterMs(error: unknown): number | null {
   return null;
 }
 
+export function isProviderRateLimit(error: unknown): boolean {
+  return (error as { status?: number } | null)?.status === 429;
+}
+
+/** Whole seconds the provider asked to wait (Retry-After or "try again in …"), without our safety margin; null when it did not say. */
+export function providerRetryAfterSeconds(error: unknown): number | null {
+  const ms = groqRetryAfterMs(error);
+  return ms === null ? null : Math.max(0, Math.round((ms - 750) / 1000));
+}
+
+/** Total time the retries may spend waiting on one provider call (429 pauses and the like). */
+export function retryWaitBudgetMs() {
+  return envMs("VOCAL_AI_RETRY_WAIT_MS", 60_000);
+}
+
+/** Test seam: the pause between attempts. */
+export const retryClock: { sleep: (ms: number) => Promise<void> } = {
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+};
+
 export function isRetryableGroqError(error: unknown): boolean {
   const status = (error as { status?: number }).status;
   if (status === 429) return true;
@@ -153,6 +177,8 @@ export async function withRetry<T>(
 ): Promise<T> {
   const retries = opts.retries ?? (noAutomaticModelRetry() ? 1 : 4);
   let lastError: unknown;
+  let waitedMs = 0;
+  const waitBudgetMs = retryWaitBudgetMs();
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       return await fn();
@@ -168,10 +194,15 @@ export async function withRetry<T>(
       if (opts.deadlineAt !== undefined && Date.now() + waitMs >= opts.deadlineAt) {
         throw error;
       }
+      // A pause the budget cannot cover (a per-day limit asks for hours): give up now instead of holding the author's request.
+      if (waitedMs + waitMs > waitBudgetMs) {
+        throw error;
+      }
+      waitedMs += waitMs;
       console.warn(
         `Groq ${opts.label ?? "request"} retry ${attempt + 1}/${retries - 1} in ${waitMs}ms`,
       );
-      await new Promise((r) => setTimeout(r, waitMs));
+      await retryClock.sleep(waitMs);
     }
   }
   throw lastError;
