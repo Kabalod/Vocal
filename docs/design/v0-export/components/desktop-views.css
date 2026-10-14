@@ -1,0 +1,89 @@
+/* Desktop-only screens (>=1024px): dialog reader (ref 05), script versions (ref 06), profile portrait (ref 07).
+   Everything is scoped to the media query so mobile and tablet layouts are untouched. */
+@media (min-width:1024px){
+/* shared buttons */
+.dk-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:34px;min-height:34px;padding:0 14px;border-radius:9px;border:.5px solid #ffffff14;font:500 13px/1 var(--font-inter),system-ui,sans-serif;white-space:nowrap;cursor:pointer;color:#f4f2f7;background:transparent;transition:background 150ms ease-out,transform 150ms ease-out}
+.dk-btn svg{width:15px;height:15px;stroke-width:1.75;flex-shrink:0}
+.dk-btn:active{transform:scale(.98)}
+.dk-btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.dk-btn-secondary{background:#ffffff0d;border-color:#ffffff24}
+.dk-btn-secondary:hover:not(:disabled){background:#ffffff16}
+.dk-btn-ghost{color:#c7c3cd}
+.dk-btn-ghost:hover:not(:disabled){background:#ffffff0d}
+.dk-btn-primary{background:linear-gradient(180deg,#8b6cf8,#7154d9);border-color:#ffffff14;color:#fff;box-shadow:inset 0 .5px 0 #ffffff40,0 1px 2px #0006}
+.dk-btn-primary:hover:not(:disabled){filter:brightness(1.07)}
+.dk-btn-danger{background:#e5484d;border-color:transparent;color:#fff}
+.dk-btn:focus-visible,.dk-version:focus-visible,.dk-rows button:focus-visible,.dk-back:focus-visible{outline:2px solid #8b6cf8aa;outline-offset:2px}
+
+/* ---- 05 Dialog: reading column + narrow chat ---- */
+.dk-dialog{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:24px;width:min(100%,1064px);height:calc(100dvh - 224px);min-height:520px;margin:0 auto}
+.dk-script{display:flex;flex-direction:column;min-width:0;overflow-y:auto;padding:32px 40px;border:.5px solid #ffffff14;border-radius:14px;background:#ffffff06;box-shadow:inset 0 .5px 0 #ffffff0d;scrollbar-width:thin}
+.dk-caption{margin:0 0 18px;color:#929098;font:500 11px/1.3 var(--font-inter),system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase}
+.dk-script-text{max-width:62ch;font-family:var(--font-serif),Georgia,serif;font-size:22px;line-height:1.6}
+.dk-script-text p{margin:0 0 22px}
+.dk-chat{display:flex;flex-direction:column;min-width:0;min-height:0;border:.5px solid #ffffff14;border-radius:14px;background:#1b1b1f;overflow:hidden}
+.dk-chat-head{padding:14px 16px;border-bottom:.5px solid #ffffff14}
+.dk-chat-head strong{display:block;font:600 14px/1.3 var(--font-inter),system-ui,sans-serif}
+.dk-chat-head span{color:#929098;font-size:12px}
+.dk-chat-scroll{flex:1;min-height:0;overflow-y:auto;padding:16px;scrollbar-width:thin}
+.dk-chat .conversation{gap:14px}
+.dk-chat .conversation-time{display:block;margin:0 0 4px;text-align:center;color:#929098;font-size:11px}
+.dk-chat .message{max-width:92%;font-size:14px}
+.dk-chat .message>p:not(.message-note){padding:11px 14px;border-radius:16px}
+.dk-chat .message-note-caption{max-width:92%}
+.dk-chat-foot{display:flex;flex-direction:column;gap:10px;padding:10px 12px 12px;border-top:.5px solid #ffffff14}
+.dk-chips{display:flex;flex-wrap:wrap;gap:6px}
+.dk-chips button{height:30px;padding:0 12px;border:.5px solid #ffffff1c;border-radius:15px;background:#ffffff08;color:#d9d2ff;font:500 12px/1 var(--font-inter),system-ui,sans-serif;cursor:pointer}
+.dk-chips button:hover{background:#ffffff12}
+.dk-chips button.primary{border-color:#8b6cf866;background:#8b6cf81f}
+.dk-chips button:focus-visible{outline:2px solid #8b6cf8aa;outline-offset:2px}
+.dk-chat .voice-composer{position:static;margin:0}
+.dk-chat .mic-area small{display:none}
+
+
+/* ---- 06 Script: versions list + reader ---- */
+.dk-build{width:100%;height:38px;margin-bottom:18px}
+.dk-hint{position:relative;display:flex;align-items:center;gap:16px;margin:0 0 20px;padding:12px 44px 12px 16px;border:.5px solid #8b6cf855;border-radius:12px;background:#8b6cf812}
+.dk-hint p{flex:1;margin:0;color:#d9d6e0;font-size:13.5px;line-height:1.5}
+.dk-hint strong{margin-right:8px;color:#b6a4ff;font:600 11px/1 var(--font-inter),system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase}
+.dk-hint-close{position:absolute;top:8px;right:8px;display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:7px;background:transparent;color:#aaa7b1;cursor:pointer}
+.dk-hint-close:hover{background:#ffffff12;color:#f4f2f7}
+.dk-hint-close:focus-visible{outline:2px solid #8b6cf8aa;outline-offset:2px}
+.dk-hint-close svg{width:16px;height:16px}
+.dk-building{flex:1;max-width:64ch}
+.dk-building .state-card{min-height:0}
+.dk-script-page{display:grid;grid-template-columns:260px minmax(0,1fr);gap:24px;width:min(100%,1064px);margin:0 auto;align-items:start}
+.dk-versions h2{margin:0 0 10px;color:#929098;font:500 11px/1.3 var(--font-inter),system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase}
+.dk-versions ul{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.dk-version{display:flex;flex-direction:column;gap:6px;width:100%;padding:12px 14px;border:.5px solid #ffffff14;border-radius:12px;background:#ffffff06;color:#f4f2f7;text-align:left;cursor:pointer;transition:background 150ms ease-out,border-color 150ms ease-out}
+.dk-version:hover{background:#ffffff0d}
+.dk-version.selected{border-color:#8b6cf899;background:#8b6cf81a}
+.dk-version-name{display:flex;align-items:center;gap:8px;font:600 14px/1.3 var(--font-inter),system-ui,sans-serif}
+.dk-version-name em{font-style:normal;font-weight:500;font-size:11px;color:#b6a4ff}
+.dk-version-name b{margin-left:auto;padding:2px 7px;border:.5px solid #8b6cf8;border-radius:6px;color:#d9d2ff;font-size:10px;letter-spacing:.05em;text-transform:uppercase}
+.dk-version-date{color:#929098;font-size:12px}
+.dk-reader{display:flex;flex-direction:column;min-width:0;min-height:calc(100dvh - 210px);padding:24px 32px 28px;border:.5px solid #ffffff14;border-radius:14px;background:#ffffff06;box-shadow:inset 0 .5px 0 #ffffff0d}
+.dk-reader>header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px}
+.dk-eyebrow{display:block;margin-bottom:6px;color:#b6a4ff;font:600 11px/1.3 var(--font-inter),system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase}
+.dk-reader h2{margin:0;font:500 24px/1.2 var(--font-serif),Georgia,serif}
+.dk-reader-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+.dk-reader-text{flex:1;max-width:64ch;font-family:var(--font-serif),Georgia,serif;font-size:20px;line-height:1.65}
+.dk-reader-text p{margin:0 0 20px}
+.dk-editor{flex:1;display:flex;flex-direction:column;gap:12px}
+.dk-editor textarea{flex:1;min-height:240px;max-width:72ch;padding:14px 16px;border:.5px solid #8b6cf866;border-radius:12px;background:#161618;color:#f4f2f7;font:400 20px/1.65 var(--font-serif),Georgia,serif;resize:vertical}
+.dk-editor>div{display:flex;gap:8px}
+.dk-changes{margin-top:24px;padding-top:16px;border-top:.5px solid #ffffff14}
+.dk-changes summary{display:inline-flex;align-items:center;gap:6px;color:#c7c3cd;font:500 13px/1 var(--font-inter),system-ui,sans-serif;cursor:pointer;list-style:none}
+.dk-changes summary::-webkit-details-marker{display:none}
+.dk-changes summary svg{width:15px;height:15px;transition:transform 150ms ease-out}
+.dk-changes[open] summary svg{transform:rotate(180deg)}
+.dk-changes ul{display:flex;flex-direction:column;gap:8px;margin:14px 0 0;padding:0;list-style:none}
+.dk-changes li{display:flex;gap:8px;align-items:flex-start;color:#c7c3cd;font-size:13px;line-height:1.5}
+.dk-changes li svg{width:15px;height:15px;margin-top:2px;color:#8b6cf8;flex-shrink:0}
+}
+@media (min-width:1024px) and (prefers-reduced-motion:reduce){.dk-btn,.dk-version,.dk-changes summary svg{transition:none}}
+
+/* Thought header on tablet and desktop: one back link and one title (the compact iOS title stays on mobile). */
+@media (min-width:641px){
+.focused-thought .mobile-back-copy,.focused-thought .mobile-nav-title{display:none}
+}
