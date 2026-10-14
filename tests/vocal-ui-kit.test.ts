@@ -25,7 +25,7 @@ test("dev ui catalog is off in production and not in user nav", () => {
 test("kit statuses and segmented tabs stay off champagne fill", () => {
   assert.deepEqual(
     VOCAL_USER_STATUSES.map((item) => item.label),
-    ["Не завершена", "В работе", "Успешно завершена"],
+    ["Не завершена", "В работе", "Завершена"],
   );
   const tabs = readFileSync(join(root, "src/components/vocal-ui/SegmentedTabs.tsx"), "utf8");
   const filters = readFileSync(join(root, "src/components/vocal-ui/FilterControl.tsx"), "utf8");

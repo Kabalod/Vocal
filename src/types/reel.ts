@@ -11,7 +11,7 @@ export const REEL_STATUS_LABELS: Record<ReelStatus, string> = {
   idea: "Идея",
   in_progress: "В работе",
   ready_to_record: "Готов к записи",
-  completed: "Успешно завершена",
+  completed: "Завершена",
   archived: "Архив",
 };
 
@@ -21,7 +21,7 @@ export type ReelStatusGroup = (typeof REEL_STATUS_GROUPS)[number];
 export const REEL_STATUS_GROUP_LABELS: Record<ReelStatusGroup, string> = {
   open: "Не завершена",
   in_progress: "В работе",
-  completed: "Успешно завершена",
+  completed: "Завершена",
   archived: "Архив",
 };
 

@@ -2,7 +2,7 @@ export const RECORDING_FILTERS = [
   { id: "all", label: "Все" },
   { id: "idea", label: "Не завершена" },
   { id: "in_progress", label: "В работе" },
-  { id: "completed", label: "Успешно завершена" },
+  { id: "completed", label: "Завершена" },
 ] as const;
 
 export type RecordingFilterId = (typeof RECORDING_FILTERS)[number]["id"];

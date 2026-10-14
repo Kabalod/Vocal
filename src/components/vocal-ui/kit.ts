@@ -1,7 +1,7 @@
 export const VOCAL_USER_STATUSES = [
   { id: "open", label: "Не завершена" },
   { id: "in_progress", label: "В работе" },
-  { id: "completed", label: "Успешно завершена" },
+  { id: "completed", label: "Завершена" },
 ] as const;
 
 export type VocalUserStatusId = (typeof VOCAL_USER_STATUSES)[number]["id"];

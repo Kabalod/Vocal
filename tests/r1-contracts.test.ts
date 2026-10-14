@@ -23,7 +23,7 @@ test("R1 maps P13–P16 later and locks user statuses, scriptless record and ame
     P15: "R5+R8",
     P16: "R7",
   });
-  assert.deepEqual(productUserStatusLabels(), ["Не завершена", "В работе", "Успешно завершена"]);
+  assert.deepEqual(productUserStatusLabels(), ["Не завершена", "В работе", "Завершена"]);
   assert.equal(scriptlessRecordingAllowed(), true);
   assert.equal(unfinishedAmendPublishesPortrait(emptyProfileFields()), false);
   assert.equal(

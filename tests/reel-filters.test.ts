@@ -12,7 +12,7 @@ test("thought filters are the four user groups without archive chips", () => {
   );
   assert.deepEqual(
     RECORDING_FILTERS.map((item) => item.label),
-    ["Все", "Не завершена", "В работе", "Успешно завершена"],
+    ["Все", "Не завершена", "В работе", "Завершена"],
   );
   assert.equal(isRecordingFilterId("archived"), false);
   assert.equal(isRecordingFilterId("open"), false);
@@ -30,7 +30,7 @@ test("internal reel statuses map to user groups", () => {
 test("user-facing list statuses stay three labels via one mapping", () => {
   assert.deepEqual(
     VOCAL_USER_STATUSES.map((item) => item.label),
-    ["Не завершена", "В работе", "Успешно завершена"],
+    ["Не завершена", "В работе", "Завершена"],
   );
   assert.equal(thoughtUserStatus("draft"), "open");
   assert.equal(thoughtUserStatus("idea"), "open");

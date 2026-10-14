@@ -19,7 +19,7 @@ const STATUS_ICONS = {
 const STATUS_LABELS = {
   open: "Не завершена",
   in_progress: "В работе",
-  completed: "Успешно завершена",
+  completed: "Завершена",
 } as const;
 
 function PolaroidStatus({ reel, size }: { reel: ReelListItemDto; size: "desktop" | "mobile" }) {

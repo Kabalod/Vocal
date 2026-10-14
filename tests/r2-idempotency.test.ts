@@ -23,7 +23,7 @@ test("R2 keeps R1 mapping and product invariants", () => {
     P15: "R5+R8",
     P16: "R7",
   });
-  assert.deepEqual(productUserStatusLabels(), ["Не завершена", "В работе", "Успешно завершена"]);
+  assert.deepEqual(productUserStatusLabels(), ["Не завершена", "В работе", "Завершена"]);
   assert.equal(scriptlessRecordingAllowed(), true);
   assert.equal(unfinishedAmendPublishesPortrait(emptyProfileFields()), false);
 });

@@ -19,7 +19,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 test("user statuses, nav and media errors stay inside the MVP dictionary", () => {
   assert.deepEqual(
     VOCAL_USER_STATUSES.map((item) => item.label),
-    ["Не завершена", "В работе", "Успешно завершена"],
+    ["Не завершена", "В работе", "Завершена"],
   );
   assert.deepEqual(
     SHELL_NAV.map((item) => item.label),
