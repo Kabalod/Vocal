@@ -1,0 +1,54 @@
+/* Shared month calendar: desktop sidebar and mobile date sheet use the same markup. */
+.month-calendar{display:flex;flex-direction:column;gap:10px;color:#f4f2f7}
+.month-calendar .calendar-heading{display:grid;grid-template-columns:32px 1fr 32px;align-items:center;margin:0}
+.month-calendar .calendar-heading strong{text-align:center;font:600 14px/1.2 var(--font-inter),system-ui,sans-serif}
+.month-calendar .calendar-heading button{width:32px;height:32px;min-width:0;min-height:0;display:grid;place-items:center;padding:0;border:0;border-radius:8px;background:transparent;color:#b6a4ff;font-size:inherit}
+.month-calendar .calendar-heading button:hover{background:#ffffff0d}
+.month-calendar .calendar-heading svg{width:16px;height:16px;stroke-width:1.75}
+.month-calendar .calendar-presets{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0}
+.month-calendar .calendar-presets button{height:28px;min-height:28px;min-width:0;padding:0 10px;border:.5px solid #ffffff1c;border-radius:14px;background:#ffffff08;color:#c7c3cd;font:500 12px/1 var(--font-inter),system-ui,sans-serif;white-space:nowrap}
+.month-calendar .calendar-presets button:hover{background:#ffffff12}
+.month-calendar .calendar-presets button.selected{background:#8b6cf8;border-color:transparent;color:#fff}
+.month-calendar .calendar-presets .calendar-reset{margin-left:auto;padding:0 2px;border:0;background:none;color:#b6a4ff}
+.month-calendar .calendar-presets .calendar-reset:hover{background:none;text-decoration:underline}
+.month-calendar .calendar-week,.month-calendar .calendar-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;margin:0}
+.month-calendar .calendar-week span{text-align:center;color:#8d8994;font-size:11px;line-height:20px}
+.month-calendar .calendar-days span{min-height:0}
+.month-calendar .calendar-days button{position:relative;justify-self:center;width:100%;max-width:34px;aspect-ratio:1;min-width:0;min-height:0;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:transparent;color:#e9e6ee;padding-bottom:6px;font:500 12px/1 var(--font-inter),system-ui,sans-serif;font-variant-numeric:tabular-nums;cursor:pointer}
+.month-calendar .calendar-days button:hover{background:#ffffff10}
+.month-calendar .calendar-days button.in-selection{background:#8b6cf822}
+.month-calendar .calendar-days button.today:not(.selected){box-shadow:inset 0 0 0 1.5px #8b6cf8}
+.month-calendar .calendar-days button.selected{background:#8b6cf8;color:#fff}
+.month-calendar .calendar-days button.has-thought::after{content:"";position:absolute;bottom:1px;left:50%;width:3px;height:3px;margin-left:-1.5px;border-radius:50%;background:#a28bfb}
+.month-calendar .calendar-days button.selected::after{background:#fff}
+.month-calendar .calendar-days button:focus-visible,.month-calendar button:focus-visible{outline:2px solid #8b6cf8aa;outline-offset:1px}
+
+/* Desktop: calendar lives in the library sidebar (canon screen 09). */
+.sidebar-calendar{margin:0 0 6px;padding:0 4px}
+.sidebar-calendar .calendar-heading{grid-template-columns:28px 1fr 28px}
+.sidebar-calendar .calendar-heading strong{font-size:13px;white-space:nowrap}
+
+/* Active date filter row above the library: chip + result count. */
+.active-filters{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:0 0 18px;color:#b7b4bf;font-size:12px}
+.date-chip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 6px 0 12px;border:.5px solid #8b6cf866;border-radius:15px;background:#8b6cf81f;color:#ddd5ff;font:500 12px/1 var(--font-inter),system-ui,sans-serif;white-space:nowrap}
+.date-chip button{width:22px;height:22px;min-width:0;min-height:0;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:transparent;color:inherit}
+.date-chip button:hover{background:#ffffff14}
+.date-chip svg{width:13px;height:13px}
+
+@media (max-width:640px){
+  .active-filters{margin:14px 0 4px}
+  .month-calendar{gap:12px}
+  .month-calendar .calendar-heading{grid-template-columns:44px 1fr 44px}
+  .month-calendar .calendar-heading strong{font-size:16px}
+  .month-calendar .calendar-heading button{width:44px;height:44px}
+  .month-calendar .calendar-heading svg{width:20px;height:20px}
+  .month-calendar .calendar-presets{gap:8px}
+  .month-calendar .calendar-presets button{height:34px;min-height:34px;padding:0 13px;border-radius:17px;font-size:13px}
+  .month-calendar .calendar-days{gap:4px}
+  .month-calendar .calendar-days button{max-width:44px;padding-bottom:5px;font-size:15px}
+  .month-calendar .calendar-days button.has-thought::after{bottom:5px;width:4px;height:4px;margin-left:-2px}
+  .date-chip{height:32px}
+}
+
+/* The sidebar now holds the calendar: let it scroll on short windows instead of clipping. */
+@media (min-width:641px){.library-sidebar{overflow-y:auto;scrollbar-width:none}.library-sidebar::-webkit-scrollbar{display:none}}

@@ -62,27 +62,8 @@
   color: #b7b4bf;
   margin-top: 5px;
 }
-.library-date {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  margin: 36px 0 22px;
-  padding: 12px;
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 12px;
-}
-.library-date strong {
-  font-size: 20px;
-}
-.library-date small,
-.library-date span {
-  color: #b7b4bf;
-}
-.library-date.selected {
-  border-color: #a28bfb;
-}
 .library-nav {
+  margin-top: 36px;
   display: flex;
   gap: 12px;
   align-items: center;
@@ -776,7 +757,6 @@
 .library-sort { display:flex; flex-shrink:0; padding:3px; border:1px solid #ffffff12; border-radius:12px; background:#1e1e21; }
 .library-sort button { padding:0 12px; background:transparent; border:0; border-radius:8px; color:#b7b4bf; }
 .library-sort button.selected { background:#34303f; color:#fff; }
-.library-date { flex-direction:row; gap:10px; align-items:center; border-color:#ffffff12; }
 .library-context { display:none; }
 .row-copy { min-width:0; flex:1; }
 .row-copy .row-preview { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#b7b4bf; margin-top:4px; }
@@ -788,7 +768,7 @@
 .date-dialog { max-width:440px; padding:24px; }
 .date-dialog header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
 .date-dialog h2 { font:600 20px inherit; }
-.date-dialog button { min-width:44px; background:#242427; border:1px solid #ffffff12; border-radius:10px; padding:10px; }
+.date-dialog header button { min-width:44px; background:#242427; border:1px solid #ffffff12; border-radius:10px; padding:10px; }
 .date-options { display:flex; flex-wrap:wrap; gap:8px; }
 .date-options .selected { border-color:#8b7cff; color:#d6ceff; }
 .date-range { display:flex; flex-direction:column; gap:14px; margin-top:20px; }
@@ -822,3 +802,10 @@
     transition: none;
   }
 }
+
+/* Status marks (canon 09): same shapes and colours as the cards. */
+.library-filters .status-icon,
+.mobile-filters .status-icon { flex: 0 0 auto; width: 16px; height: 16px; }
+.status-icon-0 { color: #7d7784; }
+.status-icon-1 { color: #d1a958; }
+.status-icon-2 { color: #70be8b; }
