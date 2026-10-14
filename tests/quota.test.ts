@@ -196,3 +196,16 @@ test("J1: quota is off by default, in production too; only explicit VOCAL_QUOTA=
   assert.equal(quotaEnforced({ NODE_ENV: "production", VOCAL_QUOTA: "on" }), true);
   assert.equal(quotaEnforced({ NODE_ENV: "test", VOCAL_QUOTA: " ON " }), true);
 });
+
+test("J1: without migration 11 (no UserQuota table) and VOCAL_QUOTA off: status, thought creation and account deletion still work", async (t) => {
+  const { prisma, quota, create } = await setup(t, { VOCAL_QUOTA: "off" });
+  await prisma.$executeRawUnsafe('DROP TABLE "UserQuota"');
+  const status = await quota.getQuotaStatus();
+  assert.deepEqual([status.enforced, status.exempt, status.canCreate, status.hasPeriod], [false, true, true, false]);
+  const created = await create();
+  assert.ok(created.reel.id, "a thought is created with the quota off and no quota table");
+  const { deleteAccountData } = await import("../src/lib/data-deletion");
+  const result = await deleteAccountData("local");
+  assert.equal(result.thoughts, 1, "account deletion does not touch the missing quota table");
+  assert.equal(await prisma.reel.count(), 0);
+});

@@ -50,7 +50,8 @@ export type QuotaStatus = {
 export async function getQuotaStatus(userId = ownerUserId(), now = new Date()): Promise<QuotaStatus> {
   const enforced = quotaEnforced();
   const exempt = !enforced || isOwnerUser(userId);
-  const row = await prisma.userQuota.findUnique({ where: { ownerUserId: userId } });
+  // Quota off (the default): do not touch UserQuota, its table exists only after migration 11_user_quota.
+  const row = enforced ? await prisma.userQuota.findUnique({ where: { ownerUserId: userId } }) : null;
   const active = Boolean(row) && now >= row!.periodStart && now < row!.periodEnd;
   const limit = row?.thoughtsLimit ?? DEFAULT_THOUGHTS_LIMIT;
   const used = row?.thoughtsUsed ?? 0;

@@ -278,7 +278,10 @@ export async function deleteAccountData(owner: string): Promise<{ thoughts: numb
         await tx.profileRevision.deleteMany({ where: { profileId: profile.id } });
         await tx.creatorProfile.delete({ where: { id: profile.id } });
       }
-      await tx.userQuota.deleteMany({ where: { ownerUserId: owner } }); // J1: the paid-period row goes with the account
+      // J1: the paid-period row goes with the account. The table exists only after migration 11_user_quota
+      // (not applied on live yet); a statement on a missing table would abort the whole transaction.
+      const [quotaTable] = await tx.$queryRaw<{ present: boolean }[]>`SELECT to_regclass('"UserQuota"') IS NOT NULL AS present`;
+      if (quotaTable?.present) await tx.userQuota.deleteMany({ where: { ownerUserId: owner } });
       // Remaining accounting rows keep their counts but lose the account id.
       await anonymizeAiCalls(tx, { ownerUserId: owner }, anonymizedOwnerId(owner));
     },
