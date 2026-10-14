@@ -41,8 +41,9 @@ test("kit statuses and segmented tabs stay off champagne fill", () => {
   assert.match(catalog, /variant="microphone"/);
   assert.match(composer, /variant="microphone"/);
   assert.match(iconButton, /microphone: "bg-accent text-on-accent/);
-  assert.match(icons, /Lucide is not installed/);
-  assert.equal(icons.includes("lucide-react"), false);
+  assert.match(icons, /from "lucide-react"/);
+  assert.equal(icons.includes("IconCheck"), false);
+  assert.equal(icons.includes("IconUpload"), false);
 });
 
 test("tablist arrows and Home/End move selection with wrap", () => {

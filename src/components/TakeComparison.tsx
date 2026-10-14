@@ -259,7 +259,7 @@ export function TakeComparison({ reelId }: { reelId: string }) {
               <span
                 key={`${chunk.op}-${index}`}
                 className={
-                  chunk.op === "add" ? "bg-green-900/40" : chunk.op === "del" ? "bg-red-900/40 line-through" : undefined
+                  chunk.op === "add" ? "bg-good/20" : chunk.op === "del" ? "bg-bad/20 line-through" : undefined
                 }
               >
                 {chunk.text}

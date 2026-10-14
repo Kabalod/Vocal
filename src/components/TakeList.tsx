@@ -140,7 +140,7 @@ function PolaroidTake({
           {take.number === 1 ? " · исходная мысль" : ""}
           {isFinal ? " · итоговый" : ""}
         </p>
-        <p className="mt-1 text-sm text-[#4a4258]">
+        <p className="mt-1 text-sm text-[var(--paper-ink-muted)]">
           {TAKE_INPUT_TYPE_LABELS[take.inputType]}
           {take.originalName ? ` · ${take.originalName}` : take.inputType === "text" ? " · без файла" : ` · ${take.mediaStatus}`}
         </p>
@@ -152,13 +152,13 @@ function PolaroidTake({
         rows={2}
         aria-label={`Заметка к дублю №${take.number}`}
         onBlur={(event) => onNote(event.target.value)}
-        className="mt-2 w-full rounded-lg border border-[#d8cfc0] bg-[#fbf7f0] px-2 py-1 text-sm text-[#1a1424] outline-none"
+        className="mt-2 w-full rounded-lg border border-[var(--paper-line)] bg-[var(--paper-light)] px-2 py-1 text-sm text-[var(--paper-ink)] outline-none"
       />
       <button
         type="button"
         onClick={onFinal}
         disabled={locked}
-        className="mt-2 min-h-11 rounded-full bg-[#1a1424] px-3 text-xs text-[#f5f3ff] disabled:opacity-50"
+        className="mt-2 min-h-11 rounded-full bg-[var(--paper-ink)] px-3 text-xs text-[var(--text)] disabled:opacity-50"
       >
         {isFinal ? "Снять итоговый" : "Сделать итоговым"}
       </button>

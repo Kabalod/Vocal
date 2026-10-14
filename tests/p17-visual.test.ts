@@ -14,8 +14,8 @@ function src(rel: string) {
 test("P17 visual: tokens, Inter/Literata/Caveat, reduced motion, viewports", () => {
   const css = src("src/app/globals.css");
   const layout = src("src/app/layout.tsx");
-  assert.match(css, /--accent:\s*#8b7cff/);
-  assert.match(css, /--font-sans:\s*var\(--font-inter\)/);
+  assert.match(css, /--accent:\s*#8b6cf8/);
+  assert.match(css, /--font-sans:\s*-apple-system, "SF Pro Text", var\(--font-inter\)/);
   assert.match(css, /--font-display:\s*var\(--font-literata\)/);
   assert.match(css, /\.polaroid/);
   assert.match(css, /\.polaroid-caption/);

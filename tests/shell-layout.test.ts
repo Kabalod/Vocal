@@ -38,12 +38,15 @@ test("shell uses 1200px breakpoint and persists collapse, not md sidebar", () =>
   assert.match(layout, /--font-inter/);
   assert.match(layout, /--font-literata/);
   assert.match(css, /--vocal-accent:\s*var\(--accent\)/);
-  assert.match(css, /--accent:\s*#8b7cff/);
-  assert.match(css, /--bg:\s*#0b0714/);
-  assert.match(css, /--on-accent:\s*#0b0714/);
-  assert.match(css, /--radius-panel:\s*18px/);
+  // P1: prototype palette (accent for fills without text, white text on the button gradient, no violet glow)
+  assert.match(css, /--accent:\s*#8b6cf8/);
+  assert.match(css, /--accent-soft:\s*#a28bfb/);
+  assert.match(css, /--bg:\s*#131315/);
+  assert.match(css, /--on-accent:\s*#ffffff/);
+  assert.match(css, /--radius-panel:\s*14px/);
   assert.match(css, /--radius-control:\s*12px/);
-  assert.match(css, /--shadow-primary:\s*0 8px 22px rgba\(139, 124, 255, 0\.28\)/);
+  assert.match(css, /--shadow-primary:\s*inset 0 0\.5px 0 rgba\(255, 255, 255, 0\.25\), 0 1px 2px rgba\(0, 0, 0, 0\.4\)/);
+  assert.equal(/--shadow-primary:[^;]*139, 124, 255/.test(css), false);
   assert.match(shell, /shell:flex/);
   assert.match(shell, /shell:!hidden/);
   assert.match(shell, /w-\[200px\]/);

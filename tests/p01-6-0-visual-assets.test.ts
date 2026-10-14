@@ -77,7 +77,7 @@ test("P01.6-0 applies WebP to cards and the desktop work area only", () => {
   assert.match(list, /archive-desk-surface/);
   assert.match(list, /archive-workspace-toolbar/);
   assert.match(css, /url\("\/archive\/desk\/desk\.webp"\)/);
-  assert.match(css, /linear-gradient\(180deg, rgba\(11, 7, 20/);
+  assert.match(css, /linear-gradient\(180deg, color-mix\(in srgb, var\(--bg\) 34%/); // P1: the same scrim, now from the --bg token
   assert.equal(css.includes(".svg"), false);
   assert.equal(helper.includes(".svg"), false);
   assert.equal(pkg.includes("generate-p01-6-0"), false);
