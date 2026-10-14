@@ -19,6 +19,7 @@
     "test:reels": "node scripts/test-postgres.cjs --reels",
     "backup": "bash scripts/ops/backup.sh",
     "report:ai": "tsx scripts/ai-usage-report.ts",
+    "report:daily": "tsx scripts/ai-daily-report.ts",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "node scripts/db-migrate.cjs",

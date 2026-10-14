@@ -68,3 +68,6 @@ Analyz/_private_raw/
 
 # local run (docs/LOCAL_LIVE_RUN.md)
 .local-media/
+
+# generated spend reports (contain user ids)
+/reports/
