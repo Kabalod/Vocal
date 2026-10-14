@@ -33,4 +33,6 @@ C00 docs **accepted** (`8cb7351`). C00-01 **accepted** (`2391217`). C00-02 **acc
 
 Live Supabase has Prisma migrations 0…10 registered (live schema accepted 29.09.2026). Do **not** apply Prisma baseline or `migrate resolve` to live Supabase, and do not create or apply new migrations, from the audit stages S0–S5 without an explicit owner decision. Operations: `docs/OPERATIONS.md`.
 
+Live provider calls (rule, 14.10.2026): tests that call Groq/xAI/Whisper are skipped unless `VOCAL_LIVE_TESTS=1`; under `NODE_ENV=test` the provider client throws on a real call without that flag (`src/lib/groq.ts`, `tests/live-guard.test.ts`). Never run `tsx --test` without an explicit file list (it picks up every test). See `docs/OPERATIONS.md`.
+
 After each development stage, user sends results to agent «Создание приложение» for review before the next stage.

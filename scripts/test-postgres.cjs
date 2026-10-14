@@ -25,7 +25,7 @@ const authTests = [
 /** Live-model tests. Never part of any runner: they call the paid provider (see tests/runner-coverage.test.ts). */
 const liveModelTests = ["tests/c00-classify-live.test.ts", "tests/c00-live-model.test.ts"];
 
-const i07Tests = ["tests/i07-gateway.test.ts", "tests/runner-coverage.test.ts"];
+const i07Tests = ["tests/i07-gateway.test.ts", "tests/runner-coverage.test.ts", "tests/live-guard.test.ts"];
 
 const s3Tests = ["tests/s3-entry-cleanup.test.ts"];
 

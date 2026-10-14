@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { classifyC00CorrectionSignal } from "../src/lib/c00-classify-signal";
 import { routeC00Decision } from "../src/lib/c00-router";
 import { resetGroq } from "../src/lib/groq";
+import { LIVE_SKIP_REASON, liveTestsEnabled } from "./helpers/live-tests";
 import { ownerUserId } from "../src/lib/auth/session";
 
 function loadLocalEnv() {
@@ -37,16 +38,17 @@ function loadLocalEnv() {
   }
 }
 
-loadLocalEnv();
+// The key from .env is read only for an intentional live run; otherwise it never enters process.env.
+if (liveTestsEnabled()) loadLocalEnv();
 resetGroq();
 
-const LIVE = Boolean(process.env.GROQ_API_KEY?.trim());
+const LIVE = liveTestsEnabled() && Boolean(process.env.GROQ_API_KEY?.trim());
 const FACT_SEED = { id: "fact_seed", text: "Вечер тихий.", sourceType: "initial_note" };
 const NEGATION_FACT = { id: "fact_seed", text: "Автор любит мат.", sourceType: "initial_note" };
 
 test("live classify C00 correction before action: two phrases on one fact_seed", async (t) => {
   if (!LIVE) {
-    t.skip("GROQ_API_KEY not loaded");
+    t.skip(LIVE_SKIP_REASON);
     return;
   }
 

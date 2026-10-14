@@ -9,6 +9,7 @@ import { parseC00Envelope } from "../src/lib/c00-envelope";
 import { resetPrismaClient } from "../src/lib/db";
 import { sendDialogueMessage } from "../src/lib/dialogue";
 import { resetGroq } from "../src/lib/groq";
+import { LIVE_SKIP_REASON, liveTestsEnabled } from "./helpers/live-tests";
 import { createThoughtFromText } from "../src/lib/thought-create";
 import { applyThoughtState, getThoughtState } from "../src/lib/thought-state";
 import { withPostgresTestDb } from "./helpers/postgres-test-db";
@@ -43,10 +44,11 @@ function loadLocalEnv() {
   }
 }
 
-loadLocalEnv();
+// The key from .env is read only for an intentional live run; otherwise it never enters process.env.
+if (liveTestsEnabled()) loadLocalEnv();
 resetGroq();
 
-const LIVE = Boolean(process.env.GROQ_API_KEY?.trim());
+const LIVE = liveTestsEnabled() && Boolean(process.env.GROQ_API_KEY?.trim());
 
 function summarizePrompt(prompt: string | null | undefined) {
   if (!prompt) return null;
@@ -118,7 +120,7 @@ function summarizeReply(raw: string) {
 
 test("live model C00 chain: author message to thought slice", async (t) => {
   if (!LIVE) {
-    t.skip("GROQ_API_KEY not loaded");
+    t.skip(LIVE_SKIP_REASON);
     return;
   }
   const { prisma } = await withPostgresTestDb(t);
