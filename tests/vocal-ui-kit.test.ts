@@ -98,7 +98,9 @@ test("field panel and primary action reuse vocal tokens", () => {
 
 test("modal trap reuses sheet helpers and keeps backdrop out of tab order", () => {
   const modal = readFileSync(join(root, "src/components/vocal-ui/VocalModal.tsx"), "utf8");
-  assert.match(modal, /trapSheetTab/);
+  // P2: the trap lives in the shared overlay behaviour that the modal uses
+  assert.match(modal, /useDialogBehavior/);
+  assert.match(readFileSync(join(root, "src/components/vocal-ui/dialog-behavior.ts"), "utf8"), /trapSheetTab/);
   assert.match(modal, /aria-hidden="true"/);
   assert.match(modal, /data-vocal-initial/);
   assert.equal(/aria-label="Закрыть меню"/.test(modal), false);

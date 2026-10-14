@@ -1,14 +1,21 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-export type ActionButtonVariant = "primary" | "secondary" | "compact" | "danger";
+/** `compact` is the old name of `ghost`, kept so existing screens do not change; new code uses `ghost`. */
+export type ActionButtonVariant = "primary" | "secondary" | "ghost" | "compact" | "danger";
+
+const GHOST = "border-transparent bg-transparent px-2 text-muted hover:bg-white/5 hover:text-text";
 
 const VARIANTS: Record<ActionButtonVariant, string> = {
   primary: "border-transparent bg-accent text-on-accent shadow-[var(--vocal-shadow-cta)]",
-  secondary: "border-line bg-surface text-text",
-  compact: "border-transparent bg-transparent text-muted hover:text-text px-2",
-  danger: "border-bad/40 bg-transparent text-bad",
+  secondary: "border-line-strong bg-white/5 text-text hover:bg-white/10",
+  ghost: GHOST,
+  compact: GHOST,
+  danger: "border-bad/40 bg-transparent text-bad hover:bg-bad/10",
 };
 
+/**
+ * Height: 44 px on touch widths (target size), 32 px on the desktop shell (prototype), primary 48 px on touch.
+ */
 export function ActionButton({
   variant = "secondary",
   loading = false,
@@ -31,7 +38,8 @@ export function ActionButton({
     <span className="inline-flex max-w-full flex-col items-start gap-1">
       <button
         type={type}
-        className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-[var(--vocal-radius-control)] border px-4 text-sm ${
+        data-variant={variant}
+        className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-[var(--vocal-radius-control)] border px-4 text-sm shell:min-h-8 ${
           variant === "primary" ? "min-h-12" : ""
         } ${VARIANTS[variant]} ${className}`}
         {...props}

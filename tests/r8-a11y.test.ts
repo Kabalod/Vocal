@@ -54,8 +54,11 @@ test("composer, new thought, export, and icon-only controls expose names and 44p
   assert.match(icon, /h-11 w-11/);
   const modal = src("src/components/vocal-ui/VocalModal.tsx");
   assert.match(modal, /label="Закрыть"/);
-  assert.match(modal, /Escape/);
-  assert.match(modal, /triggerRef\.current\?\.focus\(\)/);
+  // P2: Escape, the trigger focus restore and the trap moved into the shared overlay behaviour (modal, sheet, action sheet, alert)
+  assert.match(modal, /useDialogBehavior/);
+  const behavior = src("src/components/vocal-ui/dialog-behavior.ts");
+  assert.match(behavior, /Escape/);
+  assert.match(behavior, /triggerRef\.current\?\.focus\(\)/);
   const thought = src("src/components/NewThoughtSheet.tsx");
   assert.match(thought, /htmlFor=\{titleId\}/);
   assert.match(thought, /htmlFor=\{bodyId\}/);

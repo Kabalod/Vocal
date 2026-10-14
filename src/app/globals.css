@@ -160,8 +160,15 @@ a[aria-disabled="true"] {
 
 .vocal-card {
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
+  border: 0.5px solid var(--line-strong);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Overlay panels (dialog, sheets, alert): hairline and the same one-pixel inner highlight as Panel. */
+.vocal-overlay-panel {
+  border: 0.5px solid var(--line-strong);
+  box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.04), var(--shadow-popover);
 }
 
 .vocal-badge {

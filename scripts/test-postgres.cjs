@@ -115,6 +115,7 @@ const reelsTests = [
   "tests/shell-layout.test.ts",
   "tests/shell-sheet.test.ts",
   "tests/vocal-ui-kit.test.ts",
+  "tests/vocal-ui-p2.test.ts",
   "tests/reel-filters.test.ts",
   "tests/thoughts-list.test.ts",
   "tests/p01-1-archive-contracts.test.ts",

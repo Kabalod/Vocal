@@ -1,5 +1,6 @@
 import type { HTMLAttributes, ReactNode } from "react";
 
+/** Hairline 0.5 px border, radius 12, a one-pixel inner highlight (the look comes from `.vocal-card`). */
 export function Panel({
   children,
   className = "",

@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
-import { getSheetFocusableElements, trapSheetTab } from "@/components/shell-sheet";
+import { useId, useRef, type ReactNode } from "react";
+import { useDialogBehavior } from "@/components/vocal-ui/dialog-behavior";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { IconButton } from "@/components/vocal-ui/IconButton";
 import { IconClose } from "@/components/vocal-ui/icons";
 
+/**
+ * Desktop: a centered dialog. Mobile (below the shell breakpoint): a bottom sheet with a grabber, safe-area padding, backdrop click
+ * and Escape to close, focus kept inside (see dialog-behavior.ts). `placement="sheet"` only widens the desktop panel.
+ */
 export function VocalModal({
   open,
   title,
@@ -22,38 +26,8 @@ export function VocalModal({
   initialFocus?: "first" | "safe";
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLElement | null>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
   const titleId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const panel = panelRef.current;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const items = panel ? getSheetFocusableElements(panel) : [];
-    const safe = panel?.querySelector<HTMLElement>("[data-vocal-initial='safe']");
-    const target = initialFocus === "safe" ? (safe ?? items[0]) : items[0];
-    (target ?? panel)?.focus();
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (panel) trapSheetTab(event, panel, document.activeElement);
-    }
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
-      triggerRef.current?.focus();
-    };
-  }, [open, initialFocus]);
+  useDialogBehavior({ open, panelRef, onClose, initialFocus });
 
   if (!open) return null;
 
@@ -66,12 +40,11 @@ export function VocalModal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`relative max-h-[90vh] w-full overflow-auto bg-bg-elev p-4 ${
-          placement === "sheet"
-            ? "rounded-t-[var(--vocal-radius-modal)] pb-[max(1rem,env(safe-area-inset-bottom))] shell:max-w-md shell:rounded-[var(--vocal-radius-modal)]"
-            : "m-4 max-w-[440px] rounded-[var(--vocal-radius-modal)]"
+        className={`vocal-overlay-panel relative max-h-[90vh] w-full overflow-auto rounded-t-[var(--vocal-radius-modal)] bg-bg-elev px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 shell:m-4 shell:rounded-[var(--vocal-radius-modal)] shell:p-4 ${
+          placement === "sheet" ? "shell:max-w-md" : "shell:max-w-[440px]"
         }`}
       >
+        <span aria-hidden="true" className="mx-auto mb-2 block h-1 w-9 rounded-full bg-line-strong shell:hidden" />
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 id={titleId} className="font-[family-name:var(--font-display)] text-lg">
             {title}
