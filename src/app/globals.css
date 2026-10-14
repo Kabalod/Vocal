@@ -26,13 +26,13 @@
   --shadow-primary: inset 0 0.5px 0 rgba(255, 255, 255, 0.25), 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-popover: 0 12px 28px rgba(0, 0, 0, 0.45);
   /* paper of the polaroids and the desk: a physical object, it keeps its own light colours */
-  --paper: #efe8dc;
-  --paper-cool: #d7d8de;
-  --paper-ink: #1a1424;
-  --paper-ink-soft: #2c2f3c;
-  --paper-ink-muted: #4a4258;
-  --paper-line: #d8cfc0;
-  --paper-light: #fbf7f0;
+  --paper: #e8e5df;
+  --paper-cool: #dcd8d0;
+  --paper-ink: #22212a;
+  --paper-ink-soft: #3a3844;
+  --paper-ink-muted: #55525c;
+  --paper-line: #d3cec4;
+  --paper-light: #f3f0ea;
 
   --vocal-bg: var(--bg);
   --vocal-surface: var(--surface);
@@ -105,7 +105,11 @@ body {
   overflow-x: hidden;
 }
 
+/* next/font puts --font-inter / --font-literata on <body>, so the composed stacks are defined here, not on :root (a var() on :root
+   would not see them). @theme inline does not emit --font-sans / --font-display, and several rules read them directly. */
 body {
+  --font-sans: -apple-system, "SF Pro Text", var(--font-inter), system-ui, "Segoe UI", Arial, sans-serif;
+  --font-display: var(--font-literata), Georgia, "Times New Roman", serif;
   min-height: 100vh;
   min-width: 320px;
   font-family: -apple-system, "SF Pro Text", var(--font-inter), system-ui, "Segoe UI", Arial, sans-serif;
@@ -113,7 +117,9 @@ body {
   line-height: var(--vocal-leading);
 }
 
-.font-display {
+.font-display,
+h1,
+h2 {
   font-weight: 500;
 }
 
@@ -452,9 +458,9 @@ a[aria-disabled="true"] {
 
   .archive-workspace-toolbar .archive-toolbar-title {
     margin: 0;
-    font-family: var(--font-sans);
+    font-family: var(--font-display);
     font-size: 1.35rem;
-    font-weight: 600;
+    font-weight: 500;
     line-height: 1.1;
     white-space: nowrap;
   }

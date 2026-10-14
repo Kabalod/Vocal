@@ -93,7 +93,7 @@ test("P01.6-2 large desktop splits thoughts into deterministic six-card desk spr
   assert.match(css, /\.archive-workspace-desk[\s\S]*--archive-desk-size/);
   assert.equal(/\n\s*filter:\s*blur/.test(css), false);
   assert.match(css, /\.archive-desk-slot \.archive-polaroid[\s\S]*var\(--paper-cool\)/);
-  assert.match(css, /--paper-cool:\s*#d7d8de/); // P1: same colour, now a token
+  assert.match(css, /--paper-cool:\s*#dcd8d0/); // P1: token; warm cream after the owner's review (was cool grey #d7d8de)
   assert.match(css, /\.archive-desk-slot \.archive-polaroid[\s\S]*-2px 4px 6px/);
   assert.match(css, /\.archive-desk-spread \.archive-polaroid-frame[\s\S]*inset 0 0 0 1px/);
   assert.match(css, /\.archive-desk-spread \.archive-polaroid:hover[\s\S]*translateY\(-5px\)/);
