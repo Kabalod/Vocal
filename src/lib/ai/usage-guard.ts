@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
-import { isOrdinaryUser, quotaEnforced } from "@/lib/quota-env";
+import { abuseGuardsEnforced, isOrdinaryUser } from "@/lib/quota-env";
 
 const inflight = new Map<string, Promise<unknown>>();
 
@@ -128,10 +128,10 @@ export function globalDailyTokenCap(env: Record<string, string | undefined> = pr
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : DEFAULT_GLOBAL_DAILY_TOKEN_CAP;
 }
 
-/** J1 global switch: chat tokens of ALL users since midnight against VOCAL_GLOBAL_DAILY_TOKEN_CAP (0 disables). Only where the quota is enforced. */
+/** J1 global switch: chat tokens of ALL users since midnight against VOCAL_GLOBAL_DAILY_TOKEN_CAP (0 disables). Only where the abuse protections are on (VOCAL_ABUSE_GUARDS=on or the quota). */
 export async function assertGlobalSpendCap(): Promise<void> {
   const cap = globalDailyTokenCap();
-  if (cap <= 0 || !quotaEnforced()) return;
+  if (cap <= 0 || !abuseGuardsEnforced()) return;
   const rows = await prisma.aiCall.aggregate({
     where: { kind: { not: STT_CALL_KIND }, status: { in: ["done", "error"] }, createdAt: { gte: dayStart() } },
     _sum: { promptTokens: true, completionTokens: true },

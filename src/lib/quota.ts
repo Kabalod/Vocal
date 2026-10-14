@@ -8,16 +8,17 @@
  *    available for reading, copying and downloading.
  *  - Per thought: at most 8 questions and about 40k tokens of dialogue; after that the author offers "Сгенерировать сценарий".
  *  - Per user: a request rate limit per minute. Globally: a switch when the day's provider spend passes a cap.
- *  - Enforcement is on in production and in tests that set VOCAL_QUOTA=on; it is off in the local dev/test contour (VOCAL_QUOTA=off
- *    forces it off). Owners listed in VOCAL_OWNER_USER_IDS are exempt and keep the daily token limit of the owner/dev contour.
+ *  - The thought quota is on only with an explicit VOCAL_QUOTA=on (off by default, also in production). The abuse protections
+ *    (rate, global cap, per-thought ceiling) are on with VOCAL_ABUSE_GUARDS=on or when the quota is on. Owners listed in
+ *    VOCAL_OWNER_USER_IDS are exempt and keep the daily token limit of the owner/dev contour.
  */
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ownerUserId } from "@/lib/auth/session";
 import { RateLimitedError } from "@/lib/ai/usage-guard";
-import { isOrdinaryUser, isOwnerUser, quotaEnforced } from "@/lib/quota-env";
+import { abuseGuardsEnforced, isGuardedUser, isOrdinaryUser, isOwnerUser, quotaEnforced } from "@/lib/quota-env";
 
-export { isOrdinaryUser, isOwnerUser, quotaEnforced };
+export { abuseGuardsEnforced, isGuardedUser, isOrdinaryUser, isOwnerUser, quotaEnforced };
 
 export const DEFAULT_THOUGHTS_LIMIT = 100;
 export const DEFAULT_PERIOD_DAYS = 30;
@@ -114,7 +115,7 @@ export function requestsPerMinute(env: Record<string, string | undefined> = proc
 }
 
 export function checkRequestRate(userId = ownerUserId(), now = Date.now()): void {
-  if (!isOrdinaryUser(userId)) return;
+  if (!isGuardedUser(userId)) return;
   const windowStart = now - 60_000;
   const recent = (requestLog.get(userId) ?? []).filter((at) => at > windowStart);
   if (recent.length >= requestsPerMinute()) {
@@ -143,7 +144,7 @@ export function thoughtTokenCeiling(env: Record<string, string | undefined> = pr
 
 /** 8 questions or about 40k tokens of dialogue spent on this thought (scripts and speech recognition are not counted). */
 export async function thoughtCeilingReached(reelId: string, threadId: string, userId = ownerUserId()): Promise<boolean> {
-  if (!isOrdinaryUser(userId)) return false;
+  if (!isGuardedUser(userId)) return false;
   const questions = await prisma.dialogueMessage.count({ where: { threadId, role: "assistant", kind: "question", status: "done" } });
   if (questions >= thoughtQuestionCeiling()) return true;
   const tokens = await prisma.aiCall.aggregate({

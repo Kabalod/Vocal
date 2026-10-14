@@ -9,12 +9,26 @@ export function quotaEnforced(env: Record<string, string | undefined> = process.
   return env.VOCAL_QUOTA?.trim().toLowerCase() === "on";
 }
 
+/**
+ * L1 variant B: the abuse protections (request rate per minute, global daily cap, per-thought ceiling) work without the thought quota.
+ * On with an explicit VOCAL_ABUSE_GUARDS=on (or when the quota itself is on, which implies them). Off by default.
+ * The per-user daily token limit and the STT seconds limit are not part of this switch: they stay as they are.
+ */
+export function abuseGuardsEnforced(env: Record<string, string | undefined> = process.env): boolean {
+  return env.VOCAL_ABUSE_GUARDS?.trim().toLowerCase() === "on" || quotaEnforced(env);
+}
+
 /** Owner/dev users (VOCAL_OWNER_USER_IDS, comma separated): no quota, the daily token limit stays. */
 export function isOwnerUser(userId: string, env: Record<string, string | undefined> = process.env): boolean {
   return (env.VOCAL_OWNER_USER_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean).includes(userId);
 }
 
-/** An ordinary author: quota and abuse protections apply, the per-user daily token limit does not. */
+/** An ordinary author of the quota contour: the thought quota applies, the per-user daily token limit does not. */
 export function isOrdinaryUser(userId = ownerUserId(), env: Record<string, string | undefined> = process.env): boolean {
   return quotaEnforced(env) && !isOwnerUser(userId, env);
+}
+
+/** An author the abuse protections apply to (owners are exempt). Independent of the quota: see abuseGuardsEnforced. */
+export function isGuardedUser(userId = ownerUserId(), env: Record<string, string | undefined> = process.env): boolean {
+  return abuseGuardsEnforced(env) && !isOwnerUser(userId, env);
 }

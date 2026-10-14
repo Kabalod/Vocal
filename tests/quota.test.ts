@@ -209,3 +209,58 @@ test("J1: without migration 11 (no UserQuota table) and VOCAL_QUOTA off: status,
   assert.equal(result.thoughts, 1, "account deletion does not touch the missing quota table");
   assert.equal(await prisma.reel.count(), 0);
 });
+
+test("L1: VOCAL_ABUSE_GUARDS is off by default and separate from the quota; the quota implies the guards", async () => {
+  const { abuseGuardsEnforced, isGuardedUser, quotaEnforced } = await import("@/lib/quota-env");
+  assert.equal(abuseGuardsEnforced({ NODE_ENV: "production" }), false);
+  assert.equal(abuseGuardsEnforced({ NODE_ENV: "production", VOCAL_ABUSE_GUARDS: "off" }), false);
+  assert.equal(abuseGuardsEnforced({ NODE_ENV: "production", VOCAL_ABUSE_GUARDS: " ON " }), true);
+  assert.equal(quotaEnforced({ NODE_ENV: "production", VOCAL_ABUSE_GUARDS: "on" }), false, "the guards flag does not turn the quota on");
+  assert.equal(abuseGuardsEnforced({ NODE_ENV: "production", VOCAL_QUOTA: "on" }), true);
+  assert.equal(isGuardedUser("u1", { VOCAL_ABUSE_GUARDS: "on" }), true);
+  assert.equal(isGuardedUser("u1", { VOCAL_ABUSE_GUARDS: "on", VOCAL_OWNER_USER_IDS: "u1" }), false);
+  assert.equal(isGuardedUser("u1", {}), false);
+});
+
+test("L1: guards on, quota off, no UserQuota table: rate limit, global cap and per-thought ceiling work; the daily token limit stays", async (t) => {
+  const { prisma, quota, create } = await setup(t, { VOCAL_QUOTA: "off", VOCAL_ABUSE_GUARDS: "on", VOCAL_RATE_PER_MINUTE: "3" });
+  await prisma.$executeRawUnsafe('DROP TABLE "UserQuota"');
+  await create(); await create(); await create();
+  await assert.rejects(create(), (e: unknown) => e instanceof RateLimitedError && e.code === "RATE_LIMITED", "rate limit without the quota");
+  quota.resetRequestRateForTests();
+  env.VOCAL_OWNER_USER_IDS = "local";
+  quota.checkRequestRate(); quota.checkRequestRate(); quota.checkRequestRate(); quota.checkRequestRate();
+  delete env.VOCAL_OWNER_USER_IDS;
+  quota.resetRequestRateForTests();
+
+  // the per-user daily token limit is not replaced by the guards: it still applies
+  await prisma.aiCall.create({ data: { kind: "dialogue", model: "m", status: "done", promptText: "", inputSnapshotJson: "{}", promptTokens: 500, completionTokens: 500, ownerUserId: "local" } });
+  env.VOCAL_DAILY_TOKEN_LIMIT = "100";
+  await assert.rejects(assertDailyTokenBudget(), AiBudgetError);
+  delete env.VOCAL_DAILY_TOKEN_LIMIT;
+  env.VOCAL_GLOBAL_DAILY_TOKEN_CAP = "500";
+  await assert.rejects(assertDailyTokenBudget(), (e: unknown) => e instanceof AiPausedError && e.code === "AI_PAUSED");
+  delete env.VOCAL_GLOBAL_DAILY_TOKEN_CAP;
+
+  // per-thought ceiling on tokens
+  env.VOCAL_THOUGHT_TOKEN_CEILING = "1000";
+  env.VOCAL_RATE_PER_MINUTE = "1000";
+  const made = await create();
+  const { sendDialogueMessage } = await import("../src/lib/dialogue");
+  let calls = 0;
+  const heavy = (async () => { calls += 1; return reply({ action: "ask_question", question: "Что было дальше с рынком?", clarificationReason: "нужно уточнение", whyUnknown: "мало данных", thoughtUpdate: { fact: null, closeGapIds: [] } }, 600); }) as never;
+  await sendDialogueMessage(made.reel.id, { text: "Я хожу на рынок утром.", idempotencyKey: "guards-1" }, heavy);
+  const second = await sendDialogueMessage(made.reel.id, { text: "Там тихо и мало людей.", idempotencyKey: "guards-2" }, heavy);
+  delete env.VOCAL_THOUGHT_TOKEN_CEILING;
+  assert.equal(calls, 1);
+  assert.equal(second.messages.filter((m) => m.role === "assistant" && m.status === "done").at(-1)?.body, quota.CEILING_REPLY);
+});
+
+test("L1: guards and quota both off: no rate limit, no global cap, no thought ceiling", async (t) => {
+  const { prisma, quota, create } = await setup(t, { VOCAL_QUOTA: "off", VOCAL_RATE_PER_MINUTE: "1", VOCAL_GLOBAL_DAILY_TOKEN_CAP: "1" });
+  delete env.VOCAL_ABUSE_GUARDS;
+  await prisma.aiCall.create({ data: { kind: "dialogue", model: "m", status: "done", promptText: "", inputSnapshotJson: "{}", promptTokens: 500, completionTokens: 500, ownerUserId: "local" } });
+  await create(); await create(); await create();
+  await assertDailyTokenBudget();
+  assert.equal(await quota.thoughtCeilingReached("r", "t"), false);
+});
