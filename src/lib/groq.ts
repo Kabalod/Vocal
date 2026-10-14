@@ -37,7 +37,23 @@ export function chatCompletionModel(requested?: string) {
   return requested;
 }
 
+/**
+ * Safety net for tests: under NODE_ENV=test a real provider call needs VOCAL_LIVE_TESTS=1.
+ * Fake clients (`groqClientSeam`) and mocks never reach this check.
+ */
+export function liveProviderCallsAllowed() {
+  return process.env.NODE_ENV !== "test" || process.env.VOCAL_LIVE_TESTS === "1";
+}
+
+export function assertLiveProviderCallAllowed(what: string) {
+  if (liveProviderCallsAllowed()) return;
+  throw new Error(
+    `Живой вызов провайдера (${what}) заблокирован в тестах: задайте VOCAL_LIVE_TESTS=1, если это намеренно (платный вызов).`,
+  );
+}
+
 function createGroqClient(): Groq {
+  assertLiveProviderCallAllowed("Groq");
   const apiKey = process.env.GROQ_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("Не задан GROQ_API_KEY. Добавьте ключ в файл .env");
@@ -65,6 +81,7 @@ export async function createXaiChatCompletion(input: {
   system: string;
   user: string;
 }) {
+  assertLiveProviderCallAllowed("xAI");
   const apiKey = process.env.XAI_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("Не задан XAI_API_KEY.");
