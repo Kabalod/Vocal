@@ -125,3 +125,20 @@ scripts/ops/verify-restore.sh "postgresql://…/vocal_restore" /var/lib/vocal-re
 - `tests/live-guard.test.ts` проверяет это без сети.
 
 Никогда не запускать `tsx --test` без явного списка файлов: он подбирает все `tests/*.test.ts`. Живой набор — только по отдельному решению владельца.
+
+## Тяжёлые команды на малой машине (3,9 ГБ ОЗУ, без swap)
+
+`/tmp` — tmpfs и считается в ОЗУ. `next build`, `next dev`, `tsc`, набор тестов и Chromium вместе съедают память, и хост зависает целиком. Любую тяжёлую команду запускать только через обёртку:
+
+```
+source ~/vocal-dev/env.sh   # node в PATH
+scripts/ops/limited.sh build node_modules/.bin/next build
+scripts/ops/limited.sh test  node_modules/.bin/tsx --test --test-concurrency=1 tests/x.test.ts
+scripts/ops/limited.sh tsc   node_modules/.bin/tsc --noEmit
+scripts/ops/limited.sh dev   node_modules/.bin/next dev -p 3202
+scripts/ops/limited.sh shoot bash serve-shoot.sh out/   # next + Chromium вместе
+```
+
+Профили: build 2000M, test 1400M, tsc 1400M, dev 1500M, shoot 1800M (cgroup `MemoryMax`, без swap) + `--max-old-space-size`. Превысивший задание убивается ядром (exit 137), хост жив. Замок `/tmp/vocal-heavy.lock` пускает по одному заданию; `VOCAL_LIMIT_NOWAIT=1` — отказ вместо ожидания. Если свободно меньше 60 % потолка — отказ с кодом 75.
+
+Правила: не держать `next dev` и `next start` одновременно; после съёмки убивать сервер; не складывать worktree и `.next` в `/tmp` без нужды (проверка: `df -h /tmp`).

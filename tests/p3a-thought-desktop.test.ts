@@ -46,7 +46,7 @@ test("chips: 'Не помню' and 'Пропустить вопрос' call the 
   );
   chips[0].props.onClick?.();
   chips[1].props.onClick?.();
-  assert.deepEqual(sent, ["Не помню", "Не знаю"]);
+  assert.deepEqual(sent, ["Не помню", "Пропустить вопрос"]);
   for (const chip of DONT_KNOW_CHIPS) assert.equal(isDontKnow(chip.text), true, chip.text);
   chips[2].props.onClick?.();
   assert.equal(built, 1);

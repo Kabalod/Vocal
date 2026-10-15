@@ -49,12 +49,12 @@ export function showDialogueTimeLabel(previousIso: string | null, currentIso: st
 
 /**
  * Chips above the composer. Both "don't know" chips go through the ordinary text path of the dialogue: the server recognises the
- * text as "не знаю" (turn-policy `isDontKnow`), takes no fact from it and closes the topic (G1). "Пропустить вопрос" sends
- * "Не знаю" because the label itself is not a recognised answer.
+ * text as "не знаю" (turn-policy `isDontKnow`, author-speech `startsWithDontKnow`), takes no fact from it and closes the
+ * topic (G1). Each chip sends its own label.
  */
 export const DONT_KNOW_CHIPS = [
   { id: "dont_remember", label: "Не помню", text: "Не помню" },
-  { id: "skip_question", label: "Пропустить вопрос", text: "Не знаю" },
+  { id: "skip_question", label: "Пропустить вопрос", text: "Пропустить вопрос" },
 ] as const;
 
 export const BUILD_SCRIPT_CHIP_LABEL = "Собрать сценарий";
