@@ -22,24 +22,18 @@ export function ArchiveStatusFilters({
 }: {
   value: RecordingFilterId;
   onChange: (id: RecordingFilterId) => void;
-  variant?: "sidebar" | "icons" | "sheet";
+  variant?: "sidebar" | "chips" | "sheet";
 }) {
-  if (variant === "icons") {
+  if (variant === "chips") {
     return (
-      <div className="archive-mobile-status-icons" role="group" aria-label="Фильтры мыслей">
+      <div className="archive-status-chips" role="group" aria-label="Фильтры мыслей">
         {RECORDING_FILTERS.map((item) => {
           const Icon = ICONS[item.id];
           const active = value === item.id;
           return (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={active}
-              aria-label={item.label}
-              onClick={() => onChange(item.id)}
-              className={active ? "bg-accent/12 text-accent-soft" : "text-muted"}
-            >
-              <Icon className={`h-5 w-5 shrink-0 ${active ? "text-accent-soft" : "text-muted"}`} />
+            <button key={item.id} type="button" aria-pressed={active} onClick={() => onChange(item.id)} data-active={active || undefined}>
+              <Icon className="h-4 w-4 shrink-0" />
+              <span>{item.label}</span>
             </button>
           );
         })}
@@ -49,7 +43,7 @@ export function ArchiveStatusFilters({
 
   return (
     <div className="space-y-2" role="group" aria-label="Фильтры мыслей">
-      {variant === "sidebar" ? <p className="text-xs uppercase tracking-[0.14em] text-muted">Статус</p> : null}
+      {variant === "sidebar" ? <p className="px-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted">Статус</p> : null}
       <ul className="space-y-1">
         {RECORDING_FILTERS.map((item) => {
           const Icon = ICONS[item.id];

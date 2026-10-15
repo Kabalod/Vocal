@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import {
   ARCHIVE_DENSITY_KEY,
+  DEFAULT_ARCHIVE_DENSITY,
   isArchiveDensity,
   readArchiveDensity,
   writeArchiveDensity,
@@ -23,7 +24,7 @@ import {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("P01.6-2 density stays local and defaults to large", (t) => {
+test("P01.6-2 density stays local and defaults to the grid", (t) => {
   assert.equal(ARCHIVE_DENSITY_KEY, "vocal-archive-density-v1");
   assert.equal(isArchiveDensity("large"), true);
   assert.equal(isArchiveDensity("compact"), true);
@@ -48,7 +49,8 @@ test("P01.6-2 density stays local and defaults to large", (t) => {
     Reflect.deleteProperty(globalThis, "window");
     Reflect.deleteProperty(globalThis, "localStorage");
   });
-  assert.equal(readArchiveDensity(), "large");
+  assert.equal(readArchiveDensity(), "compact");
+  assert.equal(DEFAULT_ARCHIVE_DENSITY, "compact");
   writeArchiveDensity("compact");
   assert.equal(memory.get(ARCHIVE_DENSITY_KEY), "compact");
   assert.equal(readArchiveDensity(), "compact");
@@ -127,7 +129,6 @@ test("P01.6-2 desktop composition moves calendar/status left and toolbar into th
   assert.match(list, /vocal-archive-density-v1|writeArchiveDensity/);
   assert.match(list, /\+ Новая мысль/);
   assert.match(list, /closeCalendar/);
-  assert.match(list, /onToggle/);
   assert.equal(list.includes("shell:grid-cols-[minmax(14rem,17rem)"), false);
   assert.match(shell, /shell:sticky/);
   assert.match(shell, /shell:h-screen/);

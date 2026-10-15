@@ -34,24 +34,27 @@ export function ArchiveListView({
               const statusLabel = REEL_STATUS_GROUP_LABELS[reel.statusGroup] ?? thoughtUserStatus(reel.statusGroup);
               return (
                 <li key={reel.id} className="archive-list-row" data-archive-reel={reel.id}>
-                  <button
-                    type="button"
+                  <Link
+                    href={studioThoughtHref(reel.id, "dialog")}
                     className="archive-list-main"
-                    aria-label={`Открыть превью мысли «${reel.title}»`}
-                    onClick={() => onOpenPreview(reel.id)}
+                    aria-label={`Открыть мысль «${reel.title}»`}
+                    onClick={() => onLeaveToStudio(reel.id)}
                   >
                     <span className="archive-list-title">{reel.title}</span>
                     <span className="archive-list-date">{formatListDate(reel.createdAt)}</span>
                     <span className="archive-list-status">{statusLabel}</span>
-                  </button>
-                  <Link
-                    href={studioThoughtHref(reel.id, "dialog")}
-                    className="archive-list-dialog"
-                    aria-label={`Открыть диалог мысли «${reel.title}»`}
-                    onClick={() => onLeaveToStudio(reel.id)}
-                  >
-                    <span aria-hidden="true">→</span>
+                    <span className="archive-list-dialog" aria-hidden="true">
+                      →
+                    </span>
                   </Link>
+                  <button
+                    type="button"
+                    className="archive-row-info"
+                    aria-label={`Предпросмотр мысли «${reel.title}»`}
+                    onClick={() => onOpenPreview(reel.id)}
+                  >
+                    <span aria-hidden="true">i</span>
+                  </button>
                 </li>
               );
             })}

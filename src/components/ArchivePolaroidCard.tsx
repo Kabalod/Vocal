@@ -46,14 +46,15 @@ function PolaroidFace({
       className={`archive-polaroid-frame ${compact ? "archive-polaroid-frame-mobile" : ""}`}
       style={{ "--archive-card-image": archiveCardBackgroundImage(reel.id) } as CSSProperties}
     >
-      <span className="archive-polaroid-info" aria-hidden="true">
-        <span className="archive-polaroid-info-mark">i</span>
-      </span>
       <p className="archive-polaroid-title">{reel.title}</p>
     </div>
   );
 }
 
+/**
+ * One polaroid of the library (P5). The "i" opens the preview; the rest of the card — the frame and the footer — is one link that
+ * opens the thought. The status is a mark only: it changes by product events, never by a tap.
+ */
 export function ArchivePolaroidCard({
   reel,
   variant = "desktop",
@@ -76,26 +77,26 @@ export function ArchivePolaroidCard({
       <PolaroidStatus reel={reel} size={compact ? "mobile" : "desktop"} />
       <button
         type="button"
-        className="archive-polaroid-preview"
-        aria-label={`Открыть превью мысли «${reel.title}»`}
+        className="archive-polaroid-info"
+        aria-label={`Предпросмотр мысли «${reel.title}»`}
         onClick={(event) => {
           event.stopPropagation();
           onOpenPreview();
         }}
       >
-        <PolaroidFace reel={reel} compact={compact} />
+        <span className="archive-polaroid-info-mark" aria-hidden="true">
+          i
+        </span>
       </button>
       <Link
         href={dialogHref}
-        className="archive-polaroid-footer"
-        aria-label={`Открыть диалог мысли «${reel.title}»`}
-        onClick={(event) => {
-          event.stopPropagation();
-          onLeaveToStudio?.();
-        }}
+        className="archive-polaroid-preview"
+        aria-label={`Открыть мысль «${reel.title}»`}
+        onClick={() => onLeaveToStudio?.()}
       >
-        <span aria-hidden="true" className="archive-polaroid-footer-mark">
-          →
+        <PolaroidFace reel={reel} compact={compact} />
+        <span className="archive-polaroid-footer" aria-hidden="true">
+          <span className="archive-polaroid-footer-mark">→</span>
         </span>
       </Link>
     </article>

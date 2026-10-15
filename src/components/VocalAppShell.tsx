@@ -12,6 +12,7 @@ import {
 import { getSheetFocusableElements, trapSheetTab } from "@/components/shell-sheet";
 import { useKeyboardInset } from "@/components/use-keyboard-inset";
 import { ArchiveDesktopHostProvider } from "@/components/ArchiveDesktopChrome";
+import { NewThoughtSheet } from "@/components/NewThoughtSheet";
 import { isAuthShellPath } from "@/lib/auth/paths";
 import { isShellNavActive, SHELL_NAV, shellBack, shellHeaderTitle } from "@/components/shell-nav";
 
@@ -28,6 +29,15 @@ function IconMenu() {
   return (
     <svg aria-hidden className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.6">
       <path d="M5 7h14M5 12h14M5 17h14" />
+    </svg>
+  );
+}
+
+function IconMic() {
+  return (
+    <svg aria-hidden className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
     </svg>
   );
 }
@@ -100,6 +110,7 @@ function VocalAppShellFrame({ children }: { children: ReactNode }) {
   const [statusHost, setStatusHost] = useState<HTMLElement | null>(null);
   const [sheetStatusHost, setSheetStatusHost] = useState<HTMLElement | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sheetPanelRef = useRef<HTMLDivElement>(null);
@@ -172,11 +183,11 @@ function VocalAppShellFrame({ children }: { children: ReactNode }) {
             {collapsed ? "V" : "Vocal"}
           </Link>
         </div>
-        <div ref={setDateHost} className="empty:hidden px-2 pb-3" />
         <nav className="px-2" aria-label="Разделы">
           <NavItem href={RECORDINGS_NAV.href} label={RECORDINGS_NAV.label} collapsed={collapsed} />
         </nav>
-        <div ref={setStatusHost} className="empty:hidden px-2 pt-4" />
+        <div ref={setStatusHost} className={`empty:hidden px-2 pt-4 ${collapsed ? "!hidden" : ""}`} />
+        <div ref={setDateHost} className={`empty:hidden px-2 pt-4 ${collapsed ? "!hidden" : ""}`} />
         <div className="mt-auto space-y-2 p-2">
           <nav aria-label="Профиль">
             <NavItem href={PROFILE_NAV.href} label={PROFILE_NAV.label} collapsed={collapsed} />
@@ -203,7 +214,7 @@ function VocalAppShellFrame({ children }: { children: ReactNode }) {
           archiveDesktop ? "archive-workspace-desk shell:h-screen shell:overflow-y-auto" : ""
         } ${thoughtDesktop ? "shell:h-screen shell:overflow-y-auto" : ""}`}
       >
-        <header className={`flex min-h-11 items-center gap-3 border-b border-line px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] shell:px-6 ${thoughtDesktop ? "hidden" : archiveDesktop ? "shell:hidden" : ""}`}>
+        <header className={`flex min-h-11 items-center gap-3 border-b border-line px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] shell:px-6 ${thoughtDesktop || archiveDesktop ? "hidden" : ""}`}>
           <button
             ref={menuButtonRef}
             type="button"
@@ -247,7 +258,9 @@ function VocalAppShellFrame({ children }: { children: ReactNode }) {
           {children}
         </main>
         <nav
-          className="vocal-tabbar fixed inset-x-0 bottom-0 z-40 grid grid-cols-2 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] shell:!hidden"
+          className={`vocal-tabbar fixed inset-x-0 bottom-0 z-40 grid border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] shell:!hidden ${
+            thoughtDesktop ? "grid-cols-2" : "grid-cols-3"
+          }`}
           aria-label="Главные разделы"
         >
           <Link
@@ -260,6 +273,17 @@ function VocalAppShellFrame({ children }: { children: ReactNode }) {
             <IconRecordings />
             {RECORDINGS_NAV.label}
           </Link>
+          {thoughtDesktop ? null : (
+            <button
+              type="button"
+              data-tabbar-new
+              aria-label="Новая мысль"
+              onClick={() => setCreateOpen(true)}
+              className="mx-auto my-0.5 grid h-11 min-h-11 w-11 min-w-11 place-items-center self-center rounded-full bg-accent text-on-accent shadow-[var(--vocal-shadow-cta)] active:scale-95"
+            >
+              <IconMic />
+            </button>
+          )}
           <Link
             href={PROFILE_NAV.href}
             aria-current={isShellNavActive(pathname, PROFILE_NAV.href) ? "page" : undefined}
@@ -272,6 +296,8 @@ function VocalAppShellFrame({ children }: { children: ReactNode }) {
           </Link>
         </nav>
       </div>
+
+      <NewThoughtSheet open={createOpen} onClose={() => setCreateOpen(false)} />
 
       {sheetOpen ? (
         <div className="fixed inset-0 z-50 shell:!hidden">

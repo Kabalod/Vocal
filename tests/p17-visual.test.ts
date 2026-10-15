@@ -57,8 +57,7 @@ test("P17 visual: recording teleprompter, dialogue split, polaroid path, thought
   assert.match(takes, /min-h-11/);
   assert.match(takes, /aria-label=\{`Заметка к дублю/);
 
-  assert.match(list, /aria-label="Поиск и фильтры"/);
-  assert.match(list, /shell:grid-cols-1/);
+  assert.match(list, /data-archive-mobile-header/);
   assert.match(list, /ArchiveCalendar/);
   assert.match(list, /ArchivePolaroidCard/);
   assert.match(script, /Редактировать/);

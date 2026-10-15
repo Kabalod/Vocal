@@ -281,7 +281,7 @@ test("P01.5 UI opens preview from polaroid zones and routes dialog/record withou
   assert.match(list, /rememberArchiveFocus/);
   assert.equal(list.includes("/api/reels/${reel.id}/archive-preview"), false);
   assert.match(card, /onOpenPreview/);
-  assert.match(card, /Открыть превью мысли/);
+  assert.match(card, /Предпросмотр мысли/);
   assert.equal(card.includes("disabled"), false);
   assert.match(card, /studioThoughtHref\(reel\.id, "dialog"\)/);
   assert.match(preview, /Снять новый дубль/);

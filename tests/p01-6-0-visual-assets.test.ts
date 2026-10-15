@@ -74,7 +74,6 @@ test("P01.6-0 applies WebP to cards and the desktop work area only", () => {
   assert.match(helper, /2166136261/);
   assert.match(card, /archiveCardBackgroundImage\(reel\.id\)/);
   assert.match(card, /--archive-card-image/);
-  assert.match(list, /archive-desk-surface/);
   assert.match(list, /archive-workspace-toolbar/);
   assert.match(css, /url\("\/archive\/desk\/desk\.webp"\)/);
   assert.match(css, /linear-gradient\(180deg, color-mix\(in srgb, var\(--bg\) 34%/); // P1: the same scrim, now from the --bg token

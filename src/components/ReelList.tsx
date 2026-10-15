@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { NewThoughtSheet } from "@/components/NewThoughtSheet";
 import { ArchiveCalendar } from "@/components/ArchiveCalendar";
 import { ArchiveCalendarSheet } from "@/components/ArchiveCalendarSheet";
-import { ArchiveDateControl } from "@/components/ArchiveDateControl";
+import { ArchiveMobileRow } from "@/components/ArchiveMobileRow";
+import { CalendarDays, Mic, X } from "lucide-react";
 import { ArchiveDensityToggle } from "@/components/ArchiveDensityToggle";
 import { ArchiveDesktopSlot } from "@/components/ArchiveDesktopChrome";
 import { ArchiveListView } from "@/components/ArchiveListView";
@@ -19,10 +20,8 @@ import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { EmptyState } from "@/components/vocal-ui/EmptyState";
 import { Field } from "@/components/vocal-ui/Field";
 import { GenerationGuard } from "@/lib/generation-guard";
-import {
-  formatArchiveDateHeading,
-  resolveClientTimeZone,
-} from "@/lib/archive-calendar";
+import { resolveClientTimeZone } from "@/lib/archive-calendar";
+import { libraryDateFilter, libraryDateLabel, thoughtsCountLabel } from "@/lib/library-date";
 import {
   ARCHIVE_LIST_SORTS,
   applyArchiveCalendarRange,
@@ -45,11 +44,13 @@ import {
 import { ArchiveDeskSpread } from "@/components/ArchiveDeskSpread";
 import { chunkArchiveDeskSpreads } from "@/lib/archive-desk-layout";
 import {
+  DEFAULT_ARCHIVE_DENSITY,
   readArchiveDensity,
   writeArchiveDensity,
   type ArchiveDensity,
 } from "@/lib/archive-density";
 import { resetThoughtListQuery } from "@/lib/thought-preview";
+import { hasArchiveDateFilter } from "@/lib/thought-archive-state";
 import { type ReelListItemDto, type ReelListResult } from "@/types/reel";
 
 function NewThoughtButton({
@@ -83,14 +84,11 @@ export function ReelList() {
   const [listError, setListError] = useState<string | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [density, setDensity] = useState<ArchiveDensity>("large");
+  const [density, setDensity] = useState<ArchiveDensity>(DEFAULT_ARCHIVE_DENSITY);
   const calendarOpen = Boolean(urlState.calendarOpen);
   const previewId = urlState.previewId?.trim() || null;
-  const [dateHeading, setDateHeading] = useState({
-    title: "Календарь",
-    subtitle: "День или месяц",
-    selected: false,
-  });
+  const [dateLabel, setDateLabel] = useState("");
+  const [matchCount, setMatchCount] = useState(0);
 
   const loadGen = useRef(new GenerationGuard());
   const listEpoch = useRef(0);
@@ -172,6 +170,7 @@ export function ReelList() {
     setNextCursor(data.nextCursor);
     setHasMore(data.hasMore);
     setTotalCount(data.totalCount);
+    setMatchCount(data.matchCount ?? data.totalCount);
     setReels((prev) => mergeReelListPages(prev, data.reels, append));
   }, []);
 
@@ -312,12 +311,13 @@ export function ReelList() {
   }, [loading, listError, reels]);
 
   useEffect(() => {
-    setDateHeading(formatArchiveDateHeading(urlState.from, urlState.to, resolveClientTimeZone()));
+    const timeZone = resolveClientTimeZone();
+    setDateLabel(libraryDateLabel(libraryDateFilter(urlState.from, urlState.to, timeZone), urlState.from, urlState.to, timeZone));
   }, [urlState.from, urlState.to]);
 
   const resetAction = (
     <ActionButton variant="secondary" onClick={resetSearchAndFilters}>
-      Сбросить поиск и фильтры
+      Сбросить фильтры
     </ActionButton>
   );
 
@@ -371,199 +371,8 @@ export function ReelList() {
     </div>
   );
 
-  return (
-    <div className="space-y-6 pb-[env(safe-area-inset-bottom)]">
-      <div className="flex items-start justify-between gap-3 shell:hidden">
-        <div className="min-w-0">
-          <h1 className="font-[family-name:var(--font-display)] text-4xl">Мысли</h1>
-          <button
-            type="button"
-            className="archive-mobile-date mt-2"
-            aria-haspopup="dialog"
-            aria-expanded={calendarOpen}
-            aria-label="Открыть календарь"
-            onClick={() => pushUrl(openArchiveCalendar(urlStateRef.current))}
-          >
-            <span>
-              <span className="block text-xl font-medium leading-tight text-text">{dateHeading.title}</span>
-              <span className="block text-sm capitalize text-muted">{dateHeading.subtitle}</span>
-            </span>
-            <span aria-hidden="true" className="text-muted">
-              ▾
-            </span>
-          </button>
-        </div>
-        <NewThoughtButton onClick={() => setCreateOpen(true)} />
-      </div>
-
-      {isDesktop ? (
-        <>
-          <ArchiveDesktopSlot slot="date">
-            <ArchiveDateControl
-              from={urlState.from}
-              to={urlState.to}
-              open={calendarOpen}
-              onToggle={() => {
-                if (urlStateRef.current.calendarOpen) {
-                  closeCalendar();
-                  return;
-                }
-                pushUrl(openArchiveCalendar(urlStateRef.current));
-              }}
-            />
-            {calendarOpen ? (
-              <div className="pt-2">
-                <ArchiveCalendar
-                  state={urlState}
-                  onApplyRange={({ from, to }) => applyFilters({ from, to, dateField: null })}
-                  onClearDate={clearDateFilter}
-                />
-              </div>
-            ) : null}
-          </ArchiveDesktopSlot>
-          <ArchiveDesktopSlot slot="statuses">
-            <ArchiveStatusFilters
-              value={urlState.status}
-              onChange={(id) => applyFilters({ status: id })}
-            />
-          </ArchiveDesktopSlot>
-        </>
-      ) : (
-        <ArchiveDesktopSlot slot="sheet-statuses">
-          <ArchiveStatusFilters
-            variant="sheet"
-            value={urlState.status}
-            onChange={(id) => applyFilters({ status: id })}
-          />
-        </ArchiveDesktopSlot>
-      )}
-
-      <div className="grid gap-6 shell:grid-cols-1">
-        {!isDesktop ? (
-          <aside className="flex flex-col gap-3 archive-mobile-tight" aria-label="Поиск и фильтры">
-            <div className="flex items-center gap-2">
-              {searchField}
-              <ArchiveSortMenu value={urlState.sort} onChange={(id) => applyFilters({ sort: id })} />
-            </div>
-            {calendarOpen ? (
-              <ArchiveCalendarSheet
-                open
-                state={urlState}
-                onClose={closeCalendar}
-                onApplyRange={(range) => replaceUrl(applyArchiveCalendarRange(urlStateRef.current, range))}
-                onClearDate={clearDateFilter}
-              />
-            ) : null}
-            <ArchiveStatusFilters
-              variant="icons"
-              value={urlState.status}
-              onChange={(id) => applyFilters({ status: id })}
-            />
-          </aside>
-        ) : null}
-
-        {previewId ? (
-          <ArchiveThoughtPreview
-            open
-            reelId={previewId}
-            onClose={closePreview}
-            onLeaveToStudio={() => rememberArchiveFocus(previewId)}
-          />
-        ) : null}
-
-        <div className={`min-w-0 ${isDesktop ? "" : "archive-desk-surface space-y-4"}`}>
-          {isDesktop ? (
-            <div className="archive-workspace-toolbar">
-              <h1 className="archive-toolbar-title">Мысли</h1>
-              <div className="min-w-0 flex-1">{searchField}</div>
-              <NewThoughtButton onClick={() => setCreateOpen(true)} />
-              {sortControl}
-              <ArchiveDensityToggle value={density} onChange={changeDensity} />
-            </div>
-          ) : null}
-
-          {listError ? <ShellError message={listError} onRetry={() => void loadFirst()} /> : null}
-          {loading ? <ShellLoading label="Загрузка мыслей…" /> : null}
-
-          {!loading && emptyKind === "none" ? (
-            <EmptyState
-              title="Пока нет мыслей"
-              description="Создайте первую мысль — профиль для этого не нужен."
-              action={<NewThoughtButton onClick={() => setCreateOpen(true)} />}
-            />
-          ) : null}
-          {!loading && emptyKind === "search" ? (
-            <EmptyState
-              title="Ничего не найдено"
-              description="Попробуйте другое название или сбросьте поиск и фильтры."
-              action={resetAction}
-            />
-          ) : null}
-          {!loading && emptyKind === "filter" ? (
-            <EmptyState
-              title="Нет мыслей в этом статусе"
-              description="Смените фильтр или откройте список «Все»."
-              action={resetAction}
-            />
-          ) : null}
-          {!loading && emptyKind === "date" ? (
-            <EmptyState
-              title="Нет мыслей в выбранных датах"
-              description="Сбросьте дату или выберите другой день или месяц."
-              action={
-                <ActionButton variant="secondary" onClick={clearDateFilter}>
-                  Сбросить дату
-                </ActionButton>
-              }
-            />
-          ) : null}
-
-          {!loading && !listError && reels.length > 0 ? (
-            <div className={isDesktop && density === "large" ? "archive-desk-spreads" : "space-y-4"}>
-              {isDesktop && density === "list" ? (
-                <ArchiveListView
-                  reels={reels}
-                  onOpenPreview={openPreview}
-                  onLeaveToStudio={rememberArchiveFocus}
-                />
-              ) : isDesktop && density === "compact" ? (
-                <ul className="archive-polaroid-grid archive-polaroid-grid-compact list-none p-0 px-4 shell:px-6">
-                  {reels.map((reel) => (
-                    <li key={reel.id} className="min-w-0">
-                      <ArchivePolaroidCard
-                        reel={reel}
-                        variant="desktop"
-                        onOpenPreview={() => openPreview(reel.id)}
-                        onLeaveToStudio={() => rememberArchiveFocus(reel.id)}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              ) : isDesktop ? (
-                chunkArchiveDeskSpreads(reels).map((spread, spreadIndex) => (
-                  <ArchiveDeskSpread
-                    key={spread.map((reel) => reel.id).join("-")}
-                    reels={spread}
-                    spreadIndex={spreadIndex}
-                    onOpenPreview={openPreview}
-                    onLeaveToStudio={rememberArchiveFocus}
-                  />
-                ))
-              ) : (
-                <ul className="archive-polaroid-grid-mobile archive-mobile-tight list-none p-0">
-                  {reels.map((reel) => (
-                    <li key={reel.id} className="min-w-0">
-                      <ArchivePolaroidCard
-                        reel={reel}
-                        variant="mobile"
-                        onOpenPreview={() => openPreview(reel.id)}
-                        onLeaveToStudio={() => rememberArchiveFocus(reel.id)}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              )}
-
+  const paging = (
+    <div className="space-y-4">
               {loadingMore ? (
                 <p className="text-sm text-muted" role="status" aria-live="polite">
                   Загрузка ещё…
@@ -597,11 +406,210 @@ export function ReelList() {
                   Конец списка
                 </p>
               ) : null}
+    </div>
+  );
+
+  const filtersActive = Boolean(urlState.q) || urlState.status !== "all" || hasArchiveDateFilter(urlState);
+  const dateChip = dateLabel && hasArchiveDateFilter(urlState) ? (
+    <div className="flex flex-wrap items-center gap-3" role="status" data-archive-active-date>
+      <span className="archive-date-chip">
+        {dateLabel}
+        <button type="button" aria-label="Сбросить фильтр по дате" onClick={clearDateFilter}>
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      </span>
+      {!loading && !listError ? (
+        <span className="text-sm text-muted">
+          {matchCount} {thoughtsCountLabel(matchCount)}
+        </span>
+      ) : null}
+    </div>
+  ) : null;
+
+  const emptyStates = (
+    <>
+      {!loading && emptyKind === "none" ? (
+        <div className="vocal-card archive-first-run" data-archive-first-run>
+          <button
+            type="button"
+            className="archive-first-run-mic"
+            aria-label="Записать первую мысль"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Mic className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
+          </button>
+          <h2 className="font-[family-name:var(--font-display)] text-xl">Запишите первую мысль</h2>
+          <p className="text-sm text-muted">Расскажите голосом или напишите текст.</p>
+        </div>
+      ) : null}
+      {!loading && (emptyKind === "search" || emptyKind === "filter" || emptyKind === "date") ? (
+        <EmptyState
+          title="Ничего не найдено"
+          description="Попробуйте другое название или смените фильтры."
+          action={resetAction}
+        />
+      ) : null}
+    </>
+  );
+
+
+  return (
+    <div className="pb-[env(safe-area-inset-bottom)]">
+      {isDesktop ? (
+        <>
+          <ArchiveDesktopSlot slot="statuses">
+            <ArchiveStatusFilters value={urlState.status} onChange={(id) => applyFilters({ status: id })} />
+          </ArchiveDesktopSlot>
+          <ArchiveDesktopSlot slot="date">
+            <p className="px-2 pb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted" id="archive-date-label">
+              Дата
+            </p>
+            <div className="px-1" aria-labelledby="archive-date-label" role="group">
+              <ArchiveCalendar
+                state={urlState}
+                onApplyRange={({ from, to }) => applyFilters({ from, to, dateField: null })}
+                onClearDate={clearDateFilter}
+              />
+            </div>
+          </ArchiveDesktopSlot>
+        </>
+      ) : null}
+
+      {previewId ? (
+        <ArchiveThoughtPreview
+          open
+          reelId={previewId}
+          onClose={closePreview}
+          onLeaveToStudio={() => rememberArchiveFocus(previewId)}
+        />
+      ) : null}
+
+      {/* outside the spaced column: a fixed overlay must not inherit the column margins */}
+      {!isDesktop && calendarOpen ? (
+        <ArchiveCalendarSheet
+          open
+          state={urlState}
+          onClose={closeCalendar}
+          onApplyRange={(range) => replaceUrl(applyArchiveCalendarRange(urlStateRef.current, range))}
+          onClearDate={clearDateFilter}
+        />
+      ) : null}
+      {!isDesktop ? (
+        <div className="space-y-4 px-4 pb-[calc(var(--tabbar-h,3rem)+1.25rem)] pt-[max(0.75rem,env(safe-area-inset-top))]" data-archive-touch>
+          <header className="space-y-3" data-archive-mobile-header>
+            <div className="flex min-h-11 items-center justify-between gap-3">
+              <h1 className="font-[family-name:var(--font-display)] text-[30px] font-medium leading-tight">Мысли</h1>
+              <button
+                type="button"
+                className="archive-mobile-date !w-auto"
+                aria-haspopup="dialog"
+                aria-expanded={calendarOpen}
+                aria-label="Открыть календарь"
+                onClick={() => pushUrl(openArchiveCalendar(urlStateRef.current))}
+              >
+                <CalendarDays className="h-[18px] w-[18px] text-accent-soft" strokeWidth={1.75} aria-hidden="true" />
+                <span className="text-sm font-medium">{dateLabel && hasArchiveDateFilter(urlState) ? dateLabel : "Дата"}</span>
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              {searchField}
+              <ArchiveSortMenu value={urlState.sort} onChange={(id) => applyFilters({ sort: id })} />
+            </div>
+          </header>
+          <ArchiveStatusFilters variant="chips" value={urlState.status} onChange={(id) => applyFilters({ status: id })} />
+          {dateChip}
+          {listError ? <ShellError message={listError} onRetry={() => void loadFirst()} /> : null}
+          {loading ? <ShellLoading label="Загрузка мыслей…" /> : null}
+          {emptyStates}
+          {!loading && !listError && reels.length > 0 ? (
+            <div className="space-y-4">
+              {!filtersActive ? (
+                <section aria-labelledby="archive-lane-title" className="space-y-1">
+                  <h2 id="archive-lane-title" className="archive-section-title">
+                    На столе сейчас
+                  </h2>
+                  <ul className="archive-lane" data-archive-lane>
+                    {reels.slice(0, 6).map((reel) => (
+                      <li key={reel.id}>
+                        <ArchivePolaroidCard
+                          reel={reel}
+                          variant="mobile"
+                          onOpenPreview={() => openPreview(reel.id)}
+                          onLeaveToStudio={() => rememberArchiveFocus(reel.id)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+              <section aria-labelledby="archive-rows-title">
+                <h2 id="archive-rows-title" className="archive-section-title">
+                  {filtersActive ? "Найдено" : "Все мысли"}
+                </h2>
+                <ul className="archive-rows">
+                  {reels.map((reel) => (
+                    <ArchiveMobileRow
+                      key={reel.id}
+                      reel={reel}
+                      onOpenPreview={() => openPreview(reel.id)}
+                      onLeaveToStudio={() => rememberArchiveFocus(reel.id)}
+                    />
+                  ))}
+                </ul>
+              </section>
+              {paging}
             </div>
           ) : null}
-          <NewThoughtSheet open={createOpen} onClose={() => setCreateOpen(false)} />
         </div>
-      </div>
+      ) : (
+        <div className="min-w-0">
+          <div className="archive-workspace-toolbar">
+            <h1 className="archive-toolbar-title">Мысли</h1>
+            <div className="min-w-0 flex-1">{searchField}</div>
+            {sortControl}
+            <NewThoughtButton onClick={() => setCreateOpen(true)} />
+            <ArchiveDensityToggle value={density} onChange={changeDensity} />
+          </div>
+          <div className="space-y-4">
+            {dateChip ? <div className="px-6 pt-4">{dateChip}</div> : null}
+            {listError ? <ShellError message={listError} onRetry={() => void loadFirst()} /> : null}
+            {loading ? <ShellLoading label="Загрузка мыслей…" /> : null}
+            <div className="px-6">{emptyStates}</div>
+            {!loading && !listError && reels.length > 0 ? (
+              <div className={density === "large" ? "archive-desk-spreads" : "space-y-4"}>
+                {density === "list" ? (
+                  <ArchiveListView reels={reels} onOpenPreview={openPreview} onLeaveToStudio={rememberArchiveFocus} />
+                ) : density === "compact" ? (
+                  <ul className="archive-polaroid-grid archive-polaroid-grid-compact list-none p-0 px-6">
+                    {reels.map((reel) => (
+                      <li key={reel.id} className="min-w-0">
+                        <ArchivePolaroidCard
+                          reel={reel}
+                          variant="desktop"
+                          onOpenPreview={() => openPreview(reel.id)}
+                          onLeaveToStudio={() => rememberArchiveFocus(reel.id)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  chunkArchiveDeskSpreads(reels).map((spread, spreadIndex) => (
+                    <ArchiveDeskSpread
+                      key={spread.map((reel) => reel.id).join("-")}
+                      reels={spread}
+                      spreadIndex={spreadIndex}
+                      onOpenPreview={openPreview}
+                      onLeaveToStudio={rememberArchiveFocus}
+                    />
+                  ))
+                )}
+                <div className="px-6 pb-8">{paging}</div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+      <NewThoughtSheet open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   );
 }

@@ -79,7 +79,7 @@ test("reset clears search and filter together without AI", () => {
     dateField: null,
   });
   const list = readFileSync(join(root, "src/components/ReelList.tsx"), "utf8");
-  assert.match(list, /Сбросить поиск и фильтры/);
+  assert.match(list, /Сбросить фильтры/);
   assert.match(list, /resetThoughtListQuery/);
   assert.equal(list.includes("/api/analyze"), false);
   assert.equal(list.includes("groq"), false);
@@ -90,7 +90,7 @@ test("thought list states stay on the real API and do not require a profile", ()
   const card = readFileSync(join(root, "src/components/ReelCard.tsx"), "utf8");
   assert.match(list, /fetch\(`\/api\/reels\?\$\{queryString\}`/);
   assert.match(list, /ShellLoading/);
-  assert.match(list, /Пока нет мыслей/);
+  assert.match(list, /Запишите первую мысль/);
   assert.match(list, /ShellError/);
   assert.match(list, /onRetry/);
   assert.match(list, /Новая мысль/);

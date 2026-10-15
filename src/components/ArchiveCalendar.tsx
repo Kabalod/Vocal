@@ -1,18 +1,15 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { MonthCalendar } from "@/components/vocal-ui/MonthCalendar";
 import {
-  CALENDAR_WEEKDAYS_RU,
-  buildCalendarCells,
   dayKeyFromInstant,
   dayRangeInTimeZone,
-  formatMonthTitleRu,
-  matchArchiveDateSelection,
   monthFilterRangeInTimeZone,
   monthKeyFromInstant,
   resolveClientTimeZone,
-  shiftMonthKey,
 } from "@/lib/archive-calendar";
+import { libraryDateFilter, presetRange } from "@/lib/library-date";
 import type { CalendarFacetDto } from "@/lib/reel-archive-query";
 import type { ArchiveListUrlState } from "@/lib/thought-archive-state";
 
@@ -22,31 +19,27 @@ type Props = {
   onClearDate: () => void;
 };
 
+/**
+ * Month calendar of the library (P5): the P2 `MonthCalendar` over the existing facets endpoint. Dots come from
+ * `/api/reels/calendar` for the viewed month under the same search / status filters as the list; presets, a day and the whole
+ * month become the same `from` / `to` range the list API already takes.
+ */
 export function ArchiveCalendar({ state, onApplyRange, onClearDate }: Props) {
-  const labelId = useId();
   const timeZone = useMemo(() => resolveClientTimeZone(), []);
   const today = useMemo(() => dayKeyFromInstant(new Date(), timeZone), [timeZone]);
-  const selection = useMemo(
-    () => matchArchiveDateSelection(state.from, state.to, timeZone),
-    [state.from, state.to, timeZone],
-  );
+  const filter = useMemo(() => libraryDateFilter(state.from, state.to, timeZone), [state.from, state.to, timeZone]);
 
-  const initialMonth =
-    selection?.kind === "day"
-      ? selection.day.slice(0, 7)
-      : selection?.kind === "month"
-        ? selection.month
-        : monthKeyFromInstant(new Date(), timeZone);
-
-  const [viewMonth, setViewMonth] = useState(initialMonth);
+  const [viewMonth, setViewMonth] = useState(() => {
+    if (filter.kind === "range" && filter.rangeStart) return filter.rangeStart.slice(0, 7);
+    if (filter.kind === "month") return filter.monthValue;
+    return monthKeyFromInstant(new Date(), timeZone);
+  });
   const [facets, setFacets] = useState<CalendarFacetDto | null>(null);
-  const [facetsError, setFacetsError] = useState<string | null>(null);
-  const [loadingFacets, setLoadingFacets] = useState(false);
 
   useEffect(() => {
-    if (selection?.kind === "day") setViewMonth(selection.day.slice(0, 7));
-    else if (selection?.kind === "month") setViewMonth(selection.month);
-  }, [selection]);
+    if (filter.kind === "range" && filter.rangeStart) setViewMonth(filter.rangeStart.slice(0, 7));
+    else if (filter.kind === "month") setViewMonth(filter.monthValue);
+  }, [filter.kind, filter.rangeStart, filter.monthValue]);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -56,151 +49,41 @@ export function ArchiveCalendar({ state, onApplyRange, onClearDate }: Props) {
     params.set("status", state.status);
     if (state.q.trim()) params.set("q", state.q.trim());
     if (state.dateField === "updatedAt") params.set("dateField", "updatedAt");
-
-    setLoadingFacets(true);
-    setFacetsError(null);
     void fetch(`/api/reels/calendar?${params}`, { cache: "no-store", signal: ac.signal })
       .then(async (res) => {
-        const data = (await res.json()) as CalendarFacetDto & { error?: string };
-        if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить календарь.");
+        const data = (await res.json()) as CalendarFacetDto;
+        if (!res.ok) throw new Error("calendar");
         setFacets(data);
       })
-      .catch((err: unknown) => {
-        if (ac.signal.aborted) return;
-        setFacets(null);
-        setFacetsError(err instanceof Error ? err.message : "Ошибка календаря.");
-      })
-      .finally(() => {
-        if (!ac.signal.aborted) setLoadingFacets(false);
+      .catch(() => {
+        if (!ac.signal.aborted) setFacets(null);
       });
-
     return () => ac.abort();
   }, [state.dateField, state.q, state.status, timeZone, viewMonth]);
 
-  const marked = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const day of facets?.days ?? []) map.set(day.date, day.count);
-    return map;
-  }, [facets]);
-
-  const cells = useMemo(() => buildCalendarCells(viewMonth, timeZone), [timeZone, viewMonth]);
-  const monthSelected = selection?.kind === "month" && selection.month === viewMonth;
-  const hasDateFilter = Boolean(state.from && state.to);
+  const marked = useMemo(() => new Set((facets?.days ?? []).filter((day) => day.count > 0).map((day) => day.date)), [facets]);
+  const [year, month] = viewMonth.split("-").map(Number);
 
   return (
-    <section className="space-y-3" aria-labelledby={labelId}>
-      <div className="flex items-center justify-between gap-2">
-        <h2 id={labelId} className="text-sm font-medium text-text">
-          {formatMonthTitleRu(viewMonth)}
-        </h2>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-control border border-line text-muted hover:text-text"
-            aria-label="Предыдущий месяц"
-            onClick={() => setViewMonth((m) => shiftMonthKey(m, -1))}
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-control border border-line text-muted hover:text-text"
-            aria-label="Следующий месяц"
-            onClick={() => setViewMonth((m) => shiftMonthKey(m, 1))}
-          >
-            ›
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted" aria-hidden="true">
-        {CALENDAR_WEEKDAYS_RU.map((day) => (
-          <span key={day} className="py-1">
-            {day}
-          </span>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-7 gap-1" aria-label="Календарь мыслей">
-        {cells.map((cell) => {
-          const count = marked.get(cell.date) ?? 0;
-          const isToday = cell.date === today;
-          const isSelected = selection?.kind === "day" && selection.day === cell.date;
-          const hasResults = cell.inMonth && count > 0;
-          const label = [
-            cell.date,
-            isToday ? "сегодня" : null,
-            hasResults ? `${count} мыслей` : "нет мыслей",
-            isSelected ? "выбран" : null,
-          ]
-            .filter(Boolean)
-            .join(", ");
-
-          return (
-            <button
-              key={`${cell.date}-${cell.inMonth ? "in" : "out"}`}
-              type="button"
-              disabled={!cell.inMonth}
-              aria-label={label}
-              aria-current={isToday ? "date" : undefined}
-              aria-pressed={isSelected}
-              onClick={() => {
-                const range = dayRangeInTimeZone(cell.date, timeZone);
-                onApplyRange({ from: range.from, to: range.to });
-              }}
-              className={[
-                "relative flex min-h-11 min-w-0 flex-col items-center justify-center rounded-control text-sm",
-                cell.inMonth ? "text-text" : "text-muted/40",
-                isSelected ? "bg-accent text-on-accent" : "hover:bg-accent-dim",
-                !isSelected && isToday ? "ring-1 ring-accent-soft" : "",
-                !cell.inMonth ? "pointer-events-none" : "",
-              ].join(" ")}
-            >
-              <span>{cell.day}</span>
-              {hasResults && !isSelected ? (
-                <span className="absolute bottom-1 h-1 w-1 rounded-full bg-accent" aria-hidden="true" />
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <button
-          type="button"
-          className={`min-h-11 rounded-full border px-3 text-sm ${
-            monthSelected
-              ? "border-accent bg-accent/15 text-text"
-              : "border-line bg-surface text-muted hover:text-text"
-          }`}
-          aria-pressed={monthSelected}
-          onClick={() => {
-            const range = monthFilterRangeInTimeZone(viewMonth, timeZone);
-            onApplyRange({ from: range.from, to: range.to });
-          }}
-        >
-          Показать месяц
-        </button>
-        {hasDateFilter ? (
-          <button
-            type="button"
-            className="min-h-11 text-sm text-muted underline-offset-2 hover:text-text hover:underline"
-            onClick={onClearDate}
-          >
-            Сбросить дату
-          </button>
-        ) : null}
-        {loadingFacets ? (
-          <p className="text-xs text-muted" role="status">
-            Обновление меток…
-          </p>
-        ) : null}
-        {facetsError ? (
-          <p className="text-xs text-bad" role="alert">
-            {facetsError}
-          </p>
-        ) : null}
-      </div>
-    </section>
+    <MonthCalendar
+      year={year}
+      month={month - 1}
+      onMonthChange={(nextYear, nextMonth) => setViewMonth(`${nextYear}-${String(nextMonth + 1).padStart(2, "0")}`)}
+      marked={marked}
+      today={today}
+      dateFilter={filter.kind}
+      rangeStart={filter.rangeStart}
+      monthValue={filter.monthValue}
+      onPreset={(preset) => onApplyRange(presetRange(preset, timeZone))}
+      onDay={(day) => {
+        const range = dayRangeInTimeZone(day, timeZone);
+        onApplyRange({ from: range.from, to: range.to });
+      }}
+      onWholeMonth={() => {
+        const range = monthFilterRangeInTimeZone(viewMonth, timeZone);
+        onApplyRange({ from: range.from, to: range.to });
+      }}
+      onReset={onClearDate}
+    />
   );
 }

@@ -143,7 +143,8 @@ test("P01.4 mobile archive uses 3-col polaroids, URL calendar sheet, and named s
   const css = readFileSync(join(root, "src/app/globals.css"), "utf8");
   const modal = readFileSync(join(root, "src/components/vocal-ui/VocalModal.tsx"), "utf8");
 
-  assert.match(list, /archive-polaroid-grid-mobile/);
+  assert.match(list, /archive-lane/);
+  assert.match(list, /ArchiveMobileRow/);
   assert.match(list, /variant="mobile"/);
   assert.match(list, /ArchiveCalendarSheet/);
   assert.match(list, /calendarOpen/);

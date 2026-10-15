@@ -121,10 +121,9 @@ test("P01.6-2 view mode persists and mobile chrome stays compact", (t) => {
   assert.match(shell, /overflow-x-hidden/);
   assert.match(list, /ArchiveSortMenu/);
   assert.match(list, /archive-mobile-date/);
-  assert.match(list, /variant="icons"/);
-  assert.match(list, /variant="sheet"/);
+  assert.match(list, /variant="chips"/);
   assert.equal(list.includes("FilterControl"), false);
-  assert.match(filters, /variant === "icons"/);
+  assert.match(filters, /variant === "chips"/);
   assert.match(sort, /Новые сначала/);
   assert.match(sort, /Escape/);
   assert.match(css, /archive-polaroid-grid-mobile[\s\S]*repeat\(3/);

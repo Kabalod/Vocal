@@ -31,9 +31,10 @@ function IconList() {
   );
 }
 
+/** Grid is the default layout; the desk and the list are a secondary switch (P5). */
 const OPTIONS: Array<{ id: ArchiveDensity; label: string; Icon: typeof IconSpatial }> = [
-  { id: "large", label: "Пространственный вид", Icon: IconSpatial },
-  { id: "compact", label: "Компактный вид", Icon: IconCompact },
+  { id: "compact", label: "Сетка", Icon: IconCompact },
+  { id: "large", label: "Стол", Icon: IconSpatial },
   { id: "list", label: "Список", Icon: IconList },
 ];
 
@@ -45,7 +46,7 @@ export function ArchiveDensityToggle({
   onChange: (value: ArchiveDensity) => void;
 }) {
   return (
-    <div className="archive-toolbar-segment hidden items-center gap-0.5 shell:inline-flex" role="group" aria-label="Вид архива">
+    <div className="hidden items-center gap-0.5 shell:inline-flex" role="group" aria-label="Раскладка">
       {OPTIONS.map((item) => {
         const Icon = item.Icon;
         const active = value === item.id;
@@ -53,8 +54,9 @@ export function ArchiveDensityToggle({
           <button
             key={item.id}
             type="button"
-            className={`inline-flex h-11 min-h-11 min-w-11 items-center justify-center rounded-[var(--vocal-radius-control)] ${
-              active ? "bg-bg text-text" : "text-muted hover:text-text"
+            title={item.label}
+            className={`inline-flex h-9 min-h-9 min-w-9 items-center justify-center rounded-[var(--vocal-radius-control)] ${
+              active ? "bg-white/10 text-text" : "text-muted hover:text-text"
             }`}
             aria-pressed={active}
             aria-label={item.label}
