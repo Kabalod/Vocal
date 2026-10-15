@@ -10,6 +10,7 @@ import {
   writeStoredShellCollapsed,
 } from "@/components/shell-layout";
 import { getSheetFocusableElements, trapSheetTab } from "@/components/shell-sheet";
+import { useKeyboardInset } from "@/components/use-keyboard-inset";
 import { ArchiveDesktopHostProvider } from "@/components/ArchiveDesktopChrome";
 import { isAuthShellPath } from "@/lib/auth/paths";
 import { isShellNavActive, SHELL_NAV, shellBack, shellHeaderTitle } from "@/components/shell-nav";
@@ -105,6 +106,7 @@ function VocalAppShellFrame({ children }: { children: ReactNode }) {
   const titleId = useId();
   const back = shellBack(pathname);
   const title = shellHeaderTitle(pathname);
+  useKeyboardInset();
 
   function closeSheet() {
     setSheetOpen(false);
@@ -201,7 +203,7 @@ function VocalAppShellFrame({ children }: { children: ReactNode }) {
           archiveDesktop ? "archive-workspace-desk shell:h-screen shell:overflow-y-auto" : ""
         } ${thoughtDesktop ? "shell:h-screen shell:overflow-y-auto" : ""}`}
       >
-        <header className={`flex min-h-11 items-center gap-3 border-b border-line px-4 py-3 shell:px-6 ${archiveDesktop || thoughtDesktop ? "shell:hidden" : ""}`}>
+        <header className={`flex min-h-11 items-center gap-3 border-b border-line px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] shell:px-6 ${thoughtDesktop ? "hidden" : archiveDesktop ? "shell:hidden" : ""}`}>
           <button
             ref={menuButtonRef}
             type="button"
@@ -245,7 +247,7 @@ function VocalAppShellFrame({ children }: { children: ReactNode }) {
           {children}
         </main>
         <nav
-          className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-2 border-t border-line bg-surface shell:!hidden"
+          className="vocal-tabbar fixed inset-x-0 bottom-0 z-40 grid grid-cols-2 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] shell:!hidden"
           aria-label="Главные разделы"
         >
           <Link

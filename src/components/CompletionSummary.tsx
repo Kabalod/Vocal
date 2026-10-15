@@ -91,7 +91,7 @@ export function CompletionSummary({
       <h3 className="font-[family-name:var(--font-display)] text-xl">Завершение</h3>
       <p className="text-sm">
         Итоговый дубль: {takeLabel}{" "}
-        <button type="button" className="text-accent underline" onClick={onPickTake}>
+        <button type="button" className="inline-flex min-h-11 items-center px-1 text-accent underline" onClick={onPickTake}>
           {take ? "открыть" : "выбрать"}
         </button>
       </p>

@@ -45,8 +45,8 @@ test("P17 visual: recording teleprompter, dialogue split, polaroid path, thought
   assert.doesNotMatch(recording, /ThoughtDialogue/);
   assert.doesNotMatch(recording, /Composer/);
 
-  assert.match(dialogue, /dialogue-script/);
-  assert.match(dialogue, /23\.75rem/);
+  assert.match(dialogue, /data-dialogue-touch/);
+  assert.match(dialogue, /380px/);
   assert.match(dialogue, /bg-surface-raised/);
   assert.match(dialogue, /Composer/);
   assert.doesNotMatch(dialogue, /#201D18/);

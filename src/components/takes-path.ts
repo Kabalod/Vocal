@@ -174,3 +174,15 @@ export function formatClock(seconds: number): string {
   const total = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
+
+/** Mobile path (ref 08): the focus card shows the final take, or the newest one while none is final; a removed focus falls back too. */
+export function focusTakeId(takes: readonly TakeDto[], finalTakeId: string | null, current: string | null): string | null {
+  if (current && takes.some((take) => take.id === current)) return current;
+  if (finalTakeId && takes.some((take) => take.id === finalTakeId)) return finalTakeId;
+  return takes.length === 0 ? null : orderTakes(takes, "newest")[0].id;
+}
+
+/** Mobile timeline: every take in the chosen order except the one in the focus card; the ghost "next take" sits at the newest end. */
+export function timelineNodes(takes: readonly TakeDto[], order: TakeOrder, focusId: string | null): PathNode[] {
+  return pathNodes(takes, order).filter((node) => node === null || node.id !== focusId);
+}

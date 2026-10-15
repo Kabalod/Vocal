@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
+import { Chip } from "@/components/vocal-ui/Chip";
 import { Composer } from "@/components/vocal-ui/Composer";
 import { EmptyState } from "@/components/vocal-ui/EmptyState";
 import { InlineError } from "@/components/vocal-ui/InlineError";
@@ -577,22 +578,13 @@ export function ThoughtDialogue({
   }
 
   return (
-    <section className="flex min-h-[28rem] flex-col gap-4 shell:flex-row shell:items-stretch" aria-label="Диалог с Vocal">
-      <div className="hidden min-w-0 flex-1 overflow-y-auto pr-1 shell:block">
-        {scriptPreview ? (
-          <p className="dialogue-script whitespace-pre-wrap">{scriptPreview}</p>
-        ) : (
-          <p className="text-sm text-muted">Сценарий появится здесь, когда сохраните готовую версию. Чат справа — не запись дубля.</p>
-        )}
-      </div>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col shell:w-[min(100%,23.75rem)] shell:flex-none">
-      <div className="mb-3">
-        <h2 className="font-[family-name:var(--font-display)] text-xl">Диалог с Vocal</h2>
-      </div>
+    <section className="flex h-full min-h-0 flex-col" aria-label="Диалог с Vocal" data-dialogue-touch>
+      <div className="min-h-0 min-w-0 flex-1 flex-col flex">
+      <h2 className="sr-only">Диалог с Vocal</h2>
       <div
         ref={scrollerRef}
         onScroll={onScroll}
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1"
+        className="min-h-0 flex-1 space-y-3.5 overflow-y-auto overscroll-contain px-4 pb-3 pt-2"
       >
         {page?.nextCursor ? (
           <div className="text-center">
@@ -623,8 +615,15 @@ export function ThoughtDialogue({
         {empty ? (
           <EmptyState title="Пока нет переписки" description="Напишите или скажите мысль — Vocal ответит здесь." />
         ) : null}
-        {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+        {messages.map((message, index) => (
+          <div key={message.id} className="space-y-3.5">
+            {showDialogueTimeLabel(messages[index - 1]?.createdAt ?? null, message.createdAt) ? (
+              <time dateTime={message.createdAt} className="block text-center text-[11px] text-muted" data-dialogue-time>
+                {formatThoughtStamp(message.createdAt)}
+              </time>
+            ) : null}
+            <MessageBubble message={message} desktop showHint={index === lastQuestionIndex} />
+          </div>
         ))}
         {page?.analyzing ? <ProcessingState label="Разбираю вашу мысль…" /> : null}
       </div>
@@ -672,7 +671,7 @@ export function ThoughtDialogue({
           ) : null}
         </div>
       ) : null}
-      <div className="mt-3 space-y-2 border-t border-line pt-3">
+      <div className="space-y-2 border-t border-line bg-bg px-3 pb-2 pt-2">
         {pinnedQuestion?.text ? (
           <p className="text-sm" data-dialogue-pinned-question={pinnedQuestion.gapId ?? ""}>
             {pinnedQuestion.text}
@@ -682,14 +681,7 @@ export function ThoughtDialogue({
           <ActionButton variant="secondary" onClick={onReopen}>
             Вернуть в работу
           </ActionButton>
-        ) : (
-        <ActionButton
-          variant="secondary"
-          onClick={onGoRecord}
-        >
-          Записать дубль
-        </ActionButton>
-        )}
+        ) : null}
         {thoughtCompleted ? null : recording || finalizing ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <p className="mr-auto text-sm text-muted">
@@ -707,6 +699,16 @@ export function ThoughtDialogue({
             )}
           </div>
         ) : (
+          <>
+          <DialogueChips
+            scroll
+            disabled={!canSendDialogueText({ recording, finalizing, sending })}
+            onSend={(text) => void sendText(text, { keepDraft: true })}
+            onBuild={onBuildScript}
+            trailing={
+              <Chip className="!h-11 px-4 !text-sm" onClick={onGoRecord}>Записать дубль</Chip>
+            }
+          />
           <Composer
             value={draft}
             onChange={onDraftChange}
@@ -717,6 +719,7 @@ export function ThoughtDialogue({
             onMic={() => void startMic()}
             micLabel="Ответить голосом"
           />
+          </>
         )}
       </div>
       </div>

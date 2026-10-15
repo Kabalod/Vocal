@@ -826,3 +826,23 @@ a[aria-disabled="true"] {
 .text-on-accent {
   background-image: var(--gradient-primary);
 }
+
+/* P4 (touch): the keyboard height is published as --kb by use-keyboard-inset; the tab bar steps aside while a keyboard is open. */
+:root {
+  --tabbar-h: calc(3rem + env(safe-area-inset-bottom));
+  --bottom-chrome: var(--tabbar-h);
+}
+:root[data-kb-open] {
+  --bottom-chrome: var(--kb, 0px);
+}
+:root[data-kb-open] .vocal-tabbar {
+  display: none;
+}
+/* Press states instead of hover on touch. */
+@media (hover: none) {
+  [data-press]:active,
+  button:active:not(:disabled) {
+    opacity: 0.72;
+    transition: opacity 80ms ease-out;
+  }
+}

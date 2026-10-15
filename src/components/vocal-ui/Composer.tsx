@@ -84,7 +84,7 @@ export function Composer({
           </IconButton>
         )}
       </div>
-      <p id={hintId} className="px-4 text-xs text-muted">
+      <p id={hintId} className="hidden px-4 text-xs text-muted shell:block">
         Enter — отправить, Shift+Enter — новая строка
       </p>
     </form>

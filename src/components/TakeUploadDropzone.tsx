@@ -122,6 +122,7 @@ export function TakeUploadDropzone({
       />
       <input
         type="file"
+        className="min-h-11 w-full text-sm file:mr-3 file:min-h-11 file:rounded-full file:border-0 file:bg-white/10 file:px-4 file:text-sm file:text-text"
         accept={
           !videoOnly && kind === "audio"
             ? "audio/*,.mp3,.wav,.m4a,.aac,.ogg,.webm"

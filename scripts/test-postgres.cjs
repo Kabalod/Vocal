@@ -118,6 +118,7 @@ const reelsTests = [
   "tests/vocal-ui-p2.test.ts",
   "tests/p3a-thought-desktop.test.ts",
   "tests/p3b-takes.test.ts",
+  "tests/p4-mobile.test.ts",
   "tests/reel-filters.test.ts",
   "tests/thoughts-list.test.ts",
   "tests/p01-1-archive-contracts.test.ts",

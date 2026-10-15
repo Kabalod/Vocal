@@ -112,7 +112,7 @@ test("desktop thought screen: own toolbar and title on the shell breakpoint; bel
   assert.match(studio, /desktop \? \(/);
   assert.match(studio, /<ThoughtDesktopToolbar/);
   assert.match(studio, /<ReelStudioFrame/);
-  assert.match(studio, /<DeleteThoughtAction reelId=\{reelId\}/);
+  assert.match(src("src/components/ReelStudioFrame.tsx"), /<DeleteThoughtConfirm reelId=\{reelId\}/);
   const desktopBranch = studio.slice(studio.indexOf("data-thought-desktop"), studio.indexOf("<ReelStudioFrame"));
   assert.doesNotMatch(desktopBranch, /DeleteThoughtAction|StatusBadge/);
   assert.match(src("src/components/use-desktop-shell.ts"), /SHELL_DESKTOP_MEDIA/);
@@ -120,12 +120,12 @@ test("desktop thought screen: own toolbar and title on the shell breakpoint; bel
 
 test("dialogue: 'Записать дубль' is gone from the desktop layout and stays in the earlier one", () => {
   const source = src("src/components/ThoughtDialogue.tsx");
-  const desktopBranch = source.slice(source.indexOf("const readingText = scriptPreview"), source.indexOf("return (\n    <section className=\"flex min-h-[28rem]"));
+  const desktopBranch = source.slice(source.indexOf("const readingText = scriptPreview"), source.indexOf("return (\n    <section className=\"flex h-full min-h-0 flex-col"));
   assert.doesNotMatch(desktopBranch, /Записать дубль|onGoRecord/);
   assert.match(desktopBranch, /<DialogueChips/);
   assert.match(desktopBranch, /<Composer/);
   assert.match(desktopBranch, /w-\[380px\]|380px/);
-  assert.match(source.slice(source.indexOf("return (\n    <section className=\"flex min-h-[28rem]")), /Записать дубль/);
+  assert.match(source.slice(source.indexOf("return (\n    <section className=\"flex h-full min-h-0 flex-col")), /Записать дубль/);
 });
 
 test("dialogue chips keep a typed draft; the build chip only hands over to the script tab", () => {

@@ -1,21 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { DeleteTakeAction } from "@/components/DeleteActions";
-import { ActionButton } from "@/components/vocal-ui/ActionButton";
-import { TakeList } from "@/components/TakeList";
-import { TakePlayer } from "@/components/TakePlayer";
 import { TakesPathDesktop } from "@/components/TakesPathDesktop";
+import { TakesPathMobile } from "@/components/TakesPathMobile";
 import { TakeUploadDropzone } from "@/components/TakeUploadDropzone";
-import { TranscriptEditor } from "@/components/TranscriptEditor";
-import { QuestionList } from "@/components/QuestionList";
-import { ReviewPanel } from "@/components/ReviewPanel";
-import { ShellEmpty, ShellError, ShellLoading } from "@/components/shell-status";
-import type { ReelDto, TakeDto } from "@/types/reel";
+import { ShellError, ShellLoading } from "@/components/shell-status";
+import type { ReelDto } from "@/types/reel";
 
 type ReelTakesSlots = {
   media: ReactNode;
-  vocal: ReactNode;
 };
 
 export function ReelTakes({
@@ -46,11 +39,6 @@ export function ReelTakes({
 }) {
   const [reel, setReel] = useState<ReelDto | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [viewingId, setViewingId] = useState<string | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailTake, setDetailTake] = useState<TakeDto | null>(null);
-  const [seekTo, setSeekTo] = useState<number | null>(null);
-  const [seekInput, setSeekInput] = useState("0");
   const [textBody, setTextBody] = useState("");
   const [textNote, setTextNote] = useState("");
   const [savingText, setSavingText] = useState(false);
@@ -61,36 +49,11 @@ export function ReelTakes({
     if (!res.ok) throw new Error(data.error ?? "Не удалось загрузить дубли.");
     const next = data.reel as ReelDto;
     setReel(next);
-    setViewingId((current) => {
-      if (current && next.takes.some((take) => take.id === current)) return current;
-      return current;
-    });
   }, [reelId]);
 
   useEffect(() => {
     void load().catch((err: unknown) => setError(err instanceof Error ? err.message : "Ошибка."));
   }, [load, reloadToken]);
-
-  useEffect(() => {
-    if (!viewingId || !detailOpen) {
-      setDetailTake(null);
-      return;
-    }
-    let cancelled = false;
-    void fetch(`/api/takes/${viewingId}`, { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data: { take?: TakeDto; error?: string }) => {
-        if (cancelled) return;
-        if (data.take) setDetailTake(data.take);
-        else setError(data.error ?? "Не удалось открыть дубль.");
-      })
-      .catch(() => {
-        if (!cancelled) setError("Не удалось открыть дубль.");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [viewingId, detailOpen]);
 
   async function saveNote(takeId: string, authorNote: string) {
     const res = await fetch(`/api/takes/${takeId}`, {
@@ -154,90 +117,9 @@ export function ReelTakes({
 
   if (!reel) {
     const pending = error ? <ShellError message={error} onRetry={() => void load()} /> : <ShellLoading label="Загрузка попыток…" />;
-    if (children) return <>{children({ media: pending, vocal: pending })}</>;
+    if (children) return <>{children({ media: pending })}</>;
     return pending;
   }
-
-  const list = (
-    <div className={detailOpen ? "hidden shell:block" : ""}>
-      <TakeList
-        reel={reel}
-        viewingId={viewingId}
-        onView={(id) => {
-          setViewingId(id);
-          setDetailOpen(true);
-        }}
-        locked={thoughtCompleted}
-        onFinal={(id) => void setFinal(id)}
-        onNote={(id, note) => void saveNote(id, note)}
-      />
-    </div>
-  );
-
-  const detail = detailOpen ? (
-    <div className="space-y-4">
-      <ActionButton variant="secondary" className="shell:hidden" onClick={() => setDetailOpen(false)}>
-        ← К списку дублей
-      </ActionButton>
-      <TakePlayer take={detailTake} seekTo={seekTo} />
-      {detailTake ? (
-        <div>
-          <DeleteTakeAction
-            key={`delete-${detailTake.id}`}
-            takeId={detailTake.id}
-            label={`Дубль №${detailTake.number}`}
-            onDeleted={() => {
-              setViewingId(null);
-              setDetailOpen(false);
-              void load();
-              onChanged?.();
-            }}
-          />
-        </div>
-      ) : null}
-      {detailTake ? <TranscriptEditor key={detailTake.id} takeId={detailTake.id} /> : null}
-      {detailTake && detailTake.inputType !== "text" && detailTake.browserPlayback ? (
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const sec = Number(seekInput.replace(",", "."));
-            if (Number.isFinite(sec) && sec >= 0) setSeekTo(sec);
-          }}
-        >
-          <label className="text-sm text-muted">
-            Таймкод, сек
-            <input
-              value={seekInput}
-              onChange={(event) => setSeekInput(event.target.value)}
-              className="ml-2 w-24 rounded-lg border border-line bg-bg px-2 py-1"
-            />
-          </label>
-          <button type="submit" className="vocal-btn vocal-btn-primary text-sm">
-            К таймкоду
-          </button>
-        </form>
-      ) : null}
-    </div>
-  ) : (
-    <p className="hidden text-sm text-muted shell:block">Выберите дубль в списке.</p>
-  );
-
-  const vocal = (
-    <div className="space-y-6">
-      <div>
-        <h2 className="font-[family-name:var(--font-display)] text-2xl">Vocal</h2>
-        <p className="text-sm text-muted">Архив разборов и вопросов. Новый смысл — в основном Диалоге.</p>
-      </div>
-      {error ? <p className="text-bad">{error}</p> : null}
-      {detailTake ? (
-        <ReviewPanel key={`review-${detailTake.id}`} takeId={detailTake.id} />
-      ) : (
-        <ShellEmpty title="Нет дубля" description="Откройте попытку — разбор появится рядом." />
-      )}
-      <QuestionList reelId={reelId} takeId={viewingId} />
-    </div>
-  );
 
   const textForm =
     reel.takes.length === 0 ? (
@@ -266,70 +148,31 @@ export function ReelTakes({
         </form>
     ) : null;
 
-  const media = (
-    <section className="space-y-6">
-      <div>
-        <h2 className="font-[family-name:var(--font-display)] text-2xl">Попытки</h2>
-        <p className="text-sm text-muted">
-          Новый дубль не заменяет старый и не становится итоговым сам. Дубль №1 — исходная мысль.
-        </p>
-      </div>
-      {error ? <p className="text-bad">{error}</p> : null}
-      <div className="grid gap-6 shell:grid-cols-[minmax(16rem,20rem)_1fr]">
-        {list}
-        {detail}
-      </div>
-      <div className="space-y-3 rounded-2xl border border-line bg-bg-elev p-4">
-        <p className="text-sm text-muted">Новый дубль — голос или загруженное видео. Текстовый сценарий пишется в черновике.</p>
-        <ActionButton
-          variant="primary"
-          disabled={!canRecord || thoughtCompleted}
-          disabledReason={
-            thoughtCompleted ? "Сначала верните мысль в работу" : !canRecord ? recordBlockedReason : undefined
-          }
-          onClick={onStartVoiceRecord}
-        >
-          Записать дубль
-        </ActionButton>
-        <TakeUploadDropzone
-          reelId={reelId}
-          videoOnly
-          process
-          scriptVersionId={recordScriptId ?? undefined}
-          disabled={!canRecord || thoughtCompleted}
-          disabledReason={
-            thoughtCompleted ? "Сначала верните мысль в работу" : recordBlockedReason
-          }
-          onUploaded={(info) => {
-            void load();
-            if (info.jobId) onTakeJobStarted?.(info.jobId);
-          }}
-        />
-      </div>
-      {textForm}
-    </section>
-  );
-
   const pathMedia = (
-    <div className="space-y-6" data-takes-desktop>
+    <div className="space-y-6" data-takes-desktop={desktop || undefined} data-takes-touch={desktop ? undefined : true}>
       {error ? <p className="text-bad">{error}</p> : null}
-      <TakesPathDesktop
-        reel={reel}
-        reelId={reelId}
-        reloadToken={reloadToken}
-        locked={thoughtCompleted}
-        canRecord={canRecord}
-        recordBlockedReason={recordBlockedReason}
-        onRecord={() => onStartVoiceRecord?.()}
-        onFinal={(id) => void setFinal(id)}
-        onNote={(id, note) => void saveNote(id, note)}
-        onDeleted={() => {
-          void load();
-          onChanged?.();
-        }}
-      />
+      {(() => {
+        const Path = desktop ? TakesPathDesktop : TakesPathMobile;
+        return (
+          <Path
+            reel={reel}
+            reelId={reelId}
+            reloadToken={reloadToken}
+            locked={thoughtCompleted}
+            canRecord={canRecord}
+            recordBlockedReason={recordBlockedReason}
+            onRecord={() => onStartVoiceRecord?.()}
+            onFinal={(id) => void setFinal(id)}
+            onNote={(id, note) => void saveNote(id, note)}
+            onDeleted={() => {
+              void load();
+              onChanged?.();
+            }}
+          />
+        );
+      })()}
       <details className="rounded-2xl border border-line bg-bg-elev p-4 text-sm">
-        <summary className="cursor-pointer text-muted">Загрузить видео вместо записи</summary>
+        <summary className="flex min-h-11 cursor-pointer items-center text-muted">Загрузить видео вместо записи</summary>
         <div className="mt-3">
           <TakeUploadDropzone
             reelId={reelId}
@@ -349,12 +192,7 @@ export function ReelTakes({
     </div>
   );
 
-  const mediaNode = desktop ? pathMedia : media;
-  if (children) return <>{children({ media: mediaNode, vocal })}</>;
-  return (
-    <div className="space-y-8">
-      {mediaNode}
-      {vocal}
-    </div>
-  );
+  const mediaNode = pathMedia;
+  if (children) return <>{children({ media: mediaNode })}</>;
+  return <div className="space-y-8">{mediaNode}</div>;
 }

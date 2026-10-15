@@ -34,7 +34,7 @@ import type { TranscriptBundleDto } from "@/types/transcript";
 const MAX_REVIEW_FETCH = 12;
 
 /** Saved comparisons and saved reviews of the takes: read-only, existing endpoints. A failed read just means "no cloud / no stickers". */
-function useTakeInsights(reelId: string, takes: readonly TakeDto[], reloadToken: number) {
+export function useTakeInsights(reelId: string, takes: readonly TakeDto[], reloadToken: number) {
   const [comparisons, setComparisons] = useState<CompareDto[]>([]);
   const [reviews, setReviews] = useState<Record<string, ReviewDto[]>>({});
   const ids = takes.map((take) => take.id).join(",");
@@ -76,7 +76,7 @@ function useTakeInsights(reelId: string, takes: readonly TakeDto[], reloadToken:
 type PlayerState = { id: string; playing: boolean; pos: number; total: number };
 
 /** One take plays at a time through a single audio element (a video take plays its sound). */
-function useTakeAudio(takes: readonly TakeDto[]) {
+export function useTakeAudio(takes: readonly TakeDto[]) {
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -125,7 +125,7 @@ function useTakeAudio(takes: readonly TakeDto[]) {
   return { player, toggle, stop };
 }
 
-function ProgressBar({ label, pos, total }: { label: string; pos: number; total: number }) {
+export function ProgressBar({ label, pos, total }: { label: string; pos: number; total: number }) {
   const percent = total > 0 ? Math.min(100, (pos / total) * 100) : 0;
   return (
     <div
@@ -197,7 +197,7 @@ function TakeMenu({
 }
 
 /** "Читать": the selected transcript revision, read-only; "Править" opens the existing editor. The author's note stays editable here. */
-function ReadDialog({
+export function ReadDialog({
   take,
   isFinal,
   onClose,
@@ -279,7 +279,7 @@ function ReadDialog({
   );
 }
 
-function VideoDialog({ take, onClose }: { take: TakeDto; onClose: () => void }) {
+export function VideoDialog({ take, onClose }: { take: TakeDto; onClose: () => void }) {
   return (
     <VocalModal open title={`Дубль ${take.number} · видео`} onClose={onClose} placement="sheet">
       <div className="space-y-4">

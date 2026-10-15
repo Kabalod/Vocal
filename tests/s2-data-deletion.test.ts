@@ -415,8 +415,8 @@ test("S2 UI: delete actions are confirmed, account deletion needs the typed phra
   assert.match(actions, /canConfirm=\{phrase === ACCOUNT_DELETE_PHRASE\}/);
   assert.match(actions, /data-vocal-initial="safe"/, "focus starts on the safe action");
   assert.equal(actions.includes("SERVICE_ROLE"), false, "the service-role key never reaches client code");
-  assert.match(readFileSync(path.join(root, "src/components/ReelStudio.tsx"), "utf8"), /DeleteThoughtAction/);
-  assert.match(readFileSync(path.join(root, "src/components/ReelTakes.tsx"), "utf8"), /DeleteTakeAction/);
+  assert.match(readFileSync(path.join(root, "src/components/ReelStudioFrame.tsx"), "utf8"), /DeleteThoughtConfirm/);
+  for (const name of ["TakesPathDesktop", "TakesPathMobile"]) assert.match(readFileSync(path.join(root, `src/components/${name}.tsx`), "utf8"), /DeleteTakeConfirm/);
   assert.match(readFileSync(path.join(root, "src/app/profile/page.tsx"), "utf8"), /DeleteAccountAction/);
   const service = readFileSync(path.join(root, "src/lib/supabase/service.ts"), "utf8");
   assert.equal(service.includes('"use client"'), false);

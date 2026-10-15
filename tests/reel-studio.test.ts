@@ -38,7 +38,7 @@ test("thought studio shell loads by id with back, tabs and honest missing/error"
   assert.match(studio, /Мысль не найдена/);
   assert.match(studio, /ShellError/);
   assert.match(studio, /studioThoughtHref/);
-  assert.match(studio, /ThoughtStudioHeader/);
+  assert.match(frame, /IosNavBar/);
   assert.match(frame, /STUDIO_TABS/);
   assert.match(frame, /aria-label="Разделы мысли"/);
   assert.match(page, /Suspense/);

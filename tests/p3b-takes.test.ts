@@ -167,7 +167,7 @@ test("labels: caption, aria label, count and clock", () => {
 test("wiring: the path replaces the list on the desktop only; recording keeps its logic and starts only on the button", () => {
   const root = process.cwd();
   const takes = readFileSync(path.join(root, "src/components/ReelTakes.tsx"), "utf8");
-  assert.match(takes, /desktop \? pathMedia : media/);
+  assert.match(takes, /desktop \? TakesPathDesktop : TakesPathMobile/);
   const studio = readFileSync(path.join(root, "src/components/ReelStudio.tsx"), "utf8");
   assert.match(studio, /desktop=\{desktop\}/);
   const rec = readFileSync(path.join(root, "src/components/RecordingView.tsx"), "utf8");
