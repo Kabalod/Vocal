@@ -43,9 +43,11 @@ import type { ScriptNextQuestionDto } from "@/types/script";
 function MessageBubble({
   message,
   desktop = false,
+  showHint = false,
 }: {
   message: DialogueMessageDto;
   desktop?: boolean;
+  showHint?: boolean;
 }) {
   const mine = message.role === "user";
   if (desktop) {
@@ -66,7 +68,7 @@ function MessageBubble({
             <p className="mt-3 text-sm text-muted">Сохранено в переписке. Сбор сценария — во вкладке «Сценарий».</p>
           ) : null}
         </div>
-        {!mine && message.kind === "question" ? (
+        {showHint && !mine && message.kind === "question" ? (
           <p className="mt-1.5 flex items-start gap-1.5 px-1.5 text-xs text-muted" data-dialogue-hint>
             <Lightbulb className="mt-px h-3.5 w-3.5 shrink-0" strokeWidth={1.5} aria-hidden="true" />
             {QUESTION_HINT}
@@ -400,6 +402,7 @@ export function ThoughtDialogue({
   }
 
   const messages = page?.messages ?? [];
+  const lastQuestionIndex = messages.reduce((found, message, index) => (message.role !== "user" && message.kind === "question" ? index : found), -1);
   const empty = Boolean(page) && messages.length === 0 && !page?.analyzing;
 
   if (desktop) {
@@ -473,7 +476,7 @@ export function ThoughtDialogue({
                     {formatThoughtStamp(message.createdAt)}
                   </time>
                 ) : null}
-                <MessageBubble message={message} desktop />
+                <MessageBubble message={message} desktop showHint={index === lastQuestionIndex} />
               </div>
             ))}
             {page?.analyzing ? <ProcessingState label="Разбираю вашу мысль…" /> : null}

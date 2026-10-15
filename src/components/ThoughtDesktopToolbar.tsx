@@ -6,7 +6,7 @@ import { useState } from "react";
 import { DeleteThoughtConfirm } from "@/components/DeleteActions";
 import { STUDIO_TABS, type StudioMobileTab } from "@/components/reel-studio";
 import { formatThoughtStamp } from "@/components/thought-desktop";
-import { ActionSheet } from "@/components/vocal-ui/ActionSheet";
+import { PopoverMenu } from "@/components/vocal-ui/PopoverMenu";
 import { IconButton } from "@/components/vocal-ui/IconButton";
 import { IconStatusDone, IconStatusOpen, IconStatusProgress } from "@/components/vocal-ui/icons";
 import { VOCAL_USER_STATUSES, type VocalUserStatusId } from "@/components/vocal-ui/kit";
@@ -53,7 +53,6 @@ export function ThoughtDesktopToolbar({
   thoughtCompleted?: boolean;
   onRecord: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const items = STUDIO_TABS.map((item) => ({
     id: item.id,
@@ -80,24 +79,23 @@ export function ThoughtDesktopToolbar({
           )}
         </div>
         <div className="justify-self-end">
-          <IconButton label="Меню мысли" onClick={() => setMenuOpen(true)} aria-haspopup="dialog">
-            <MoreHorizontal className="h-5 w-5" strokeWidth={1.5} aria-hidden="true" />
-          </IconButton>
+          <PopoverMenu
+            items={[
+              { id: "record", label: "Записать дубль", disabled: thoughtCompleted },
+              { id: "delete", label: "Удалить мысль", destructive: true },
+            ]}
+            onSelect={(id) => {
+              if (id === "record") onRecord();
+              if (id === "delete") setConfirmOpen(true);
+            }}
+            trigger={({ ref, ...props }) => (
+              <IconButton ref={ref} label="Меню мысли" {...props}>
+                <MoreHorizontal className="h-5 w-5" strokeWidth={1.5} aria-hidden="true" />
+              </IconButton>
+            )}
+          />
         </div>
       </div>
-      <ActionSheet
-        open={menuOpen}
-        title="Мысль"
-        actions={[
-          { id: "record", label: "Записать дубль", disabled: thoughtCompleted },
-          { id: "delete", label: "Удалить мысль", destructive: true },
-        ]}
-        onSelect={(id) => {
-          if (id === "record") onRecord();
-          if (id === "delete") setConfirmOpen(true);
-        }}
-        onClose={() => setMenuOpen(false)}
-      />
       <DeleteThoughtConfirm reelId={reelId} title={title} open={confirmOpen} onClose={() => setConfirmOpen(false)} />
     </>
   );

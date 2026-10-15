@@ -1,6 +1,8 @@
 "use client";
 
+import { Copy, Download } from "lucide-react";
 import { useState } from "react";
+import { IconButton } from "@/components/vocal-ui/IconButton";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { copyCanonicalExport, downloadCanonicalExport } from "@/lib/canonical-export";
 
@@ -75,6 +77,34 @@ export function CanonicalExportActions({
           </label>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Desktop reader header: copy and .txt as icon buttons with hints; the result is a short note next to them. */
+export function CanonicalExportIconButtons({
+  text,
+  filename,
+  disabled = false,
+}: {
+  text: string;
+  filename: string;
+  disabled?: boolean;
+}) {
+  const [status, setStatus] = useState<"idle" | "copied" | "downloaded" | "manual">("idle");
+  const ready = Boolean(text.trim()) && !disabled;
+  return (
+    <div className="flex items-center gap-1">
+      <span role="status" className="mr-1 text-xs text-muted">
+        {status === "copied" ? "Скопировано" : status === "downloaded" ? "Файл сохранён" : ""}
+        {status === "manual" ? <span className="text-bad">Не удалось — скопируйте вручную</span> : null}
+      </span>
+      <IconButton label="Копировать" disabled={!ready} onClick={() => void copyCanonicalExport(text).then(setStatus)}>
+        <Copy className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+      </IconButton>
+      <IconButton label="Скачать .txt" disabled={!ready} onClick={() => setStatus(downloadCanonicalExport(filename, text))}>
+        <Download className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+      </IconButton>
     </div>
   );
 }

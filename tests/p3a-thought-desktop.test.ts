@@ -175,3 +175,26 @@ test("labels and time stamps", () => {
   assert.equal(readingCaption({ versionNumber: null, baseLabel: null }), "Основа · ваш дубль");
   assert.deepEqual(splitParagraphs("а\n\nб\n\n\nв"), ["а", "б", "в"]);
 });
+
+test("popover menu keyboard: arrows wrap and skip disabled rows", async () => {
+  const { nextMenuIndex } = await import("../src/components/vocal-ui/popover-menu");
+  assert.equal(nextMenuIndex(0, "ArrowDown", [false, false]), 1);
+  assert.equal(nextMenuIndex(1, "ArrowDown", [false, false]), 0);
+  assert.equal(nextMenuIndex(0, "ArrowUp", [false, false]), 1);
+  assert.equal(nextMenuIndex(0, "ArrowDown", [false, true, false]), 2);
+  assert.equal(nextMenuIndex(0, "End", [false, false, true]), 1);
+  assert.equal(nextMenuIndex(-1, "ArrowDown", [true, true]), null);
+  assert.equal(nextMenuIndex(0, "a", [false]), null);
+});
+
+test("toolbar menu is a popover on the desktop, not the iOS sheet", () => {
+  const src = readFileSync(path.join(process.cwd(), "src/components/ThoughtDesktopToolbar.tsx"), "utf8");
+  assert.match(src, /PopoverMenu/);
+  assert.doesNotMatch(src, /ActionSheet/);
+});
+
+test("the question hint is rendered only for the flagged (last) question", () => {
+  const src = readFileSync(path.join(process.cwd(), "src/components/ThoughtDialogue.tsx"), "utf8");
+  assert.match(src, /showHint && !mine && message\.kind === "question"/);
+  assert.match(src, /showHint=\{index === lastQuestionIndex\}/);
+});

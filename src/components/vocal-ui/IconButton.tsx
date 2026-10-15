@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 export type IconButtonVariant = "neutral" | "microphone";
 
@@ -15,7 +15,7 @@ export function IconButton({
   className = "",
   type = "button",
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
+}: ComponentProps<"button"> & {
   label: string;
   variant?: IconButtonVariant;
   children: ReactNode;

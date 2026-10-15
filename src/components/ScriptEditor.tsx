@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { CanonicalExportActions } from "@/components/CanonicalExportActions";
+import { CanonicalExportActions, CanonicalExportIconButtons } from "@/components/CanonicalExportActions";
 import { ScriptDraftComposer } from "@/components/ScriptDraftComposer";
 import { ScriptVersionTimeline } from "@/components/ScriptVersionTimeline";
 import { splitParagraphs } from "@/components/thought-desktop";
@@ -434,7 +434,7 @@ export function ScriptEditor({
         <article
           aria-label="Ридер сценария"
           aria-busy={generating}
-          className="flex min-h-[calc(100dvh-210px)] min-w-0 flex-col rounded-[14px] border border-line bg-white/[0.02] px-8 pb-7 pt-6"
+          className="flex min-w-0 flex-col rounded-[14px] border border-line bg-white/[0.02] px-8 pb-7 pt-6"
         >
           <header className="mb-5 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -447,10 +447,16 @@ export function ScriptEditor({
                     ? `${currentMeta.number ? `Версия ${currentMeta.number}` : "Версия"}${isCurrent ? " · текущая" : ""}${isFinal ? " · итоговая" : ""}`
                     : "Версий пока нет"}
               </p>
-              <h2 className="font-[family-name:var(--font-display)] text-2xl font-medium leading-tight">Сценарий</h2>
             </div>
             {snap.mode === "ready" ? (
-              <div className="flex shrink-0 flex-nowrap justify-end gap-2">
+              <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
+                {viewing && isHeadKind(viewing.kind) ? (
+                  <CanonicalExportIconButtons
+                    disabled={!viewing.body || generating}
+                    filename={sanitizeExportFilename("сценарий")}
+                    text={viewing.body ? buildCanonicalExportTxt({ title: versionTitle, scriptBody: viewing.body }) : ""}
+                  />
+                ) : null}
                 <ActionButton
                   variant="secondary"
                   disabled={generating || (!workspace?.draft && !currentMeta)}
@@ -463,7 +469,7 @@ export function ScriptEditor({
                   Помочь со сценарием
                 </ActionButton>
                 <ActionButton
-                  variant="primary"
+                  variant="secondary"
                   disabled={!viewingId || thoughtCompleted || !currentMeta || generating}
                   onClick={() => void setFinal().catch(failOpen)}
                 >
@@ -501,7 +507,7 @@ export function ScriptEditor({
           ) : viewing ? (
             <>
               <div
-                className="max-w-[64ch] flex-1 font-[family-name:var(--font-display)] text-xl font-normal leading-[1.65]"
+                className="max-w-[64ch] font-[family-name:var(--font-display)] text-xl font-normal leading-[1.65]"
                 data-script-reader-text
               >
                 {reading.map((paragraph, index) => (
@@ -509,17 +515,6 @@ export function ScriptEditor({
                     {paragraph}
                   </p>
                 ))}
-              </div>
-              <div className="mt-4">
-                <CanonicalExportActions
-                  disabled={!viewing.body || !isHeadKind(viewing.kind)}
-                  filename={sanitizeExportFilename("сценарий")}
-                  text={
-                    viewing.body && isHeadKind(viewing.kind)
-                      ? buildCanonicalExportTxt({ title: versionTitle, scriptBody: viewing.body })
-                      : ""
-                  }
-                />
               </div>
             </>
           ) : workspace ? (
