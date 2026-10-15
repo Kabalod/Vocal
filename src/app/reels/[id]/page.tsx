@@ -11,7 +11,7 @@ export default async function ReelPage({ params }: { params: Promise<{ id: strin
   const reel = await runWithOwner(user, () => getReel(id));
   if (!reel) notFound();
   return (
-    <Suspense fallback={<ShellLoading label="Загрузка мысли…" />}>
+    <Suspense fallback={<ShellLoading label="Загрузка мысли…" variant="thought" />}>
       <ReelStudio reelId={id} />
     </Suspense>
   );

@@ -40,7 +40,7 @@ test("P17 visual: recording teleprompter, dialogue split, polaroid path, thought
 
   assert.match(recording, /Начать запись/);
   assert.match(recording, /recording-script/);
-  assert.match(recording, /minmax\(15rem,20rem\)/);
+  assert.match(recording, /data-recording-mobile/);
   assert.match(recording, /Скрыть сценарий/);
   assert.doesNotMatch(recording, /ThoughtDialogue/);
   assert.doesNotMatch(recording, /Composer/);

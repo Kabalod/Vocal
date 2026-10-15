@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Mic } from "lucide-react";
+import { ArrowLeft, Mic, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
@@ -53,6 +53,8 @@ export function RecordingView({
   const [level, setLevel] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [showScript, setShowScript] = useState(true);
+  /** Which action "Повторить" repeats after an error: asking for the microphone or saving the take. */
+  const [retry, setRetry] = useState<"mic" | "save" | null>(null);
   const sessionRef = useRef<VoiceCaptureSession>(createVoiceCaptureSession());
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -151,6 +153,7 @@ export function RecordingView({
 
   async function startRecording() {
     setError(null);
+    setRetry(null);
     const session = createVoiceCaptureSession();
     sessionRef.current = session;
     setPhase("permission");
@@ -190,6 +193,7 @@ export function RecordingView({
       releaseHardware();
       setPhase("idle");
       setError(microphonePermissionMessage(err, { secureContext: window.isSecureContext }));
+      setRetry("mic");
     }
   }
 
@@ -220,12 +224,14 @@ export function RecordingView({
     if (!blob || phase === "saving") return;
     setPhase("saving");
     setError(null);
+    setRetry(null);
     const ext = blob.type.includes("mp4") ? "m4a" : "webm";
     const file = new File([blob], `take.${ext}`, { type: blob.type || "audio/webm" });
     const local = clientThoughtMediaError(file, "audio", MAX_UPLOAD_MB);
     if (local) {
       setPhase("preview");
       setError(local);
+      setRetry("save");
       return;
     }
     const key = crypto.randomUUID();
@@ -261,8 +267,15 @@ export function RecordingView({
       if (applyLateTakeUploadResult({ mounted: mountedRef.current, aborted }) === "ignore") return;
       setPhase("preview");
       setError(err instanceof Error ? err.message : "Не удалось сохранить дубль.");
+      setRetry("save");
     }
   }
+
+  const retryAction = retry ? (
+    <ActionButton variant="secondary" onClick={() => void (retry === "mic" ? startRecording() : saveTake())}>
+      Повторить
+    </ActionButton>
+  ) : undefined;
 
   const versionLabel =
     scriptNumber != null ? `версия ${scriptNumber}` : scriptVersionId ? "готовая версия" : "без сценария";
@@ -350,7 +363,7 @@ export function RecordingView({
           </div>
         ) : null}
 
-        {error ? <InlineError message={error} /> : null}
+        {error ? <InlineError message={error} action={retryAction} /> : null}
       </div>
   );
 
@@ -454,31 +467,128 @@ export function RecordingView({
     );
   }
 
+  const waveBars = Array.from({ length: 27 }, (_, index) => {
+    const shape = 0.35 + 0.65 * Math.abs(Math.sin(index * 0.9));
+    return Math.max(4, Math.round(4 + level * 36 * shape));
+  });
+  const working = phase === "recording";
+  const reviewing = phase === "preview" || phase === "saving";
+
   return (
-    <section className="flex min-h-[28rem] flex-col" aria-label="Запись дубля">
-      <header className="space-y-1 border-b border-line pb-3">
-        <p className="font-[family-name:var(--font-display)] text-xl">{thoughtTitle || "Мысль"}</p>
-        <p className="text-sm text-muted">{scriptVersionId ? `По сценарию · ${versionLabel}` : "Запись без готового сценария"}</p>
+    <section
+      className="fixed inset-0 z-[45] flex flex-col bg-bg"
+      aria-label="Запись дубля"
+      data-recording-mobile
+    >
+      <header className="flex min-h-11 shrink-0 items-center gap-2 border-b border-line px-2 pt-[env(safe-area-inset-top)]">
+        <button
+          type="button"
+          onClick={requestLeave}
+          className="inline-flex min-h-11 min-w-11 items-center gap-0.5 px-2 text-base text-accent-soft"
+        >
+          <span aria-hidden="true" className="text-2xl leading-none">
+            ‹
+          </span>
+          {phase === "recording" || reviewing ? "Отмена" : "К списку дублей"}
+        </button>
+        <div className="min-w-0 flex-1 text-center">
+          <p className="truncate text-[15px] font-semibold">{thoughtTitle || "Мысль"}</p>
+          <p className="truncate text-xs text-muted">{scriptVersionId ? `По сценарию · ${versionLabel}` : "Запись без готового сценария"}</p>
+        </div>
         {scriptVersionId ? (
-          <ActionButton variant="compact" onClick={() => setShowScript((value) => !value)}>
+          <button
+            type="button"
+            onClick={() => setShowScript((value) => !value)}
+            className="inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-sm text-muted"
+          >
             {showScript ? "Скрыть сценарий" : "Показать сценарий"}
-          </ActionButton>
-        ) : null}
+          </button>
+        ) : (
+          <span className="min-w-11" />
+        )}
       </header>
 
-      <div className={`min-h-0 flex-1 gap-4 overflow-hidden py-4 ${showScript ? "shell:grid shell:grid-cols-[minmax(0,1.7fr)_minmax(15rem,20rem)]" : ""}`}>
+      <div data-teleprompter className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
         {showScript ? (
-          <div className="min-h-0 overflow-y-auto pr-1">
-            {scriptBody ? (
-              <p className="recording-script whitespace-pre-wrap">{scriptBody}</p>
-            ) : (
-              <p className="text-sm text-muted">
-                {scriptVersionId ? "Загружаем сценарий…" : "Можно говорить без готового сценария. Текст дубля появится после расшифровки."}
-              </p>
-            )}
+          scriptBody ? (
+            <p className="recording-script whitespace-pre-wrap font-[family-name:var(--font-literata)] text-[22px] leading-[1.5]">{scriptBody}</p>
+          ) : (
+            <p className="text-sm text-muted">
+              {scriptVersionId ? "Загружаем сценарий…" : "Можно говорить без готового сценария. Текст дубля появится после расшифровки."}
+            </p>
+          )
+        ) : null}
+      </div>
+
+      <div
+        className="shrink-0 space-y-4 border-t border-line bg-bg px-5 pt-4"
+        style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
+      >
+        {error ? <InlineError message={error} action={retryAction} /> : null}
+
+        {phase === "idle" || phase === "permission" ? (
+          <div className="flex flex-col items-center gap-2">
+            <button
+              type="button"
+              data-record-start
+              aria-label="Начать запись"
+              disabled={phase === "permission"}
+              aria-busy={phase === "permission" || undefined}
+              onClick={() => void startRecording()}
+              className="grid h-20 w-20 place-items-center rounded-full bg-accent text-on-accent shadow-[var(--vocal-shadow-cta)] active:scale-95 disabled:opacity-60"
+            >
+              <Mic className="h-8 w-8" strokeWidth={1.5} aria-hidden="true" />
+            </button>
+            <p className="text-sm text-muted" aria-live="polite">
+              {phase === "permission" ? "Запрашиваем микрофон…" : "Начать запись"}
+            </p>
           </div>
         ) : null}
-        <div className={showScript ? "mt-4 shrink-0 shell:mt-0" : ""}>{stage}</div>
+
+        {working ? (
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-3xl font-medium tabular-nums" aria-live="off" data-record-timer>
+              {formatRecordingDuration(seconds)}
+            </p>
+            <div className="flex h-10 items-center justify-center gap-[3px]" aria-hidden="true" data-record-wave>
+              {waveBars.map((height, index) => (
+                <span key={index} className="w-[3px] rounded-full bg-accent transition-[height] duration-100" style={{ height }} />
+              ))}
+            </div>
+            <button
+              type="button"
+              data-record-stop
+              aria-label="Завершить запись"
+              onClick={finishRecording}
+              className="grid h-20 w-20 place-items-center rounded-full bg-bad text-white active:scale-95"
+            >
+              <Square className="h-7 w-7 fill-current" strokeWidth={0} aria-hidden="true" />
+            </button>
+            <p className="text-sm text-bad">Стоп</p>
+          </div>
+        ) : null}
+
+        {reviewing ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted">Запись {formatRecordingDuration(seconds)}</p>
+            {previewUrlRef.current ? <audio controls src={previewUrlRef.current} className="w-full" /> : null}
+            <ActionButton variant="primary" fullWidth loading={phase === "saving"} loadingLabel="Сохраняем…" onClick={() => void saveTake()}>
+              Сохранить дубль
+            </ActionButton>
+            <ActionButton variant="secondary" fullWidth onClick={requestLeave}>
+              Отменить
+            </ActionButton>
+          </div>
+        ) : null}
+
+        {phase === "saved" ? (
+          <div className="space-y-3">
+            <p className="text-sm text-text">Дубль сохранён. Следим за расшифровкой в списке дублей.</p>
+            <ActionButton variant="primary" fullWidth onClick={onClose}>
+              К списку дублей
+            </ActionButton>
+          </div>
+        ) : null}
       </div>
 
       {confirmModal}

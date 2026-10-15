@@ -52,6 +52,7 @@ import {
 import { resetThoughtListQuery } from "@/lib/thought-preview";
 import { hasArchiveDateFilter } from "@/lib/thought-archive-state";
 import { type ReelListItemDto, type ReelListResult } from "@/types/reel";
+import { InlineError } from "@/components/vocal-ui/InlineError";
 
 function NewThoughtButton({
   className = "",
@@ -381,7 +382,7 @@ export function ReelList() {
 
               {moreError ? (
                 <div className="space-y-2" role="alert">
-                  <p className="text-sm text-bad">{moreError}</p>
+                  <InlineError message={moreError} />
                   <ActionButton variant="secondary" onClick={() => void loadMore()}>
                     Повторить загрузку
                   </ActionButton>

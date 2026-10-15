@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Portrait } from "@/components/Portrait";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
@@ -8,6 +9,7 @@ import { Composer } from "@/components/vocal-ui/Composer";
 import { EmptyState } from "@/components/vocal-ui/EmptyState";
 import { InlineError } from "@/components/vocal-ui/InlineError";
 import { ProcessingState } from "@/components/vocal-ui/ProcessingState";
+import { VocalModal } from "@/components/vocal-ui/VocalModal";
 import {
   adoptGrantedMicrophone,
   cancelVoiceCaptureSession,
@@ -52,7 +54,21 @@ function MessageBubble({ message }: { message: DialogueMessageDto }) {
   );
 }
 
-export function ProfileConversation() {
+/**
+ * `presentation="page"`: the profile page. The portrait is the page; adding to it (the dialogue) opens in a dialog on the desktop and
+ * a bottom sheet on touch (VocalModal). Closing it keeps the conversation, exactly like the "К мыслям" link did.
+ */
+function ChatFrame({ modal, title, onClose, children }: { modal: boolean; title: string; onClose: () => void; children: React.ReactNode }) {
+  if (!modal) return <>{children}</>;
+  return (
+    <VocalModal open title={title} placement="sheet" onClose={onClose}>
+      {children}
+    </VocalModal>
+  );
+}
+
+export function ProfileConversation({ presentation = "inline" }: { presentation?: "inline" | "page" } = {}) {
+  const router = useRouter();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
@@ -312,6 +328,7 @@ export function ProfileConversation() {
   const messages = workspace?.dialogue.messages ?? [];
   const amending = workspace?.mode === "amend" && phase === "conversation";
   const showChat = phase === "conversation";
+  const pageDialog = presentation === "page" && showChat;
 
   return (
     <div className="min-w-0 space-y-6 overflow-x-hidden">
@@ -342,20 +359,30 @@ export function ProfileConversation() {
             <Portrait
               portrait={portrait}
               heading="Портрет автора"
+              reading={presentation === "page"}
               badge={workspace?.pendingChange ? "Уточняем · портрет пока прежний" : undefined}
             />
           ) : (
             <EmptyState title="Портрет ещё не собран" description="Действующего портрета нет." />
           )}
-          <ActionButton variant="primary" onClick={() => void runAction("supplement")}>
+          <ActionButton variant="primary" data-profile-supplement onClick={() => void runAction("supplement")}>
             {workspace?.pendingChange ? "Продолжить изменения" : "Дополнить о себе"}
           </ActionButton>
         </div>
       ) : null}
 
+      {pageDialog && portrait ? (
+        <Portrait portrait={portrait} heading="Портрет автора" reading badge={amending ? "Уточняем · портрет пока прежний" : undefined} />
+      ) : null}
+
       {showChat ? (
+        <ChatFrame
+          modal={pageDialog}
+          title={amending ? "Дополнить о себе" : "Анкета автора"}
+          onClose={() => (amending ? void runAction("skip") : router.push("/reels"))}
+        >
         <section className="flex min-h-[28rem] min-w-0 flex-col" aria-label="Диалог анкеты">
-          {amending && portrait ? (
+          {amending && portrait && !pageDialog ? (
             <div className="mb-4 space-y-2">
               <Portrait portrait={portrait} heading="Действующий портрет" badge="Уточняем · портрет пока прежний" />
             </div>
@@ -453,6 +480,7 @@ export function ProfileConversation() {
             )}
           </div>
         </section>
+        </ChatFrame>
       ) : null}
 
       {error ? (

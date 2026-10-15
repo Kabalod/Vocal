@@ -3,12 +3,13 @@
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
-export function LogoutButton() {
+export function LogoutButton({ className }: { className?: string } = {}) {
   const router = useRouter();
   return (
     <button
       type="button"
-      className="mt-8 text-sm text-muted underline-offset-2 hover:text-text hover:underline"
+      data-account-logout
+      className={className ?? "mt-8 text-sm text-muted underline-offset-2 hover:text-text hover:underline"}
       onClick={async () => {
         const supabase = createBrowserSupabaseClient();
         await supabase?.auth.signOut();

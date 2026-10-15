@@ -214,7 +214,7 @@ function VocalAppShellFrame({ children }: { children: ReactNode }) {
           archiveDesktop ? "archive-workspace-desk shell:h-screen shell:overflow-y-auto" : ""
         } ${thoughtDesktop ? "shell:h-screen shell:overflow-y-auto" : ""}`}
       >
-        <header className={`flex min-h-11 items-center gap-3 border-b border-line px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] shell:px-6 ${thoughtDesktop || archiveDesktop ? "hidden" : ""}`}>
+        <header className={`flex min-h-11 items-center gap-3 border-b border-line px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] shell:px-6 ${thoughtDesktop || archiveDesktop || pathname === "/profile" ? "hidden" : ""}`}>
           <button
             ref={menuButtonRef}
             type="button"

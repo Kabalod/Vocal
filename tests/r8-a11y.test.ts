@@ -84,6 +84,6 @@ test("sheet/dialog tab trap wraps; layout forbids page-level horizontal overflow
   assert.match(css, /min-width:\s*320px/);
   const layout = src("src/app/layout.tsx");
   assert.match(layout, /overflow-x-hidden/);
-  const profile = src("src/app/profile/page.tsx");
+  const profile = src("src/components/ProfileScreen.tsx");
   assert.match(profile, /break-words/);
 });

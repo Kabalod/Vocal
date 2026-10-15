@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { QUESTION_STATUSES, QUESTION_STATUS_LABELS, type QuestionDto, type QuestionStatus } from "@/types/review";
+import { InlineError } from "@/components/vocal-ui/InlineError";
 
 function lastAnswerText(question: QuestionDto): string {
   return question.answers.at(-1)?.text ?? "";
@@ -69,7 +70,7 @@ export function QuestionList({ reelId }: { reelId: string; takeId?: string | nul
         Новая пачка вопросов здесь не создаётся. Задайте вопрос в основном Диалоге. Ответ на старый вопрос модель не
         вызывает.
       </p>
-      {error ? <p className="text-sm text-bad">{error}</p> : null}
+      {error ? <InlineError message={error} /> : null}
       {questions.length === 0 ? <p className="text-sm text-muted">Вопросов пока нет.</p> : null}
       <ul className="space-y-4">
         {questions.map((question) => {

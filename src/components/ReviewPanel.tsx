@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ReviewDto } from "@/types/review";
+import { InlineError } from "@/components/vocal-ui/InlineError";
 
 export function ReviewPanel({ takeId }: { takeId: string }) {
   const [reviews, setReviews] = useState<ReviewDto[]>([]);
@@ -28,7 +29,7 @@ export function ReviewPanel({ takeId }: { takeId: string }) {
       <p className="text-sm text-muted">
         Новые разборы здесь не создаются. Задайте вопрос в основном Диалоге. Старые записи не удаляются.
       </p>
-      {error ? <p className="text-sm text-bad">{error}</p> : null}
+      {error ? <InlineError message={error} /> : null}
       {!latest ? <p className="text-sm text-muted">Разборов ещё нет.</p> : null}
       {latest?.status === "error" ? (
         <p className="text-sm text-bad">{latest.errorMessage ?? "Разбор не сохранился как успешный."}</p>

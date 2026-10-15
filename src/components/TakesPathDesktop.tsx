@@ -26,6 +26,7 @@ import { PopoverMenu } from "@/components/vocal-ui/PopoverMenu";
 import { VocalModal } from "@/components/vocal-ui/VocalModal";
 import type { ReelDto, TakeDto } from "@/types/reel";
 import type { TranscriptBundleDto } from "@/types/transcript";
+import { InlineError } from "@/components/vocal-ui/InlineError";
 
 type PlayerState = { id: string; playing: boolean; pos: number; total: number };
 
@@ -195,7 +196,7 @@ export function ReadDialog({
       <div className="space-y-4">
         <div className="tp-read" tabIndex={0} aria-label="Расшифровка дубля">
           <span className="tp-read-caption">Расшифровка{editing ? "" : " · только чтение"}</span>
-          {error ? <p className="text-bad">{error}</p> : null}
+          {error ? <InlineError message={error} /> : null}
           {text === null && !error ? <p className="text-muted">Загрузка…</p> : null}
           {text !== null && paragraphs.length === 0 ? <p className="text-muted">Расшифровки пока нет.</p> : null}
           {paragraphs.map((paragraph, index) => (

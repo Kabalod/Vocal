@@ -120,6 +120,7 @@ const reelsTests = [
   "tests/p3b-takes.test.ts",
   "tests/p4-mobile.test.ts",
   "tests/p5-library.test.ts",
+  "tests/p6-states.test.ts",
   "tests/reel-filters.test.ts",
   "tests/thoughts-list.test.ts",
   "tests/p01-1-archive-contracts.test.ts",

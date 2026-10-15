@@ -87,7 +87,7 @@ test("field panel and primary action reuse vocal tokens", () => {
   const panel = readFileSync(join(root, "src/components/vocal-ui/Panel.tsx"), "utf8");
   const action = readFileSync(join(root, "src/components/vocal-ui/ActionButton.tsx"), "utf8");
   const catalog = readFileSync(join(root, "src/components/vocal-ui/UiKitCatalog.tsx"), "utf8");
-  const profile = readFileSync(join(root, "src/app/profile/page.tsx"), "utf8");
+  const profile = readFileSync(join(root, "src/components/ProfileScreen.tsx"), "utf8");
   assert.match(field, /vocal-input/);
   assert.match(panel, /vocal-card/);
   assert.match(action, /min-h-12/);

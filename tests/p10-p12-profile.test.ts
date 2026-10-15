@@ -17,7 +17,7 @@ function src(rel: string) {
 }
 
 test("P10–P12 UI keeps labels, 44px targets, and no profile guard on thoughts", () => {
-  const page = src("src/app/profile/page.tsx");
+  const page = src("src/components/ProfileScreen.tsx");
   const ui = src("src/components/ProfileConversation.tsx");
   const thought = src("src/components/NewThoughtSheet.tsx");
   assert.match(page, /overflow-x-hidden/);

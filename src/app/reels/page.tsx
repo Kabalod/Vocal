@@ -4,7 +4,7 @@ import { ShellLoading } from "@/components/shell-status";
 
 export default function ReelsPage() {
   return (
-    <Suspense fallback={<ShellLoading label="Загрузка мыслей…" />}>
+    <Suspense fallback={<ShellLoading label="Загрузка мыслей…" variant="list" />}>
       <ReelList />
     </Suspense>
   );

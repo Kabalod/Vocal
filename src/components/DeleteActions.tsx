@@ -332,3 +332,58 @@ export function DeleteAccountAction() {
     </section>
   );
 }
+
+/**
+ * The account row of the profile card: a red "Удалить аккаунт" opens an iOS alert that says what goes away. The server contract is
+ * the same as DeleteAccountAction (DELETE /api/account with the confirm phrase); the alert is the confirmation.
+ */
+export function DeleteAccountRow() {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirm() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const result = await sendDelete("/api/account", { confirm: ACCOUNT_DELETE_PHRASE });
+    if (!result.ok) {
+      setOpen(false);
+      setError(result.message);
+      setBusy(false);
+      return;
+    }
+    const supabase = createBrowserSupabaseClient();
+    await supabase?.auth.signOut().catch(() => undefined);
+    router.replace("/");
+    router.refresh();
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        data-account-delete
+        className="flex min-h-11 w-full items-center px-4 text-left text-sm text-bad hover:bg-white/5"
+        onClick={() => setOpen(true)}
+      >
+        Удалить аккаунт
+      </button>
+      {error ? (
+        <div className="px-4 pb-3">
+          <InlineError message={error} />
+        </div>
+      ) : null}
+      <ConfirmAlert
+        open={open}
+        title="Удалить аккаунт?"
+        message="Все ваши мысли, дубли и сценарии будут удалены без возможности восстановления."
+        confirmLabel={busy ? "Удаляем…" : "Удалить"}
+        destructive
+        onCancel={() => (busy ? undefined : setOpen(false))}
+        onConfirm={() => void confirm()}
+      />
+    </>
+  );
+}

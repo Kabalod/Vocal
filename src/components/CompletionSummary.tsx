@@ -6,6 +6,7 @@ import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { sanitizeExportFilename } from "@/lib/canonical-export";
 import { thoughtCompletionGate } from "@/lib/thought-completion";
 import { TAKE_INPUT_TYPE_LABELS, type ReelDto } from "@/types/reel";
+import { InlineError } from "@/components/vocal-ui/InlineError";
 
 export function CompletionSummary({
   reelId,
@@ -104,7 +105,7 @@ export function CompletionSummary({
         <p className="text-sm text-muted">Итоговый текст появится после выбора дубля с расшифровкой.</p>
       )}
       <p className="text-sm text-muted">Завершить мысль — закончить работу в Vocal, не публикация ролика.</p>
-      {error ? <p className="text-sm text-bad">{error}</p> : null}
+      {error ? <InlineError message={error} /> : null}
       {exportText ? <CanonicalExportActions filename={exportName} text={exportText} /> : null}
       {gate.isCompleted ? (
         <div className="space-y-2">

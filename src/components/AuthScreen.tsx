@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ActionButton } from "@/components/vocal-ui/ActionButton";
+import { Field } from "@/components/vocal-ui/Field";
+import { InlineError } from "@/components/vocal-ui/InlineError";
+import { Panel } from "@/components/vocal-ui/Panel";
 import { safeReturnTo } from "@/lib/auth/return-to";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
@@ -73,70 +77,75 @@ export function AuthScreen({ mode, next }: { mode: Mode; next?: string }) {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-10">
-      <Link href="/" className="font-[family-name:var(--font-display)] text-2xl tracking-tight">
-        Vocal
-      </Link>
-      <h1 className="mt-8 font-[family-name:var(--font-display)] text-3xl">{COPY[mode].title}</h1>
-      <form onSubmit={onSubmit} className="mt-6 space-y-4">
-        {mode !== "update-password" ? (
-          <label className="block space-y-1 text-sm">
-            <span className="text-muted">Почта</span>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="min-h-11 w-full rounded-[var(--vocal-radius-control)] border border-input-border bg-field px-3 text-text"
-            />
-          </label>
-        ) : null}
-        {mode !== "forgot" ? (
-          <label className="block space-y-1 text-sm">
-            <span className="text-muted">Пароль</span>
-            <input
-              type="password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="min-h-11 w-full rounded-[var(--vocal-radius-control)] border border-input-border bg-field px-3 text-text"
-            />
-          </label>
-        ) : null}
-        {error ? <p className="text-sm text-bad">{error}</p> : null}
-        {notice ? <p className="text-sm text-muted">{notice}</p> : null}
-        <button
-          type="submit"
-          disabled={pending}
-          className="min-h-11 w-full rounded-full bg-accent text-sm text-on-accent disabled:opacity-50"
-        >
-          {COPY[mode].submit}
-        </button>
-      </form>
-      <nav className="mt-6 space-y-2 text-sm text-muted">
-        {mode !== "login" ? (
-          <p>
-            <Link className="text-accent-soft" href={next ? `/login?next=${encodeURIComponent(afterAuth)}` : "/login"}>
-              Вход
-            </Link>
-          </p>
-        ) : null}
-        {mode !== "signup" ? (
-          <p>
-            <Link className="text-accent-soft" href={next ? `/signup?next=${encodeURIComponent(afterAuth)}` : "/signup"}>
-              Регистрация
-            </Link>
-          </p>
-        ) : null}
-        {mode !== "forgot" ? (
-          <p>
-            <Link className="text-accent-soft" href="/forgot-password">
-              Забыли пароль
-            </Link>
-          </p>
-        ) : null}
-      </nav>
+    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] shell:py-10">
+      <Panel
+        data-auth-card
+        className="space-y-6 max-shell:border-0 max-shell:bg-transparent max-shell:p-0 max-shell:shadow-none shell:p-8"
+      >
+        <Link href="/" className="inline-block font-[family-name:var(--font-display)] text-2xl tracking-tight">
+          Vocal
+        </Link>
+        <h1 className="font-[family-name:var(--font-display)] text-3xl">{COPY[mode].title}</h1>
+        <form onSubmit={onSubmit} className="space-y-4">
+          {mode !== "update-password" ? (
+            <label className="block space-y-1 text-sm">
+              <span className="text-muted">Почта</span>
+              <Field
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
+          ) : null}
+          {mode !== "forgot" ? (
+            <label className="block space-y-1 text-sm">
+              <span className="text-muted">Пароль</span>
+              <Field
+                type="password"
+                required
+                minLength={8}
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </label>
+          ) : null}
+          {error ? <InlineError message={error} /> : null}
+          {notice ? (
+            <p className="text-sm text-muted" role="status">
+              {notice}
+            </p>
+          ) : null}
+          <ActionButton type="submit" variant="primary" fullWidth loading={pending} disabled={pending}>
+            {COPY[mode].submit}
+          </ActionButton>
+        </form>
+        <nav className="space-y-1 text-sm text-muted" aria-label="Другие действия">
+          {mode !== "login" ? (
+            <p>
+              <Link className="inline-flex min-h-11 items-center text-accent-soft" href={next ? `/login?next=${encodeURIComponent(afterAuth)}` : "/login"}>
+                Вход
+              </Link>
+            </p>
+          ) : null}
+          {mode !== "signup" ? (
+            <p>
+              <Link className="inline-flex min-h-11 items-center text-accent-soft" href={next ? `/signup?next=${encodeURIComponent(afterAuth)}` : "/signup"}>
+                Регистрация
+              </Link>
+            </p>
+          ) : null}
+          {mode !== "forgot" ? (
+            <p>
+              <Link className="inline-flex min-h-11 items-center text-accent-soft" href="/forgot-password">
+                Забыли пароль
+              </Link>
+            </p>
+          ) : null}
+        </nav>
+      </Panel>
     </div>
   );
 }

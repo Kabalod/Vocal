@@ -8,6 +8,7 @@ import {
   settleStudioTakeUpload,
 } from "@/lib/recording-session";
 import type { TakeInputType } from "@/types/reel";
+import { InlineError } from "@/components/vocal-ui/InlineError";
 
 export function TakeUploadDropzone({
   reelId,
@@ -142,7 +143,7 @@ export function TakeUploadDropzone({
           <p className="text-xs text-muted">{ABORT_TAKE_UPLOAD_LEAVE_TEXT}</p>
         </div>
       ) : null}
-      {error ? <p className="text-sm text-bad">{error}</p> : null}
+      {error ? <InlineError message={error} /> : null}
     </div>
   );
 }

@@ -119,8 +119,8 @@ test("wiring: the path replaces the list on the desktop only; recording keeps it
   const rec = readFileSync(path.join(root, "src/components/RecordingView.tsx"), "utf8");
   assert.match(rec, /data-recording-desktop/);
   assert.match(rec, /data-teleprompter/);
-  // startRecording is reachable only from the "Начать запись" button.
-  assert.equal(rec.match(/void startRecording\(\)/g)?.length, 1);
+  // startRecording is reachable only from the two "Начать запись" buttons (desktop column, mobile round button).
+  assert.equal(rec.match(/void startRecording\(\)/g)?.length, 2);
   assert.doesNotMatch(rec, /useEffect\([^)]*startRecording/);
   const path_ = readFileSync(path.join(root, "src/components/TakesPathDesktop.tsx"), "utf8");
   for (const name of ["Слушать", "Читать", "Видео", "Сделать итоговым", "Следующий дубль", "итоговый"]) assert.ok(path_.includes(name), name);

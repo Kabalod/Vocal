@@ -6,6 +6,7 @@ import { TakesPathMobile } from "@/components/TakesPathMobile";
 import { TakeUploadDropzone } from "@/components/TakeUploadDropzone";
 import { ShellError, ShellLoading } from "@/components/shell-status";
 import type { ReelDto } from "@/types/reel";
+import { InlineError } from "@/components/vocal-ui/InlineError";
 
 type ReelTakesSlots = {
   media: ReactNode;
@@ -150,7 +151,7 @@ export function ReelTakes({
 
   const pathMedia = (
     <div className="space-y-6" data-takes-desktop={desktop || undefined} data-takes-touch={desktop ? undefined : true}>
-      {error ? <p className="text-bad">{error}</p> : null}
+      {error ? <InlineError message={error} /> : null}
       {(() => {
         const Path = desktop ? TakesPathDesktop : TakesPathMobile;
         return (

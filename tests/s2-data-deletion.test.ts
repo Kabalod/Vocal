@@ -417,7 +417,7 @@ test("S2 UI: delete actions are confirmed, account deletion needs the typed phra
   assert.equal(actions.includes("SERVICE_ROLE"), false, "the service-role key never reaches client code");
   assert.match(readFileSync(path.join(root, "src/components/ReelStudioFrame.tsx"), "utf8"), /DeleteThoughtConfirm/);
   for (const name of ["TakesPathDesktop", "TakesPathMobile"]) assert.match(readFileSync(path.join(root, `src/components/${name}.tsx`), "utf8"), /DeleteTakeConfirm/);
-  assert.match(readFileSync(path.join(root, "src/app/profile/page.tsx"), "utf8"), /DeleteAccountAction/);
+  assert.match(readFileSync(path.join(root, "src/components/ProfileScreen.tsx"), "utf8"), /DeleteAccountRow/);
   const service = readFileSync(path.join(root, "src/lib/supabase/service.ts"), "utf8");
   assert.equal(service.includes('"use client"'), false);
   const clientFiles = ["DeleteActions", "LogoutButton", "NewThoughtSheet"].map((name) =>

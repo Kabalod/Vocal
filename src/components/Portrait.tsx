@@ -4,10 +4,13 @@ export function Portrait({
   portrait,
   heading,
   badge,
+  reading = false,
 }: {
   portrait: PortraitDto;
   heading?: string;
   badge?: string;
+  /** The profile page: Literata 18 / 1.65 (the prototype's reading size). */
+  reading?: boolean;
 }) {
   if (portrait.sections.length === 0) return null;
   return (
@@ -16,7 +19,7 @@ export function Portrait({
         <h2 className="font-[family-name:var(--font-display)] text-2xl">{heading}</h2>
       ) : null}
       {badge ? <p className="mt-2 text-sm text-muted">{badge}</p> : null}
-      <div className={`${heading ? "mt-4" : ""} space-y-4 font-content text-sm leading-relaxed`}>
+      <div className={`${heading ? "mt-4" : ""} space-y-4 font-content ${reading ? "text-[18px] leading-[1.65]" : "text-sm leading-relaxed"}`}>
         {portrait.sections.map((section) => (
           <section key={section.id} className="min-w-0 space-y-1">
             <h3 className="font-[family-name:var(--font-inter)] text-xs font-semibold uppercase tracking-wide text-accent">

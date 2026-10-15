@@ -5,6 +5,7 @@ import type { CompareDto } from "@/types/compare";
 import type { ReelDto } from "@/types/reel";
 import type { TextDiffDto } from "@/lib/text-diff";
 import type { TranscriptBundleDto } from "@/types/transcript";
+import { InlineError } from "@/components/vocal-ui/InlineError";
 
 export function TakeComparison({ reelId }: { reelId: string }) {
   const [reel, setReel] = useState<ReelDto | null>(null);
@@ -157,7 +158,7 @@ export function TakeComparison({ reelId }: { reelId: string }) {
           {exporting ? "Экспорт…" : "Экспорт карточки"}
         </button>
       </div>
-      {error ? <p className="text-bad">{error}</p> : null}
+      {error ? <InlineError message={error} /> : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-sm text-muted">
           Дубль A

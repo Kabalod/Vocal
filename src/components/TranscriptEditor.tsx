@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { TranscriptBundleDto, TranscriptRevisionDto } from "@/types/transcript";
+import { InlineError } from "@/components/vocal-ui/InlineError";
 
 function kindLabel(row: TranscriptRevisionDto) {
   if (row.kind === "original") return "Исходник";
@@ -71,7 +72,7 @@ export function TranscriptEditor({ takeId }: { takeId: string }) {
         Правка сохраняет исходник. Таймкоды относятся к исходной расшифровке, а не к отредактированному тексту.
         Сохранение не вызывает распознавание и не переписывает старый разбор.
       </p>
-      {error ? <p className="text-sm text-bad">{error}</p> : null}
+      {error ? <InlineError message={error} /> : null}
       {bundle && bundle.revisions.length === 0 ? (
         <p className="text-sm text-muted">Пока нет сохранённого текста. Он появится после распознавания или из текста дубля.</p>
       ) : null}
