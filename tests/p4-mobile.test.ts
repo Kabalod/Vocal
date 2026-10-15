@@ -71,7 +71,7 @@ test("wiring: nav bar with collapsing title, keyboard inset, bottom bar, sheets 
   const dialogue = read("src/components/ThoughtDialogue.tsx");
   assert.match(dialogue, /data-dialogue-touch/);
   const takes = read("src/components/TakesPathMobile.tsx");
-  for (const name of ["Слушать", "Читать", "Видео", "Сделать итоговым", "Следующий дубль", "Что улучшить", "итоговый", "от последнего", "от первого"]) {
+  for (const name of ["Слушать", "Читать", "Видео", "Сделать итоговым", "Следующий дубль", "итоговый", "от последнего", "от первого"]) {
     assert.ok(takes.includes(name), name);
   }
   assert.doesNotMatch(takes, /pathSlot|pathSegments|pathHeight/, "no zig-zag on the touch path");

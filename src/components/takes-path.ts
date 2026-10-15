@@ -1,6 +1,4 @@
-/** Pure model of the desktop "path of takes" (P3b): order, zig-zag slots, S-curves, what the AI cloud / conclusion / stickers show. */
-import type { CompareDto } from "@/types/compare";
-import type { ReviewDto } from "@/types/review";
+/** Pure model of the "path of takes" (P3b/P4): order, zig-zag slots, S-curves. The path is the history of takes: no AI layer. */
 import { TAKE_INPUT_TYPE_LABELS, type TakeDto } from "@/types/reel";
 
 export type TakeOrder = "newest" | "oldest";
@@ -10,7 +8,6 @@ export const POLAROID_H = 288;
 const SLOT_X = [0.2, 0.76, 0.27, 0.7, 0.23, 0.74];
 const SLOT_Y = [70, 340, 640, 930, 1230, 1510];
 const SLOT_ROT = [-1.8, 1.5, 1.1, -1.4, 1.7, -1.2];
-const TIP_ROT = [-4, 3, -2.5, 4.5, -3, 3.5];
 const LAP_HEIGHT = 1800;
 
 export type PathSlot = { side: "left" | "right"; cx: number; top: number; rot: number };
@@ -48,14 +45,9 @@ export function pathHeight(nodeCount: number, width: number): number {
 export type PathSegment = {
   key: string;
   d: string;
-  mx: number;
-  my: number;
-  rot: number;
-  /** The older neighbour of the pair: its advice sits on the curve (the ghost counts as the newest). */
-  olderTakeId: string | null;
 };
 
-/** One smooth S-curve between neighbouring slots; the sticker sits in its middle. */
+/** One smooth S-curve between neighbouring slots. */
 export function pathSegments(nodes: readonly PathNode[], width: number): PathSegment[] {
   const slots = nodes.map((_, index) => pathSlot(index, width));
   return nodes.slice(0, -1).map((node, index) => {
@@ -67,75 +59,23 @@ export function pathSegments(nodes: readonly PathNode[], width: number): PathSeg
     const bx = to.side === "left" ? to.cx + POLAROID_W / 2 + 8 : to.cx - POLAROID_W / 2 - 8;
     const reach = (bx - ax) * 0.56;
     const next = nodes[index + 1];
-    let older: PathNode;
-    if (node && next) older = node.number < next.number ? node : next;
-    else older = node ?? next;
     return {
       key: `${node?.id ?? "next"}-${next?.id ?? "next"}`,
       d: `M ${ax} ${ay} C ${ax + reach} ${ay}, ${bx - reach} ${by}, ${bx} ${by}`,
-      mx: (ax + bx) / 2,
-      my: (ay + by) / 2,
-      rot: TIP_ROT[index % TIP_ROT.length],
-      olderTakeId: older?.id ?? null,
     };
   });
 }
 
-export type TakeInsight = {
-  /** Cloud above the polaroid: how the thought moved relative to the previous take (saved comparison). */
-  verdict: string | null;
-  /** One line under the polaroid: the notes of that comparison. */
-  conclusion: string | null;
-  /** Stickers "что улучшить": what a saved review of this take says is missing. */
-  tips: string[];
-  /** Main idea of the take for the polaroid square (saved review), when there is no video frame. */
-  quote: string | null;
-};
-
-const CONCLUSION_MAX = 160;
-const TIPS_MAX = 2;
+const QUOTE_MAX = 110;
 
 function clip(text: string, max: number) {
   const value = text.replace(/\s+/g, " ").trim();
   return value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value;
 }
 
-/**
- * Cloud and conclusion come from the saved comparison in which the take is the newer one (by number); several → the latest.
- * Tips and the quote come from the latest successful saved review of the take. Nothing is invented: no data → null / [].
- */
-export function takeInsights(
-  takes: readonly TakeDto[],
-  comparisons: readonly CompareDto[],
-  reviewsByTake: Readonly<Record<string, readonly ReviewDto[]>>,
-): Record<string, TakeInsight> {
-  const byId = new Map(takes.map((take) => [take.id, take]));
-  const result: Record<string, TakeInsight> = {};
-  const latestFirst = [...comparisons].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  for (const take of takes) {
-    const compare = latestFirst.find((item) => {
-      if (item.status !== "done" || !item.semantic) return false;
-      const ids = [item.leftTakeId, item.rightTakeId];
-      if (!ids.includes(take.id)) return false;
-      const other = byId.get(ids[0] === take.id ? ids[1] : ids[0]);
-      return Boolean(other) && other!.number < take.number;
-    });
-    const review = (reviewsByTake[take.id] ?? []).find((item) => item.status === "done" && item.result) ?? null;
-    const semantic = compare?.semantic ?? null;
-    result[take.id] = {
-      verdict: semantic ? (semantic.thoughtPreserved ? "Мысль сохранилась" : "Мысль могла сместиться") : null,
-      conclusion: semantic?.notes?.trim() ? clip(semantic.notes, CONCLUSION_MAX) : null,
-      tips: (review?.result?.missing ?? []).map((tip) => clip(tip, 90)).filter(Boolean).slice(0, TIPS_MAX),
-      quote: review?.result?.authorThought?.trim() ? clip(review.result.authorThought, 110) : null,
-    };
-  }
-  return result;
-}
-
-/** Text of the polaroid square for a take without a frame: the review's main idea, or the start of a text take. */
-export function polaroidQuote(take: TakeDto, insight: TakeInsight | undefined): string | null {
-  if (insight?.quote) return insight.quote;
-  if (take.inputType === "text" && take.bodyText.trim()) return clip(take.bodyText, 110);
+/** Text of the polaroid square for a take without a frame: the start of a text take (the author's own words). */
+export function polaroidQuote(take: TakeDto): string | null {
+  if (take.inputType === "text" && take.bodyText.trim()) return clip(take.bodyText, QUOTE_MAX);
   return null;
 }
 
@@ -143,8 +83,8 @@ export function takeCaption(take: TakeDto): string {
   return `Дубль ${take.number} · ${TAKE_INPUT_TYPE_LABELS[take.inputType]}`;
 }
 
-export function takeAriaLabel(take: TakeDto, isFinal: boolean, verdict: string | null): string {
-  return `${takeCaption(take)}${verdict ? `, ${verdict}` : ""}${isFinal ? ", итоговый дубль" : ""}`;
+export function takeAriaLabel(take: TakeDto, isFinal: boolean): string {
+  return `${takeCaption(take)}${isFinal ? ", итоговый дубль" : ""}`;
 }
 
 export function takesCountLabel(count: number): string {

@@ -2,7 +2,7 @@
 
 import "@/components/takes-path.css";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Check, FileText, Mic, MoreHorizontal, Music, Pause, Play, Sparkles, Trash2, Video, X } from "lucide-react";
+import { Check, FileText, Mic, MoreHorizontal, Music, Pause, Play, Trash2, Video, X } from "lucide-react";
 import { DeleteTakeConfirm } from "@/components/DeleteActions";
 import { TranscriptEditor } from "@/components/TranscriptEditor";
 import {
@@ -17,61 +17,15 @@ import {
   takeActions,
   takeAriaLabel,
   takeCaption,
-  takeInsights,
   takeMediaUrl,
   takesCountLabel,
-  type TakeInsight,
   type TakeOrder,
 } from "@/components/takes-path";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { PopoverMenu } from "@/components/vocal-ui/PopoverMenu";
 import { VocalModal } from "@/components/vocal-ui/VocalModal";
-import type { CompareDto } from "@/types/compare";
 import type { ReelDto, TakeDto } from "@/types/reel";
-import type { ReviewDto } from "@/types/review";
 import type { TranscriptBundleDto } from "@/types/transcript";
-
-const MAX_REVIEW_FETCH = 12;
-
-/** Saved comparisons and saved reviews of the takes: read-only, existing endpoints. A failed read just means "no cloud / no stickers". */
-export function useTakeInsights(reelId: string, takes: readonly TakeDto[], reloadToken: number) {
-  const [comparisons, setComparisons] = useState<CompareDto[]>([]);
-  const [reviews, setReviews] = useState<Record<string, ReviewDto[]>>({});
-  const ids = takes.map((take) => take.id).join(",");
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetch(`/api/reels/${reelId}/compare`, { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : { comparisons: [] }))
-      .then((data: { comparisons?: CompareDto[] }) => {
-        if (!cancelled) setComparisons(data.comparisons ?? []);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [reelId, reloadToken, ids]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const wanted = ids ? ids.split(",").slice(0, MAX_REVIEW_FETCH) : [];
-    void Promise.all(
-      wanted.map((takeId) =>
-        fetch(`/api/takes/${takeId}/review`, { cache: "no-store" })
-          .then((res) => (res.ok ? res.json() : { reviews: [] }))
-          .then((data: { reviews?: ReviewDto[] }) => [takeId, data.reviews ?? []] as const)
-          .catch(() => [takeId, [] as ReviewDto[]] as const),
-      ),
-    ).then((rows) => {
-      if (!cancelled) setReviews(Object.fromEntries(rows));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadToken, ids]);
-
-  return useMemo(() => takeInsights(takes, comparisons, reviews), [takes, comparisons, reviews]);
-}
 
 type PlayerState = { id: string; playing: boolean; pos: number; total: number };
 
@@ -142,7 +96,7 @@ export function ProgressBar({ label, pos, total }: { label: string; pos: number;
   );
 }
 
-function PolaroidFace({ take, insight }: { take: TakeDto; insight: TakeInsight | undefined }) {
+function PolaroidFace({ take }: { take: TakeDto }) {
   const { video } = takeActions(take);
   const url = takeMediaUrl(take);
   if (video && url) {
@@ -155,7 +109,7 @@ function PolaroidFace({ take, insight }: { take: TakeDto; insight: TakeInsight |
       </>
     );
   }
-  const quote = polaroidQuote(take, insight);
+  const quote = polaroidQuote(take);
   if (quote) return <blockquote className="tp-quote">«{quote}»</blockquote>;
   return (
     <div className="tp-plain" aria-hidden="true">
@@ -304,14 +258,11 @@ export function VideoDialog({ take, onClose }: { take: TakeDto; onClose: () => v
 }
 
 /**
- * Desktop "Дубли" tab (P3b, ref 01): a zig-zag of polaroids on a dotted S-curve, the AI cloud above, the conclusion below,
- * "что улучшить" stickers on the curve, the stamp on the final take and a ghost "next take" at the newest end.
- * Everything that is shown is read from existing data; an element without data is simply not drawn.
+ * Desktop "Дубли" tab (P3b, ref 01): the history of takes — a zig-zag of polaroids on a dotted S-curve, listen / read / video,
+ * "Сделать итоговым", the stamp on the final take and a ghost "next take" at the newest end. No AI layer (owner decision 15.10.2026).
  */
 export function TakesPathDesktop({
   reel,
-  reelId,
-  reloadToken,
   locked,
   canRecord,
   recordBlockedReason,
@@ -321,8 +272,6 @@ export function TakesPathDesktop({
   onDeleted,
 }: {
   reel: ReelDto;
-  reelId: string;
-  reloadToken: number;
   locked: boolean;
   canRecord: boolean;
   recordBlockedReason?: string;
@@ -337,7 +286,6 @@ export function TakesPathDesktop({
   const [deleting, setDeleting] = useState<TakeDto | null>(null);
   const [width, setWidth] = useState(0);
   const pathRef = useRef<HTMLDivElement>(null);
-  const insights = useTakeInsights(reelId, reel.takes, reloadToken);
   const { player, toggle, stop } = useTakeAudio(reel.takes);
 
   useLayoutEffect(() => {
@@ -397,25 +345,6 @@ export function TakesPathDesktop({
                 <path key={segment.key} d={segment.d} />
               ))}
             </svg>
-            {segments.map((segment) => {
-              const tips = segment.olderTakeId ? (insights[segment.olderTakeId]?.tips ?? []) : [];
-              if (tips.length === 0) return null;
-              return (
-                <aside
-                  key={`tip-${segment.key}`}
-                  className="tp-tip"
-                  style={{ left: segment.mx, top: segment.my, "--tip-rot": `${segment.rot}deg` } as CSSProperties}
-                  data-take-tips
-                >
-                  <strong>Что улучшить</strong>
-                  <ul>
-                    {tips.map((tip) => (
-                      <li key={tip}>{tip}</li>
-                    ))}
-                  </ul>
-                </aside>
-              );
-            })}
             {nodes.map((take, index) => {
               const place = slots[index];
               const style = { transform: `translate(${place.cx - POLAROID_W / 2}px, ${place.top}px)`, "--rot": `${place.rot}deg` } as CSSProperties;
@@ -440,25 +369,18 @@ export function TakesPathDesktop({
                 );
               }
               const isFinal = reel.finalTakeId === take.id;
-              const insight = insights[take.id];
               const actions = takeActions(take);
               const active = player?.id === take.id ? player : null;
               const playing = Boolean(active?.playing);
               return (
                 <div key={take.id} className="tp-item" style={style} data-take-id={take.id}>
-                  {insight?.verdict ? (
-                    <div className="tp-cloud" data-take-verdict>
-                      <Sparkles aria-hidden="true" />
-                      <span>{insight.verdict}</span>
-                    </div>
-                  ) : null}
                   <article
                     className={`tp-polaroid${active ? " has-player" : ""}`}
-                    aria-label={takeAriaLabel(take, isFinal, insight?.verdict ?? null)}
+                    aria-label={takeAriaLabel(take, isFinal)}
                     style={{ minHeight: POLAROID_H }}
                   >
                     <div className="tp-frame">
-                      <PolaroidFace take={take} insight={insight} />
+                      <PolaroidFace take={take} />
                       <div className="tp-actions">
                         {actions.listen ? (
                           <button
@@ -503,11 +425,6 @@ export function TakesPathDesktop({
                       onDelete={() => setDeleting(take)}
                     />
                   </article>
-                  {insight?.conclusion ? (
-                    <p className="tp-conclusion" data-take-conclusion>
-                      {insight.conclusion}
-                    </p>
-                  ) : null}
                 </div>
               );
             })}

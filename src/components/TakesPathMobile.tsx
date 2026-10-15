@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, FileText, Mic, MoreHorizontal, Music, Pause, Play, Sparkles, Video, X } from "lucide-react";
+import { Check, FileText, Mic, MoreHorizontal, Music, Pause, Play, Video, X } from "lucide-react";
 import { DeleteTakeConfirm } from "@/components/DeleteActions";
-import { ProgressBar, ReadDialog, useTakeAudio, useTakeInsights, VideoDialog } from "@/components/TakesPathDesktop";
+import { ProgressBar, ReadDialog, useTakeAudio, VideoDialog } from "@/components/TakesPathDesktop";
 import {
   focusTakeId,
   formatClock,
@@ -24,12 +24,10 @@ import type { ReelDto, TakeDto } from "@/types/reel";
 /**
  * Mobile "Дубли" (ref 08): the focus card of one take on top (the final one, or the newest) and a compact vertical timeline of the
  * other takes below; a tap on a timeline row puts that take into the focus. No zig-zag, no manual comparison. Data and actions are
- * the same as on the desktop path: cloud, conclusion and stickers are drawn only when saved data exist.
+ * the same as on the desktop path: no AI cloud, conclusion or stickers (owner decision 15.10.2026).
  */
 export function TakesPathMobile({
   reel,
-  reelId,
-  reloadToken,
   locked,
   canRecord,
   recordBlockedReason,
@@ -39,8 +37,6 @@ export function TakesPathMobile({
   onDeleted,
 }: {
   reel: ReelDto;
-  reelId: string;
-  reloadToken: number;
   locked: boolean;
   canRecord: boolean;
   recordBlockedReason?: string;
@@ -56,7 +52,6 @@ export function TakesPathMobile({
   const [deleting, setDeleting] = useState<TakeDto | null>(null);
   const [menuFor, setMenuFor] = useState<TakeDto | null>(null);
   const focusRef = useRef<HTMLElement>(null);
-  const insights = useTakeInsights(reelId, reel.takes, reloadToken);
   const { player, toggle, stop } = useTakeAudio(reel.takes);
   const focusId = focusTakeId(reel.takes, reel.finalTakeId, picked);
   const focus = reel.takes.find((take) => take.id === focusId) ?? null;
@@ -73,12 +68,11 @@ export function TakesPathMobile({
     focusRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
   }
 
-  const insight = focus ? insights[focus.id] : undefined;
   const isFinal = focus ? reel.finalTakeId === focus.id : false;
   const actions = focus ? takeActions(focus) : null;
   const active = focus && player?.id === focus.id ? player : null;
   const playing = Boolean(active?.playing);
-  const quote = focus ? polaroidQuote(focus, insight) : null;
+  const quote = focus ? polaroidQuote(focus) : null;
   const url = focus ? takeMediaUrl(focus) : null;
 
   return (
@@ -101,18 +95,9 @@ export function TakesPathMobile({
         <article
           ref={focusRef}
           data-take-focus={focus.id}
-          aria-label={takeAriaLabel(focus, isFinal, insight?.verdict ?? null)}
+          aria-label={takeAriaLabel(focus, isFinal)}
           className="relative scroll-mt-16 rounded-[6px] bg-[var(--paper,#e8e5df)] p-3 pb-2 text-[var(--paper-ink,#22212a)] shadow-[0_14px_28px_rgba(0,0,0,0.4)]"
         >
-          {insight?.verdict ? (
-            <p
-              data-take-verdict
-              className="mb-2 inline-flex items-center gap-1.5 rounded-[12px] bg-[#2b2838] px-3 py-1.5 text-[13px] font-medium text-[#ebe6ff]"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-accent-soft" aria-hidden="true" />
-              {insight.verdict}
-            </p>
-          ) : null}
           <div className="relative flex min-h-[200px] items-center justify-center overflow-hidden rounded-[3px] bg-[#f4f1ea]">
             {actions?.video && url ? (
               <video className="h-[220px] w-full bg-[#14121c] object-cover" src={`${url}#t=0.1`} preload="metadata" muted playsInline aria-hidden="true" tabIndex={-1} />
@@ -181,21 +166,6 @@ export function TakesPathMobile({
               <MoreHorizontal aria-hidden="true" />
             </IconButton>
           </div>
-          {insight?.conclusion ? (
-            <p data-take-conclusion className="px-1 pt-2 text-[13px] leading-snug text-[#55525c]">
-              {insight.conclusion}
-            </p>
-          ) : null}
-          {insight && insight.tips.length > 0 ? (
-            <aside data-take-tips className="mt-3 rounded-[3px] bg-[#ecdfae] px-3 py-2.5 text-[#2a2618]">
-              <strong className="block text-[10px] font-bold uppercase tracking-[0.09em] text-[#7a6a2c]">Что улучшить</strong>
-              <ul className="mt-1 space-y-1 text-[13px] font-medium">
-                {insight.tips.map((tip) => (
-                  <li key={tip}>{tip}</li>
-                ))}
-              </ul>
-            </aside>
-          ) : null}
         </article>
       ) : (
         <p className="rounded-2xl border border-line bg-bg-elev p-4 text-sm text-muted">Дублей пока нет. Запишите первый — голосом или текстом.</p>

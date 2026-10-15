@@ -156,8 +156,6 @@ export function ReelTakes({
         return (
           <Path
             reel={reel}
-            reelId={reelId}
-            reloadToken={reloadToken}
             locked={thoughtCompleted}
             canRecord={canRecord}
             recordBlockedReason={recordBlockedReason}
