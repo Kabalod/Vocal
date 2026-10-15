@@ -5,6 +5,7 @@ import { DeleteTakeAction } from "@/components/DeleteActions";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { TakeList } from "@/components/TakeList";
 import { TakePlayer } from "@/components/TakePlayer";
+import { TakesPathDesktop } from "@/components/TakesPathDesktop";
 import { TakeUploadDropzone } from "@/components/TakeUploadDropzone";
 import { TranscriptEditor } from "@/components/TranscriptEditor";
 import { QuestionList } from "@/components/QuestionList";
@@ -28,6 +29,7 @@ export function ReelTakes({
   reloadToken = 0,
   thoughtCompleted = false,
   onChanged,
+  desktop = false,
 }: {
   reelId: string;
   children?: (slots: ReelTakesSlots) => ReactNode;
@@ -39,6 +41,8 @@ export function ReelTakes({
   reloadToken?: number;
   thoughtCompleted?: boolean;
   onChanged?: () => void;
+  /** P3b: the zig-zag path of takes from the desktop shell breakpoint. */
+  desktop?: boolean;
 }) {
   const [reel, setReel] = useState<ReelDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -235,6 +239,33 @@ export function ReelTakes({
     </div>
   );
 
+  const textForm =
+    reel.takes.length === 0 ? (
+        <form onSubmit={addText} className="space-y-3 p-1">
+          <p className="text-sm text-muted">Если мысль ещё текстом — это дубль №1. Дальше только голос или видео.</p>
+          <textarea
+            value={textBody}
+            onChange={(event) => setTextBody(event.target.value)}
+            rows={5}
+            placeholder="Текст дубля"
+            className="w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none"
+          />
+          <input
+            value={textNote}
+            onChange={(event) => setTextNote(event.target.value)}
+            placeholder="Что менял"
+            className="w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none"
+          />
+          <button
+            type="submit"
+            disabled={savingText || !textBody.trim()}
+            className="vocal-btn vocal-btn-primary disabled:opacity-50"
+          >
+            {savingText ? "Сохраняем…" : "Добавить исходный текст"}
+          </button>
+        </form>
+    ) : null;
+
   const media = (
     <section className="space-y-6">
       <div>
@@ -275,38 +306,54 @@ export function ReelTakes({
           }}
         />
       </div>
-      {reel.takes.length === 0 ? (
-        <form onSubmit={addText} className="space-y-3 p-1">
-          <p className="text-sm text-muted">Если мысль ещё текстом — это дубль №1. Дальше только голос или видео.</p>
-          <textarea
-            value={textBody}
-            onChange={(event) => setTextBody(event.target.value)}
-            rows={5}
-            placeholder="Текст дубля"
-            className="w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none"
-          />
-          <input
-            value={textNote}
-            onChange={(event) => setTextNote(event.target.value)}
-            placeholder="Что менял"
-            className="w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none"
-          />
-          <button
-            type="submit"
-            disabled={savingText || !textBody.trim()}
-            className="vocal-btn vocal-btn-primary disabled:opacity-50"
-          >
-            {savingText ? "Сохраняем…" : "Добавить исходный текст"}
-          </button>
-        </form>
-      ) : null}
+      {textForm}
     </section>
   );
 
-  if (children) return <>{children({ media, vocal })}</>;
+  const pathMedia = (
+    <div className="space-y-6" data-takes-desktop>
+      {error ? <p className="text-bad">{error}</p> : null}
+      <TakesPathDesktop
+        reel={reel}
+        reelId={reelId}
+        reloadToken={reloadToken}
+        locked={thoughtCompleted}
+        canRecord={canRecord}
+        recordBlockedReason={recordBlockedReason}
+        onRecord={() => onStartVoiceRecord?.()}
+        onFinal={(id) => void setFinal(id)}
+        onNote={(id, note) => void saveNote(id, note)}
+        onDeleted={() => {
+          void load();
+          onChanged?.();
+        }}
+      />
+      <details className="rounded-2xl border border-line bg-bg-elev p-4 text-sm">
+        <summary className="cursor-pointer text-muted">Загрузить видео вместо записи</summary>
+        <div className="mt-3">
+          <TakeUploadDropzone
+            reelId={reelId}
+            videoOnly
+            process
+            scriptVersionId={recordScriptId ?? undefined}
+            disabled={!canRecord || thoughtCompleted}
+            disabledReason={thoughtCompleted ? "Сначала верните мысль в работу" : recordBlockedReason}
+            onUploaded={(info) => {
+              void load();
+              if (info.jobId) onTakeJobStarted?.(info.jobId);
+            }}
+          />
+        </div>
+      </details>
+      {textForm}
+    </div>
+  );
+
+  const mediaNode = desktop ? pathMedia : media;
+  if (children) return <>{children({ media: mediaNode, vocal })}</>;
   return (
     <div className="space-y-8">
-      {media}
+      {mediaNode}
       {vocal}
     </div>
   );

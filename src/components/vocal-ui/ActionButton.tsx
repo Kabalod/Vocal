@@ -21,6 +21,7 @@ export function ActionButton({
   loading = false,
   loadingLabel,
   disabledReason,
+  fullWidth = false,
   children,
   className = "",
   disabled,
@@ -31,17 +32,19 @@ export function ActionButton({
   loading?: boolean;
   loadingLabel?: string;
   disabledReason?: string;
+  /** The button and its wrapper fill the row (the recording column on the desktop). */
+  fullWidth?: boolean;
   children: ReactNode;
 }) {
   const isDisabled = disabled || loading;
   return (
-    <span className="inline-flex max-w-full flex-col items-start gap-1">
+    <span className={`max-w-full flex-col items-start gap-1 ${fullWidth ? "flex w-full" : "inline-flex"}`}>
       <button
         type={type}
         data-variant={variant}
         className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-[var(--vocal-radius-control)] border px-4 text-sm shell:min-h-8 ${
           variant === "primary" ? "min-h-12" : ""
-        } ${VARIANTS[variant]} ${className}`}
+        } ${fullWidth ? "w-full" : ""} ${VARIANTS[variant]} ${className}`}
         {...props}
         disabled={isDisabled}
         aria-busy={loading || undefined}

@@ -168,6 +168,58 @@ export function DeleteThoughtConfirm({
   );
 }
 
+/** Desktop path of takes: the same deletion as `DeleteTakeAction`, opened from the take menu and confirmed in an iOS alert. */
+export function DeleteTakeConfirm({
+  takeId,
+  label,
+  open,
+  onClose,
+  onDeleted,
+}: {
+  takeId: string;
+  label: string;
+  open: boolean;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirm() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const result = await sendDelete(`/api/takes/${takeId}`);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    onClose();
+    onDeleted();
+  }
+
+  return (
+    <ConfirmAlert
+      open={open}
+      title="Удалить дубль?"
+      message={
+        error ??
+        `${label}: файл, расшифровка и разборы этого дубля исчезнут. Остальные дубли и мысль останутся. Это нельзя отменить.`
+      }
+      confirmLabel={busy ? "Удаляем…" : "Удалить дубль"}
+      cancelLabel="Оставить"
+      destructive
+      onCancel={() => {
+        if (busy) return;
+        setError(null);
+        onClose();
+      }}
+      onConfirm={() => void confirm()}
+    />
+  );
+}
+
 export function DeleteTakeAction({
   takeId,
   label,

@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeft, Mic } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ActionButton } from "@/components/vocal-ui/ActionButton";
 import { ConfirmActions, VocalModal } from "@/components/vocal-ui/VocalModal";
@@ -34,9 +35,12 @@ export function RecordingView({
   scriptNumber,
   onClose,
   onSaved,
+  desktop = false,
 }: {
   reelId: string;
   thoughtTitle: string;
+  /** P3b: teleprompter ~70% + a compact column from the desktop shell breakpoint; the recording logic is the same. */
+  desktop?: boolean;
   scriptVersionId?: string | null;
   scriptNumber: number | null;
   onClose: () => void;
@@ -264,8 +268,12 @@ export function RecordingView({
     scriptNumber != null ? `версия ${scriptNumber}` : scriptVersionId ? "готовая версия" : "без сценария";
   const stage = (
       <div
-        className="space-y-3 border-t border-line bg-bg pt-3 shell:border-t-0 shell:border-l shell:border-line shell:pl-4 shell:pt-0"
-        style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+        className={
+          desktop
+            ? "space-y-3"
+            : "space-y-3 border-t border-line bg-bg pt-3 shell:border-t-0 shell:border-l shell:border-line shell:pl-4 shell:pt-0"
+        }
+        style={desktop ? undefined : { paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
       >
         {phase === "idle" || phase === "permission" ? (
           <div className="space-y-3">
@@ -276,15 +284,19 @@ export function RecordingView({
             <div className="flex flex-wrap gap-2">
               <ActionButton
                 variant="primary"
+                fullWidth={desktop}
+                className={desktop ? "min-h-12 text-base" : ""}
                 loading={phase === "permission"}
                 loadingLabel="Запрашиваем микрофон…"
                 onClick={() => void startRecording()}
               >
                 Начать запись
               </ActionButton>
-              <ActionButton variant="secondary" onClick={requestLeave}>
-                К списку дублей
-              </ActionButton>
+              {desktop ? null : (
+                <ActionButton variant="secondary" onClick={requestLeave}>
+                  К списку дублей
+                </ActionButton>
+              )}
             </div>
           </div>
         ) : null}
@@ -298,7 +310,7 @@ export function RecordingView({
               <div className="h-full rounded-full bg-accent" style={{ width: `${Math.max(8, level * 100)}%` }} />
             </div>
             <div className="flex flex-wrap gap-2">
-              <ActionButton variant="primary" onClick={finishRecording}>
+              <ActionButton variant="primary" fullWidth={desktop} onClick={finishRecording}>
                 Завершить запись
               </ActionButton>
               <ActionButton variant="secondary" onClick={requestLeave}>
@@ -315,6 +327,7 @@ export function RecordingView({
             <div className="flex flex-wrap gap-2">
               <ActionButton
                 variant="primary"
+                fullWidth={desktop}
                 loading={phase === "saving"}
                 loadingLabel="Сохраняем…"
                 onClick={() => void saveTake()}
@@ -331,7 +344,7 @@ export function RecordingView({
         {phase === "saved" ? (
           <div className="space-y-3">
             <p className="text-sm text-text">Дубль сохранён. Следим за расшифровкой в списке дублей.</p>
-            <ActionButton variant="primary" onClick={onClose}>
+            <ActionButton variant="primary" fullWidth={desktop} onClick={onClose}>
               К списку дублей
             </ActionButton>
           </div>
@@ -340,6 +353,106 @@ export function RecordingView({
         {error ? <InlineError message={error} /> : null}
       </div>
   );
+
+  const confirmModal = (
+      <VocalModal
+        open={confirmOpen}
+        title={phase === "saving" ? "Прервать загрузку?" : "Отменить эту запись?"}
+        initialFocus="safe"
+        onClose={() => setConfirmOpen(false)}
+      >
+        <p className="text-sm text-muted">
+          {phase === "saving"
+            ? ABORT_TAKE_UPLOAD_LEAVE_TEXT
+            : `Длительность ${formatRecordingDuration(seconds)}. Исчезнет только этот фрагмент. Уже сохранённые дубли останутся.`}
+        </p>
+        <ConfirmActions
+          cancelLabel="Вернуться к записи"
+          confirmLabel="Отменить запись"
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={() => {
+            discard();
+            onClose();
+          }}
+        />
+      </VocalModal>
+  );
+
+  if (desktop) {
+    const micState =
+      phase === "recording"
+        ? "Микрофон включён"
+        : phase === "permission"
+          ? "Ждём разрешение на микрофон…"
+          : phase === "preview" || phase === "saving" || phase === "saved"
+            ? "Запись остановлена"
+            : "Микрофон будет запрошен при старте";
+    return (
+      <section aria-label="Запись дубля" data-recording-desktop className="space-y-5">
+        <header className="flex flex-wrap items-center gap-4">
+          <button
+            type="button"
+            onClick={requestLeave}
+            className="inline-flex min-h-8 items-center gap-1.5 text-[13px] text-muted hover:text-text"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />К пути
+          </button>
+          <h2 className="font-[family-name:var(--font-display)] text-[22px] font-medium leading-tight">Запись дубля</h2>
+          <p className="text-sm text-muted">{scriptVersionId ? `По сценарию · ${versionLabel}` : "Без готового сценария"}</p>
+        </header>
+        <div className={`grid items-start gap-8 ${showScript ? "grid-cols-[minmax(0,7fr)_minmax(280px,3fr)]" : "mx-auto max-w-[360px] grid-cols-1"}`}>
+          {showScript ? (
+            <section
+              aria-label="Телесуфлёр"
+              data-teleprompter
+              className="relative min-h-[420px] rounded-[14px] border border-line bg-white/[0.02] px-10 pb-10 pt-12"
+            >
+              {scriptVersionId ? (
+                <button
+                  type="button"
+                  onClick={() => setShowScript(false)}
+                  className="absolute right-4 top-3 rounded-lg px-2.5 py-1 text-[13px] text-muted hover:bg-white/10 hover:text-text"
+                >
+                  Скрыть
+                </button>
+              ) : null}
+              {scriptBody ? (
+                <p className="max-h-[calc(100dvh-280px)] overflow-y-auto whitespace-pre-wrap font-[family-name:var(--font-display)] text-[28px] leading-[1.5]">
+                  {scriptBody}
+                </p>
+              ) : (
+                <p className="text-sm text-muted">
+                  {scriptVersionId ? "Загружаем сценарий…" : "Можно говорить без готового сценария. Текст дубля появится после расшифровки."}
+                </p>
+              )}
+            </section>
+          ) : null}
+          <aside aria-label="Управление записью" className="space-y-4">
+            <div
+              data-mic-viewport
+              className="flex h-[120px] flex-col items-center justify-center gap-2.5 rounded-xl border border-line bg-white/[0.03] px-4 text-center"
+            >
+              <Mic className="h-6 w-6 text-accent-soft" strokeWidth={1.5} aria-hidden="true" />
+              <p className="text-xs text-muted">{micState}</p>
+              <div className="h-1 w-full overflow-hidden rounded-full bg-white/10" aria-hidden="true">
+                <div
+                  className="h-full rounded-full bg-accent transition-[width] duration-100"
+                  style={{ width: phase === "recording" ? `${Math.max(6, level * 100)}%` : "0%" }}
+                />
+              </div>
+            </div>
+            {stage}
+            {scriptVersionId && !showScript ? (
+              <ActionButton variant="compact" onClick={() => setShowScript(true)}>
+                Показать сценарий
+              </ActionButton>
+            ) : null}
+          </aside>
+        </div>
+        {confirmModal}
+      </section>
+    );
+  }
 
   return (
     <section className="flex min-h-[28rem] flex-col" aria-label="Запись дубля">
@@ -368,27 +481,7 @@ export function RecordingView({
         <div className={showScript ? "mt-4 shrink-0 shell:mt-0" : ""}>{stage}</div>
       </div>
 
-      <VocalModal
-        open={confirmOpen}
-        title={phase === "saving" ? "Прервать загрузку?" : "Отменить эту запись?"}
-        initialFocus="safe"
-        onClose={() => setConfirmOpen(false)}
-      >
-        <p className="text-sm text-muted">
-          {phase === "saving"
-            ? ABORT_TAKE_UPLOAD_LEAVE_TEXT
-            : `Длительность ${formatRecordingDuration(seconds)}. Исчезнет только этот фрагмент. Уже сохранённые дубли останутся.`}
-        </p>
-        <ConfirmActions
-          cancelLabel="Вернуться к записи"
-          confirmLabel="Отменить запись"
-          onCancel={() => setConfirmOpen(false)}
-          onConfirm={() => {
-            discard();
-            onClose();
-          }}
-        />
-      </VocalModal>
+      {confirmModal}
     </section>
   );
 }

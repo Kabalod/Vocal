@@ -208,6 +208,7 @@ export function ReelStudio({ reelId }: { reelId: string }) {
           thoughtTitle={thoughtTitle}
           scriptVersionId={selectedScriptId}
           scriptNumber={scriptNumber}
+          desktop={desktop}
           onClose={() => setRecording(false)}
           onSaved={(info) => {
             setTakesTick((value) => value + 1);
@@ -226,12 +227,13 @@ export function ReelStudio({ reelId }: { reelId: string }) {
           onStartVoiceRecord={requestRecording}
           thoughtCompleted={thoughtStatus === "completed"}
           onChanged={() => setTakesTick((value) => value + 1)}
+          desktop={desktop}
         >
           {({ media }) => (
             <div className="space-y-8">
               {watchJobId ? <StudioJobWatch jobId={watchJobId} onSettled={refreshStudioAfterJob} /> : null}
               {media}
-              <AutoTakeCompare reelId={reelId} reloadToken={takesTick} />
+              {desktop ? null : <AutoTakeCompare reelId={reelId} reloadToken={takesTick} />}
               <CompletionSummary
                 reelId={reelId}
                 reloadToken={takesTick + scriptTick}
