@@ -80,6 +80,9 @@ test("the touch row: mini polaroid, title, one meta line, its own preview button
   assert.match(html, /В работе · 3 дубля · 9 окт/);
   assert.match(html, /<button[^>]*aria-label="Предпросмотр мысли «Привычка и мотивация»"/);
   assert.deepEqual(archiveRowMeta(reel({ takeCount: 0, statusGroup: "completed" })).status, "Завершена");
+  const zero = renderToStaticMarkup(createElement("ul", null, createElement(ArchiveMobileRow, { reel: reel({ takeCount: 0 }), onOpenPreview: () => undefined })));
+  assert.doesNotMatch(zero, /0 дубл/);
+  assert.match(zero, /В работе · 9 окт/);
 });
 
 test("status filters: chips lane on touch, three status marks in the sidebar", () => {

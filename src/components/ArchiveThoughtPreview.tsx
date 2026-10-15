@@ -58,7 +58,7 @@ export function ArchiveThoughtPreview({
             <h3 className="min-w-0 break-words font-[family-name:var(--font-display)] text-2xl">{data.title}</h3>
             <StatusBadge status={data.userStatus} />
           </div>
-          <p className="text-sm text-muted">Дублей: {data.takeCount}</p>
+          {data.takeCount > 0 ? <p className="text-sm text-muted">Дублей: {data.takeCount}</p> : null}
           {data.completed ? <p className="text-sm text-muted">Мысль уже завершена.</p> : null}
           {data.honesty === "processing" ? (
             <p className="text-sm text-muted" role="status">

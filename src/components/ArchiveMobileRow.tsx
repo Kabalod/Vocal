@@ -13,11 +13,11 @@ const STATUS = {
   completed: { Icon: IconStatusDone, label: "Завершена" },
 } as const;
 
-export function archiveRowMeta(reel: ReelListItemDto): { status: string; takes: string; date: string } {
+export function archiveRowMeta(reel: ReelListItemDto): { status: string; takes: string | null; date: string } {
   const date = new Date(reel.createdAt);
   return {
     status: STATUS[thoughtUserStatus(reel.statusGroup)].label,
-    takes: takesCountLabel(reel.takeCount),
+    takes: reel.takeCount > 0 ? takesCountLabel(reel.takeCount) : null,
     date: Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" }).replace(".", ""),
   };
 }
@@ -48,7 +48,7 @@ export function ArchiveMobileRow({
           <span className="archive-row-meta">
             <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span>
-              {meta.status} · {meta.takes} · {meta.date}
+              {[meta.status, meta.takes, meta.date].filter(Boolean).join(" · ")}
             </span>
           </span>
         </span>
