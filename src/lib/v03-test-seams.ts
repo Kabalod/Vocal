@@ -5,6 +5,8 @@ export const v03TestSeams = {
   afterAiCallBeforeBind: null as ((ctx: { turnKey: string; callId: string }) => Promise<void>) | null,
   afterClaimBeforeComplete: null as ((ctx: { callId: string; ownerId: string; generation: number }) => Promise<void>) | null,
   beforeCommitDialogueReply: null as ((ctx: { processingId: string; callId: string }) => Promise<void>) | null,
+  /** After the last "turn already complete" check, before the reply is post-processed (the window of the turnKey race). */
+  beforeReplyPostprocess: null as ((ctx: { callId: string; turnKey: string; follower: boolean }) => Promise<void>) | null,
   afterThoughtBeforeEnvelope: null as ((ctx: { callId: string; turnKey: string }) => Promise<void>) | null,
   afterAcceptedAtBeforeCommit: null as ((ctx: { reelId: string; acceptedAt: string }) => Promise<void>) | null,
   dialogueLeaseMs: null as number | null,

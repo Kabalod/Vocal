@@ -304,7 +304,7 @@ function detailFeatures(candidate: string, original: string): number {
 /** An answer that opens with "не помню / не знаю / не думал…" (the don't-know clause is at the start). */
 export function startsWithDontKnow(text: string): boolean {
   const opening = meaningfulWords(text).slice(0, 6).join(" ");
-  return /не помню|не знаю|не думал|не задумывал|затрудняюсь|без понятия|нет ни/.test(opening);
+  return /не помню|не знаю|не думал|не задумывал|затрудняюсь|без понятия|нет ни|пропусти\p{L}* вопрос|пропускаем|пропустим/u.test(opening);
 }
 
 const STILL_UNKNOWN = /не помн|не зна|не думал|не задум|нет ни|нет никак|записях|не фиксиров|не могу|без понятия|затрудня/i;
