@@ -208,3 +208,22 @@ test("K1: 'не помню имя, но это было в мае…' keeps only
   const marks = rows.map((r) => (JSON.parse(r.payloadJson) as { discardedUpdates?: string[] }).discardedUpdates ?? []);
   assert.deepEqual(marks.map((m) => m.includes("fact_dontknow")), [true, true]);
 });
+
+test("the chip «Пропустить вопрос» is a don't-know answer: no fact is stored, the topic is closed (G1)", async (t) => {
+  const { reelId } = await setup(t, "Пропуск");
+  const { sendDialogueMessage } = await import("../src/lib/dialogue");
+  const { getThoughtState } = await import("../src/lib/thought-state");
+  const { isUnknownAnswer } = await import("../src/lib/question-guard");
+  const { startsWithDontKnow, materialAfterDontKnow } = await import("../src/lib/author-speech");
+  assert.equal(startsWithDontKnow("Пропустить вопрос"), true);
+  assert.equal(materialAfterDontKnow("Пропустить вопрос"), null);
+  assert.equal(isUnknownAnswer("Пропустить вопрос"), true);
+  const { isDontKnow } = await import("../src/lib/turn-policy");
+  assert.equal(isDontKnow("Пропустить вопрос"), true);
+  // The model invents a fact from the chip text: the server drops it.
+  await sendDialogueMessage(reelId, { text: "Пропустить вопрос", idempotencyKey: "skip-1" }, askWithFact("Автор решил пропустить вопрос про рынок и продолжить рассказ") as never);
+  assert.equal((await getThoughtState(reelId)).facts.length, 0, "the chip gives no fact");
+  const known = "Тётя Люба продаёт сметану развесную, в банке она слишком жидкая.";
+  await sendDialogueMessage(reelId, { text: known, idempotencyKey: "skip-2" }, askWithFact(known) as never);
+  assert.deepEqual((await getThoughtState(reelId)).facts.map((f) => f.text), [known]);
+});

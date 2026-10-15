@@ -643,7 +643,7 @@ async function authorSafeReply(input: {
 }): Promise<{ reply: ReturnType<typeof parseAgentReply>; rawText: string }> {
   if (!actionLeaksServiceId(input.reply.action, input.knownIds)) return { reply: input.reply, rawText: input.rawText };
   const store = async (rawText: string) => {
-    await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+    await saveReplyText(input.callId, rawText);
   };
   if (input.userPrompt) {
     try {
@@ -692,7 +692,7 @@ async function repairInvalidRedirect(input: {
   const neutral = neutralQuestionReply(state.openGaps, [], [], await reelTopic(input.reelId));
   const phrased = { ...neutral, question: withOffTopicPhrase(String(neutral.question)) };
   const responseText = JSON.stringify(phrased);
-  await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText } });
+  await saveReplyText(input.callId, responseText);
   const parsed = parseAgentReply(phrased, { authorMessageId: input.authorMessageId });
   return { reply: { ...parsed, discarded: ["redirect_invalid"] }, responseText };
 }
@@ -714,7 +714,7 @@ async function replaceValidRedirect(input: {
   const neutral = neutralQuestionReply(state.openGaps, [], [], await reelTopic(input.reelId));
   const phrased = { ...neutral, question: withOffTopicPhrase(String(neutral.question)) };
   const responseText = JSON.stringify(phrased);
-  await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText } });
+  await saveReplyText(input.callId, responseText);
   const parsed = parseAgentReply(phrased, { authorMessageId: input.authorMessageId });
   return { reply: { ...parsed, c00Signal: input.reply.c00Signal, discarded: [...input.reply.discarded, "redirect_replaced"] }, responseText };
 }
@@ -751,7 +751,7 @@ async function parseReplyRegeneratingInvalidQuestion(input: {
       label: "dialogue",
     });
     const reply = parseAgentReply(parseJsonObject(again.text), ctx);
-    await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: again.text } });
+    await saveReplyText(input.callId, again.text);
     return { reply, responseText: again.text };
   }
 }
@@ -791,7 +791,7 @@ async function downgradeInvalidReply(input: {
       ...(signal ? { c00Signal: signal } : {}),
     };
     const rawText = JSON.stringify(detached);
-    await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+    await saveReplyText(input.callId, rawText);
     const parsed = parseAgentReply(detached, { authorMessageId: input.authorMessageId });
     return { reply: { ...parsed, discarded: [...input.reply.discarded, "question_gap_detached"] }, rawText };
   }
@@ -817,7 +817,7 @@ async function downgradeInvalidReply(input: {
     ...(c00Signal ? { c00Signal } : {}),
   };
   const rawText = JSON.stringify(replaced);
-  await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+  await saveReplyText(input.callId, rawText);
   const parsed = parseAgentReply(replaced, { authorMessageId: input.authorMessageId });
   return { reply: { ...parsed, discarded: [...input.reply.discarded, reason] }, rawText };
 }
@@ -841,7 +841,7 @@ async function commitDroppingBadUpdate(input: Parameters<typeof commitDialogueRe
     void _signal;
     void _update;
     const rawText = JSON.stringify({ ...action, thoughtUpdate: { fact: null, closeGapIds: [] } });
-    await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+    await saveReplyText(input.callId, rawText);
     await commitDialogueReply({
       ...input,
       thoughtUpdate: { fact: null, closeGapIds: [] },
@@ -851,6 +851,30 @@ async function commitDroppingBadUpdate(input: Parameters<typeof commitDialogueRe
       discarded: [...(input.discarded ?? []), "update_dropped_at_commit"],
     });
   }
+}
+
+
+/**
+ * The stored model reply of a turn is rewritten only while the turn is open. A follower that post-processes its copy of the reply
+ * after the leader has committed must not overwrite the committed AiCall (status "done").
+ */
+async function saveReplyText(callId: string, responseText: string) {
+  await prisma.aiCall.updateMany({ where: { id: callId, status: { not: "done" } }, data: { responseText } });
+}
+
+/** A model call attempted after the same turn was committed by another executor (swallowed by the callers' fallbacks). */
+class TurnAlreadyCommittedError extends Error {}
+
+/**
+ * The model is not called again for a turn another executor has already committed: post-processing of a follower runs
+ * after the leader's question is in the thread and would see it as a repeat of its own reply.
+ */
+function completeUnlessTurnCommitted(complete: CompleteJsonFn, threadId: string, userMessageId: string, key: string): CompleteJsonFn {
+  const guarded = (async (...args: Parameters<CompleteJsonFn>) => {
+    if (await isDialogueTurnComplete(threadId, userMessageId, key)) throw new TurnAlreadyCommittedError("turn already committed");
+    return complete(...args);
+  }) as CompleteJsonFn;
+  return guarded;
 }
 
 /**
@@ -866,13 +890,21 @@ async function varyRepeatedQuestion(input: {
   userPrompt: string;
   complete: CompleteJsonFn;
   authorMessageId: string;
+  /** The claim key of this very turn: a question another executor of the same turn committed is not "a repeat". */
+  ownTurnClaimKey?: string;
 }): Promise<{ reply: ReturnType<typeof parseAgentReply>; rawText: string }> {
   if (input.reply.action.action !== "ask_question") return { reply: input.reply, rawText: input.rawText };
   // A correction turn (c00Signal) is never reshaped: the author's correction must reach the state unchanged.
   if (input.reply.c00Signal) return { reply: input.reply, rawText: input.rawText };
   const recent = (
     await prisma.dialogueMessage.findMany({
-      where: { threadId: input.threadId, role: "assistant", kind: "question", status: "done" },
+      where: {
+        threadId: input.threadId,
+        role: "assistant",
+        kind: "question",
+        status: "done",
+        ...(input.ownTurnClaimKey ? { OR: [{ claimKey: null }, { claimKey: { not: input.ownTurnClaimKey } }] } : {}),
+      },
       orderBy: { createdAt: "desc" },
       take: 2,
       select: { body: true, payloadJson: true },
@@ -904,7 +936,7 @@ async function varyRepeatedQuestion(input: {
     });
     const retried = parseAgentReply(parseJsonObject(again.text), { authorMessageId: input.authorMessageId });
     if (retried.action.action !== "ask_question" || !repeats(retried.action.question)) {
-      await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: again.text } });
+      await saveReplyText(input.callId, again.text);
       return { reply: { ...retried, discarded: [...retried.discarded, "question_repeat_regenerated"] }, rawText: again.text };
     }
   } catch {
@@ -928,7 +960,7 @@ async function varyRepeatedQuestion(input: {
     },
   };
   const rawText = JSON.stringify(replaced);
-  await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+  await saveReplyText(input.callId, rawText);
   const parsed = parseAgentReply(replaced, { authorMessageId: input.authorMessageId });
   return { reply: { ...parsed, discarded: [...input.reply.discarded, "question_repeat_replaced"] }, rawText };
 }
@@ -978,7 +1010,7 @@ async function varyRepeatedProposal(input: {
     },
   };
   const rawText = JSON.stringify(replaced);
-  await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+  await saveReplyText(input.callId, rawText);
   const parsed = parseAgentReply(replaced, { authorMessageId: input.authorMessageId });
   return { reply: { ...parsed, discarded: [...input.reply.discarded, "proposal_repeat_replaced"] }, rawText };
 }
@@ -1039,7 +1071,7 @@ async function applyTurnPolicy(input: {
     };
     const replacedSuppressed = { action: "ask_question", question, clarificationReason: "нужно уточнение задачи", whyUnknown: "ответ сервера по состоянию материала", thoughtUpdate: kept };
     const rawSuppressed = JSON.stringify(replacedSuppressed);
-    await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawSuppressed } });
+    await saveReplyText(input.callId, rawSuppressed);
     return { reply: { ...parseAgentReply(replacedSuppressed, { authorMessageId: input.authorMessageId }), discarded: [...reply.discarded, ...decision.marks] as typeof reply.discarded }, rawText: rawSuppressed };
   }
   const keptUpdate = {
@@ -1062,7 +1094,7 @@ async function applyTurnPolicy(input: {
     return { reply, rawText: input.rawText };
   }
   const rawText = JSON.stringify(replaced);
-  await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+  await saveReplyText(input.callId, rawText);
   const parsed = parseAgentReply(replaced, { authorMessageId: input.authorMessageId });
   return { reply: { ...parsed, discarded: [...reply.discarded, ...decision.marks] as typeof reply.discarded }, rawText };
 }
@@ -1163,7 +1195,7 @@ async function guardQuestionStyle(input: {
   const replaceWith = async (question: string, marks: string[], fromReply = reply, update: typeof kept = kept) => {
     const replaced = { action: "ask_question", question, clarificationReason: "нужно уточнение задачи", whyUnknown: "ответ сервера по состоянию материала", thoughtUpdate: update };
     const rawText = JSON.stringify(replaced);
-    await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+    await saveReplyText(input.callId, rawText);
     return { reply: { ...parseAgentReply(replaced, { authorMessageId: input.authorMessageId }), discarded: [...fromReply.discarded, ...marks] as typeof reply.discarded }, rawText };
   };
   const question = coreQuestion;
@@ -1188,7 +1220,7 @@ async function guardQuestionStyle(input: {
     });
     const retried = parseAgentReply(parseJsonObject(again.text), { authorMessageId: input.authorMessageId });
     if (retried.action.action === "ask_question" && !questionProblem(retried.action.question, problemCtx) && !repeatOf(retried.action.question)) {
-      await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: again.text } });
+      await saveReplyText(input.callId, again.text);
       return { reply: { ...retried, discarded: [...retried.discarded, "policy_lexicon_regenerated"] as typeof reply.discarded }, rawText: again.text };
     }
     if (!kept.fact && retried.thoughtUpdate.fact) {
@@ -1236,7 +1268,7 @@ async function guardQuestionContent(input: {
     const state = await getThoughtState(input.reelId);
     const replaced = { ...neutralQuestionReply(state.openGaps, [], [], await reelTopic(input.reelId)), thoughtUpdate: keptUpdate };
     const rawText = JSON.stringify(replaced);
-    await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+    await saveReplyText(input.callId, rawText);
     return { reply: { ...parseAgentReply(replaced, { authorMessageId: input.authorMessageId }), discarded: [...reply.discarded, "policy_echo_replaced"] as typeof reply.discarded }, rawText };
   }
   if (!questionNeedsHintCheck(question, answers.join(" "))) return { reply, rawText: input.rawText };
@@ -1249,7 +1281,7 @@ async function guardQuestionContent(input: {
     });
     const retried = parseAgentReply(parseJsonObject(again.text), { authorMessageId: input.authorMessageId });
     if (retried.action.action === "ask_question" && !questionNeedsHintCheck(retried.action.question, answers.join(" "))) {
-      await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: again.text } });
+      await saveReplyText(input.callId, again.text);
       return { reply: { ...retried, discarded: [...retried.discarded, "policy_hint_regenerated"] as typeof reply.discarded }, rawText: again.text };
     }
   } catch {
@@ -1270,18 +1302,26 @@ async function dropDuplicateFact(input: {
   authorMessageId: string;
   authorText: string;
   acceptedFacts: string[];
+  ownTurnClaimKey?: string;
 }): Promise<{ reply: ReturnType<typeof parseAgentReply>; rawText: string }> {
   const fact = input.reply.thoughtUpdate.fact;
   if (!fact) return { reply: input.reply, rawText: input.rawText };
   const turns = await loadPolicyTurns(input.threadId);
-  const earlier = turns.filter((turn) => turn.role === "user" && turn.id !== input.authorMessageId).map((turn) => turn.body);
+  const ownTurnIds = input.ownTurnClaimKey
+    ? new Set(
+        (await prisma.dialogueMessage.findMany({ where: { threadId: input.threadId, claimKey: input.ownTurnClaimKey }, select: { id: true } })).map((row) => row.id),
+      )
+    : new Set<string>();
+  const earlier = turns
+    .filter((turn) => turn.role === "user" && turn.id !== input.authorMessageId && !ownTurnIds.has(turn.id))
+    .map((turn) => turn.body);
   if (!isDuplicateFact(fact.text, input.authorText, earlier, input.acceptedFacts)) return { reply: input.reply, rawText: input.rawText };
   const { thoughtUpdate: _dropped, c00Signal: _signal, ...action } = input.reply.action as Record<string, unknown> & { action: string };
   void _dropped;
   void _signal;
   const replaced = { ...action, thoughtUpdate: { fact: null, closeGapIds: [] } };
   const rawText = JSON.stringify(replaced);
-  await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+  await saveReplyText(input.callId, rawText);
   const parsed = parseAgentReply(replaced, { authorMessageId: input.authorMessageId });
   return { reply: { ...parsed, c00Signal: input.reply.c00Signal, discarded: [...input.reply.discarded, "fact_duplicate"] as typeof input.reply.discarded }, rawText };
 }
@@ -1310,7 +1350,7 @@ async function dropDontKnowFact(input: {
     : { fact: { text: kept, sourceType: fact.sourceType, sourceId: fact.sourceId }, closeGapIds: input.reply.thoughtUpdate.closeGapIds, ...(input.reply.thoughtUpdate.answeredGapId ? { answeredGapId: input.reply.thoughtUpdate.answeredGapId } : {}) };
   const replaced = { ...action, thoughtUpdate: update };
   const rawText = JSON.stringify(replaced);
-  await prisma.aiCall.update({ where: { id: input.callId }, data: { responseText: rawText } });
+  await saveReplyText(input.callId, rawText);
   const parsed = parseAgentReply(replaced, { authorMessageId: input.authorMessageId });
   return { reply: { ...parsed, c00Signal: input.reply.c00Signal, discarded: [...input.reply.discarded, "fact_dontknow"] as typeof input.reply.discarded }, rawText };
 }
@@ -1711,12 +1751,16 @@ export async function runDialogueTurn(
     if (await isDialogueTurnComplete(thread.id, userMessage.id, key)) {
       return listDialoguePage(reelId);
     }
+    if (v03TestSeams.beforeReplyPostprocess) {
+      await v03TestSeams.beforeReplyPostprocess({ callId: call.id, turnKey: key, follower: execClaim === null });
+    }
+    const postComplete = completeUnlessTurnCommitted(complete, thread.id, userMessage.id, key);
     const parsedReply = await parseReplyRegeneratingInvalidQuestion({
       reelId,
       callId: call.id,
       responseText: call.responseText,
       userPrompt,
-      complete,
+      complete: postComplete,
       authorMessageId: userMessage.id,
     });
     const replacedRedirect = await replaceValidRedirect({ reelId, callId: call.id, reply: parsedReply.reply, authorMessageId: userMessage.id });
@@ -1736,6 +1780,7 @@ export async function runDialogueTurn(
       : await (async () => {
       const deduped = await dropDuplicateFact({
         threadId: thread.id,
+        ownTurnClaimKey: turnClaimKey(thread.id, key),
         callId: call.id,
         reply,
         rawText: parsedReply.responseText,
@@ -1753,11 +1798,12 @@ export async function runDialogueTurn(
       const varied = await varyRepeatedQuestion({
         reelId,
         threadId: thread.id,
+        ownTurnClaimKey: turnClaimKey(thread.id, key),
         callId: call.id,
         reply: downgraded.reply,
         rawText: downgraded.rawText,
         userPrompt,
-        complete,
+        complete: postComplete,
         authorMessageId: userMessage.id,
       });
       const proposalVaried = await varyRepeatedProposal({
@@ -1775,7 +1821,7 @@ export async function runDialogueTurn(
         reply: proposalVaried.reply,
         rawText: proposalVaried.rawText,
         userPrompt,
-        complete,
+        complete: postComplete,
         authorMessageId: userMessage.id,
       });
       const policed = await applyTurnPolicy({
@@ -1793,7 +1839,7 @@ export async function runDialogueTurn(
         reply: policed.reply,
         rawText: policed.rawText,
         userPrompt,
-        complete,
+        complete: postComplete,
         authorMessageId: userMessage.id,
       });
       const noUnknownFact = await dropDontKnowFact({
@@ -1809,7 +1855,7 @@ export async function runDialogueTurn(
         reply: noUnknownFact.reply,
         rawText: noUnknownFact.rawText,
         userPrompt,
-        complete,
+        complete: postComplete,
         knownIds: [reelId, userMessage.id, material.workingTakeId, material.transcriptRevisionId, ...thoughtFacts.map((fact) => fact.id)],
         authorMessageId: userMessage.id,
       });

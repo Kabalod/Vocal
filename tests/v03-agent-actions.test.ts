@@ -1135,6 +1135,46 @@ test("two executors of one turnKey call complete once", async (t) => {
   assert.ok(two.messages.some((item) => item.body.includes("Один ответ модели")));
 });
 
+test("a follower that sees the leader's committed question does not call the model again or rewrite the stored reply", async (t) => {
+  const { prisma } = await withPostgresTestDb(t);
+  await resetPrismaClient();
+  t.after(() => {
+    v03TestSeams.beforeReplyPostprocess = null;
+  });
+  const { reel } = await createThoughtFromText({
+    title: "V03 follower race",
+    body: "Материал для гонки.",
+    idempotencyKey: "v03-follower-race",
+  });
+  let completeCalls = 0;
+  const complete = async () => {
+    completeCalls += 1;
+    await delay(80);
+    const update = await thoughtUpdateForUserText(prisma, reel.id, "Главное — тихий вечер.");
+    return { text: askQuestionJson("Что в этом вечере было самым тихим?", update), usage: { promptTokens: 1, completionTokens: 1 } };
+  };
+  // The follower is held right after its last "complete" check until the leader has committed its question:
+  // then the question of the leader is in the thread and looks like a repeat of the follower's own reply.
+  v03TestSeams.beforeReplyPostprocess = async ({ follower }) => {
+    if (!follower) return;
+    const thread = await prisma.dialogueThread.findUniqueOrThrow({ where: { reelId: reel.id } });
+    const claimKey = turnClaimKey(thread.id, "v03-follower-1");
+    for (let i = 0; i < 200; i += 1) {
+      const row = await prisma.dialogueMessage.findFirst({ where: { threadId: thread.id, claimKey, status: "done" } });
+      if (row) return;
+      await delay(25);
+    }
+  };
+  const input = { text: "Главное — тихий вечер.", idempotencyKey: "v03-follower-1" };
+  const [one, two] = await Promise.all([runDialogueTurn(reel.id, input, complete), runDialogueTurn(reel.id, input, complete)]);
+  assert.equal(completeCalls, 1);
+  const call = await prisma.aiCall.findFirstOrThrow({ where: { reelId: reel.id, kind: "dialogue" } });
+  assert.match(call.responseText ?? "", /самым тихим/);
+  assert.equal(await prisma.aiCall.count({ where: { reelId: reel.id, kind: "dialogue" } }), 1);
+  assert.ok(one.messages.some((item) => item.body.includes("самым тихим")));
+  assert.ok(two.messages.some((item) => item.body.includes("самым тихим")));
+});
+
 test("saved responseText is reused without a second model call", async (t) => {
   const { prisma } = await withPostgresTestDb(t);
   await resetPrismaClient();
