@@ -12,6 +12,7 @@ import {
 import { getSheetFocusableElements, trapSheetTab } from "@/components/shell-sheet";
 import { useKeyboardInset } from "@/components/use-keyboard-inset";
 import { ArchiveDesktopHostProvider } from "@/components/ArchiveDesktopChrome";
+import { ConsentGate } from "@/components/ConsentGate";
 import { NewThoughtSheet } from "@/components/NewThoughtSheet";
 import { isAuthShellPath } from "@/lib/auth/paths";
 import { isShellNavActive, SHELL_NAV, shellBack, shellHeaderTitle } from "@/components/shell-nav";
@@ -172,6 +173,7 @@ function VocalAppShellFrame({ children }: { children: ReactNode }) {
   return (
     <ArchiveDesktopHostProvider value={{ dateHost, statusHost, sheetStatusHost }}>
     <div className="flex min-h-screen max-w-full overflow-x-hidden bg-bg text-text">
+      <ConsentGate />
       <aside
         data-shell-collapsed={collapsed ? "true" : "false"}
         className={`hidden border-r border-line bg-surface shell:sticky shell:top-0 shell:flex shell:h-screen shell:shrink-0 shell:flex-col shell:overflow-y-auto ${

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { DeleteAccountRow } from "@/components/DeleteActions";
@@ -7,6 +8,9 @@ import { LogoutButton } from "@/components/LogoutButton";
 import { ProfileConversation } from "@/components/ProfileConversation";
 import { IosNavBar } from "@/components/vocal-ui/IosNavBar";
 import { Panel } from "@/components/vocal-ui/Panel";
+import type { FeedbackLink } from "@/lib/consent";
+
+const ROW = "flex min-h-11 w-full items-center px-4 text-left text-sm hover:bg-white/5";
 
 type QuotaView = { enforced: boolean; exempt: boolean; hasPeriod: boolean; thoughtsLimit: number; thoughtsUsed: number; remaining: number; periodEnd: string | null };
 
@@ -19,7 +23,7 @@ export function quotaLine(quota: QuotaView | null): string | null {
   return `Мыслей осталось ${quota.remaining} из ${quota.thoughtsLimit}${until}`;
 }
 
-export function AccountCard({ email, quota }: { email: string | null; quota: QuotaView | null }) {
+export function AccountCard({ email, quota, feedback = null }: { email: string | null; quota: QuotaView | null; feedback?: FeedbackLink | null }) {
   const line = quotaLine(quota);
   return (
     <Panel data-account-card className="divide-y divide-line !p-0" aria-label="Аккаунт">
@@ -34,14 +38,27 @@ export function AccountCard({ email, quota }: { email: string | null; quota: Quo
           </p>
         ) : null}
       </div>
-      <LogoutButton className="flex min-h-11 w-full items-center px-4 text-left text-sm hover:bg-white/5" />
+      <LogoutButton className={ROW} />
+      {feedback ? (
+        <a
+          data-account-feedback
+          className={ROW}
+          href={feedback.href}
+          {...(feedback.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+        >
+          Сообщить о проблеме
+        </a>
+      ) : null}
+      <Link data-account-privacy className={ROW} href="/privacy">
+        Данные и конфиденциальность
+      </Link>
       <DeleteAccountRow />
     </Panel>
   );
 }
 
 /** Profile (07): the portrait of the author on the left, the account card on the right (below on touch). */
-export function ProfileScreen({ email }: { email: string | null }) {
+export function ProfileScreen({ email, feedback = null }: { email: string | null; feedback?: FeedbackLink | null }) {
   const router = useRouter();
   const [quota, setQuota] = useState<QuotaView | null>(null);
   useEffect(() => {
@@ -70,7 +87,7 @@ export function ProfileScreen({ email }: { email: string | null }) {
           <ProfileConversation presentation="page" />
         </div>
         <aside className="min-w-0 space-y-3 shell:sticky shell:top-6">
-          <AccountCard email={email} quota={quota} />
+          <AccountCard email={email} quota={quota} feedback={feedback} />
         </aside>
       </div>
     </div>

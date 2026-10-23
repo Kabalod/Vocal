@@ -4,6 +4,7 @@ export function isAuthShellPath(pathname: string) {
     pathname === "/login" ||
     pathname === "/signup" ||
     pathname === "/forgot-password" ||
+    pathname === "/privacy" ||
     pathname.startsWith("/auth/")
   );
 }

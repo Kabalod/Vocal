@@ -18,6 +18,7 @@
 | `VOCAL_DAILY_TOKEN_LIMIT`, `VOCAL_DAILY_STT_SECONDS` | Суточные лимиты на пользователя (по умолчанию 200000 / 3600) |
 | `VOCAL_AI_TIMEOUT_MS`, `VOCAL_STT_TIMEOUT_MS` и др. | Таймауты, см. `.env.example` |
 | `VOCAL_SHUTDOWN_GRACE_MS` | Сколько ждать завершения активных заданий при остановке (25000) |
+| `VOCAL_FEEDBACK_URL` | Пункт «Сообщить о проблеме» в профиле и на `/privacy`: `mailto:…`, `https://…` или адрес почты; не задана — пункт скрыт (читается на сервере при каждом запросе, пересборка не нужна) |
 | `NEXT_MANUAL_SIG_HANDLE=true` | **Обязательно** в production: иначе Next выходит по SIGTERM раньше, чем задание доработает (в Dockerfile уже задано) |
 
 Никогда не задавать в production: `VOCAL_UI_TEST_DB`, `VOCAL_AI_MOCK`, `VOCAL_STT_MOCK`, `VOCAL_SKIP_JOB_ENQUEUE`, `VOCAL_JOB_LEASE_MS`.

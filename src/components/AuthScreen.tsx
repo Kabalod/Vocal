@@ -144,6 +144,13 @@ export function AuthScreen({ mode, next }: { mode: Mode; next?: string }) {
               </Link>
             </p>
           ) : null}
+          {mode === "login" || mode === "signup" ? (
+            <p>
+              <Link className="inline-flex min-h-11 items-center text-accent-soft" href="/privacy">
+                Как мы работаем с данными
+              </Link>
+            </p>
+          ) : null}
         </nav>
       </Panel>
     </div>
