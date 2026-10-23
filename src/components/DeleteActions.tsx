@@ -269,7 +269,11 @@ export function DeleteTakeAction({
   );
 }
 
-export function DeleteAccountAction() {
+/**
+ * The account row of the profile card: a red "Удалить аккаунт" opens an iOS alert that says what goes away and asks to type the word.
+ * The confirm button is inactive until the author has typed it; the client never fills the phrase in itself.
+ */
+export function DeleteAccountRow() {
   const router = useRouter();
   const inputId = useId();
   const [open, setOpen] = useState(false);
@@ -277,79 +281,17 @@ export function DeleteAccountAction() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function close() {
+    setOpen(false);
+    setPhrase("");
+  }
+
   async function confirm() {
     if (busy || phrase !== ACCOUNT_DELETE_PHRASE) return;
     setBusy(true);
     setError(null);
-    const result = await sendDelete("/api/account", { confirm: ACCOUNT_DELETE_PHRASE });
+    const result = await sendDelete("/api/account", { confirm: phrase });
     if (!result.ok) {
-      setError(result.message);
-      setBusy(false);
-      return;
-    }
-    const supabase = createBrowserSupabaseClient();
-    await supabase?.auth.signOut().catch(() => undefined);
-    router.replace("/");
-    router.refresh();
-  }
-
-  return (
-    <section className="mt-10 space-y-2 border-t border-line pt-6">
-      <h2 className="text-base">Удалить аккаунт</h2>
-      <p className="text-sm text-muted">
-        Все мысли, записи, портрет и вход будут удалены без возможности восстановления.
-      </p>
-      <ActionButton variant="danger" onClick={() => setOpen(true)}>
-        Удалить аккаунт
-      </ActionButton>
-      <ConfirmDeleteModal
-        open={open}
-        title="Удалить аккаунт?"
-        description={`Это удалит все ваши данные и вход в Vocal. Чтобы подтвердить, введите «${ACCOUNT_DELETE_PHRASE}».`}
-        confirmLabel="Удалить аккаунт навсегда"
-        busy={busy}
-        error={error}
-        canConfirm={phrase === ACCOUNT_DELETE_PHRASE}
-        onCancel={() => {
-          setOpen(false);
-          setPhrase("");
-          setError(null);
-        }}
-        onConfirm={() => void confirm()}
-      >
-        <label className="block space-y-1" htmlFor={inputId}>
-          <span className="text-sm text-muted">Подтверждение</span>
-          <Field
-            id={inputId}
-            value={phrase}
-            onChange={(event) => setPhrase(event.target.value)}
-            placeholder={ACCOUNT_DELETE_PHRASE}
-            autoComplete="off"
-            disabled={busy}
-          />
-        </label>
-      </ConfirmDeleteModal>
-    </section>
-  );
-}
-
-/**
- * The account row of the profile card: a red "Удалить аккаунт" opens an iOS alert that says what goes away. The server contract is
- * the same as DeleteAccountAction (DELETE /api/account with the confirm phrase); the alert is the confirmation.
- */
-export function DeleteAccountRow() {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function confirm() {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    const result = await sendDelete("/api/account", { confirm: ACCOUNT_DELETE_PHRASE });
-    if (!result.ok) {
-      setOpen(false);
       setError(result.message);
       setBusy(false);
       return;
@@ -370,20 +312,33 @@ export function DeleteAccountRow() {
       >
         Удалить аккаунт
       </button>
-      {error ? (
-        <div className="px-4 pb-3">
-          <InlineError message={error} />
-        </div>
-      ) : null}
       <ConfirmAlert
         open={open}
         title="Удалить аккаунт?"
-        message="Все ваши мысли, дубли и сценарии будут удалены без возможности восстановления."
+        message={`Все ваши мысли, дубли и сценарии будут удалены без возможности восстановления. Чтобы подтвердить, введите «${ACCOUNT_DELETE_PHRASE}».`}
         confirmLabel={busy ? "Удаляем…" : "Удалить"}
         destructive
-        onCancel={() => (busy ? undefined : setOpen(false))}
+        confirmDisabled={phrase !== ACCOUNT_DELETE_PHRASE || busy}
+        onCancel={() => (busy ? undefined : close())}
         onConfirm={() => void confirm()}
-      />
+      >
+        <label className="block space-y-1" htmlFor={inputId}>
+          <span className="sr-only">Подтверждение</span>
+          <Field
+            id={inputId}
+            value={phrase}
+            onChange={(event) => setPhrase(event.target.value)}
+            placeholder={ACCOUNT_DELETE_PHRASE}
+            autoComplete="off"
+            disabled={busy}
+          />
+        </label>
+        {error ? (
+          <div className="mt-2">
+            <InlineError message={error} />
+          </div>
+        ) : null}
+      </ConfirmAlert>
     </>
   );
 }

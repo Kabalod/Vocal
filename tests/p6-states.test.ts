@@ -6,6 +6,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { ConfirmAlert } from "../src/components/vocal-ui/ConfirmAlert";
 import { Portrait } from "../src/components/Portrait";
 import { quotaLine } from "../src/components/ProfileScreen";
 import { RecordingView } from "../src/components/RecordingView";
@@ -84,4 +85,25 @@ test("P6 auth screens: one card, kit fields, InlineError, texts unchanged", () =
   assert.match(src, /variant="primary"/);
   for (const text of ["Вход", "Регистрация", "Восстановление пароля", "Новый пароль", "Создать аккаунт", "Отправить ссылку", "Сохранить пароль", "Забыли пароль"]) assert.ok(src.includes(text), text);
   assert.match(src, /env\(safe-area-inset-bottom\)/);
+});
+
+test("P6 account deletion: the typed word is required, the client never fills the phrase in", () => {
+  const alert = renderToStaticMarkup(
+    createElement(
+      ConfirmAlert,
+      { open: true, title: "Удалить аккаунт?", confirmLabel: "Удалить", destructive: true, confirmDisabled: true, onCancel: () => undefined, onConfirm: () => undefined },
+      createElement("input", { placeholder: "УДАЛИТЬ" }),
+    ),
+  );
+  assert.match(alert, /<button[^>]*disabled=""[^>]*>Удалить<\/button>/);
+  assert.match(alert, /placeholder="УДАЛИТЬ"/);
+  const enabled = renderToStaticMarkup(createElement(ConfirmAlert, { open: true, title: "t", confirmLabel: "Удалить", onCancel: () => undefined, onConfirm: () => undefined }));
+  assert.doesNotMatch(enabled, /disabled=/);
+  const src = read("src/components/DeleteActions.tsx");
+  const row = src.slice(src.indexOf("export function DeleteAccountRow"));
+  assert.match(row, /confirmDisabled=\{phrase !== ACCOUNT_DELETE_PHRASE \|\| busy\}/);
+  assert.match(row, /if \(busy \|\| phrase !== ACCOUNT_DELETE_PHRASE\) return;/);
+  assert.match(row, /sendDelete\("\/api\/account", \{ confirm: phrase \}\)/, "the body carries what the author typed");
+  assert.doesNotMatch(row, /confirm: ACCOUNT_DELETE_PHRASE/);
+  assert.match(row, /useState\(""\)/);
 });

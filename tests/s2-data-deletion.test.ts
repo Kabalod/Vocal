@@ -412,7 +412,7 @@ test("S2 UI: delete actions are confirmed, account deletion needs the typed phra
   assert.match(actions, /Удалить мысль\?/);
   assert.match(actions, /Удалить дубль\?/);
   assert.match(actions, /Удалить аккаунт\?/);
-  assert.match(actions, /canConfirm=\{phrase === ACCOUNT_DELETE_PHRASE\}/);
+  assert.match(actions, /confirmDisabled=\{phrase !== ACCOUNT_DELETE_PHRASE/);
   assert.match(actions, /data-vocal-initial="safe"/, "focus starts on the safe action");
   assert.equal(actions.includes("SERVICE_ROLE"), false, "the service-role key never reaches client code");
   assert.match(readFileSync(path.join(root, "src/components/ReelStudioFrame.tsx"), "utf8"), /DeleteThoughtConfirm/);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef } from "react";
+import { useId, useRef, type ReactNode } from "react";
 import { useDialogBehavior } from "@/components/vocal-ui/dialog-behavior";
 
 /**
@@ -14,6 +14,8 @@ export function ConfirmAlert({
   confirmLabel,
   cancelLabel = "Отмена",
   destructive = false,
+  confirmDisabled = false,
+  children,
   onConfirm,
   onCancel,
 }: {
@@ -23,6 +25,9 @@ export function ConfirmAlert({
   confirmLabel: string;
   cancelLabel?: string;
   destructive?: boolean;
+  /** The confirm button stays inactive (a typed confirmation below the message, passed as `children`). */
+  confirmDisabled?: boolean;
+  children?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -52,6 +57,7 @@ export function ConfirmAlert({
               {message}
             </p>
           ) : null}
+          {children ? <div className="mt-3 text-left">{children}</div> : null}
         </div>
         <div className="grid grid-cols-2 divide-x divide-line border-t border-line">
           <button type="button" data-vocal-initial="safe" className="min-h-11 text-base text-accent-soft hover:bg-white/5" onClick={onCancel}>
@@ -59,7 +65,8 @@ export function ConfirmAlert({
           </button>
           <button
             type="button"
-            className={`min-h-11 text-base font-medium hover:bg-white/5 ${destructive ? "text-bad" : "text-accent-soft"}`}
+            disabled={confirmDisabled}
+            className={`min-h-11 text-base font-medium hover:bg-white/5 disabled:opacity-40 disabled:hover:bg-transparent ${destructive ? "text-bad" : "text-accent-soft"}`}
             onClick={onConfirm}
           >
             {confirmLabel}
